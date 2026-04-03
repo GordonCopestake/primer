@@ -2,8 +2,7 @@
 
 ## Current status
 
-- Milestone 9 (local safety history, transcript review, and parent controls) is now underway with parent-area local review stores and in-app review actions for safety events.
-- Milestone 8 (homework help with local artifact capture and guided solve) is in place with local homework artifact persistence, guided step extraction, and homework safety fallback checks.
+- Milestone 8 (homework help with local artifact capture and guided solve) is now underway with local homework artifact persistence, guided step extraction, and homework safety fallback checks.
 - Milestone 7 (story mode with local persistence and safety checks) is in place with local story instance storage, per-child checkpoint persistence, and story safety fallback checks wired into story creation flow.
 - Milestone 6 (tutoring orchestration with a local-first inference pipeline) is in place via routing-mode decisions (`local_only`, `local_preferred_cloud_fallback`, `cloud_preferred_local_fallback`, `cloud_required`), structured orchestration metadata, and safety-first fallback responses in `@primer/tutor-orchestrator` and API session turns.
 - Milestone 5 (local learner profiles, curriculum persistence, and learner state) is in place with local profile and learner-state stores wired into `@primer/local-storage` and consumed by `apps/learner-app/src/store`.
@@ -24,7 +23,6 @@
 - Tutoring turn orchestration now returns explicit routing metadata and fallback reasons so parent-review surfaces can explain why a response was local, cloud-required, or safely downgraded.
 - Story creation now runs local safety review and persists story checkpoint state locally so story progress remains on-device and reviewable.
 - Homework parse now applies local safety review, emits safety fallback events when needed, and stores guided solve structures suitable for on-device parent review.
-- Parent-area safety/session pages now read local transcript and safety-history stores so parent review works without cloud state.
 - Local learner profile records and per-subject learner state now persist in schema-validated structured storage rather than placeholder learner-app constants.
 - Cloud model usage is fallback-only and must go through a stateless relay that holds provider keys server-side.
 - Relay is explicitly forbidden from storing accounts, learner records, files, transcripts, or long-lived learner-content logs.

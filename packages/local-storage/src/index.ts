@@ -76,38 +76,6 @@ export const LocalHomeworkArtifactSchema = z.object({
 
 export type LocalHomeworkArtifact = z.infer<typeof LocalHomeworkArtifactSchema>;
 
-export const LocalTranscriptTurnSchema = z.object({
-  actor: z.enum(["child", "tutor", "system"]),
-  text: z.string(),
-  createdAt: z.string().datetime()
-});
-
-export const LocalSessionTranscriptSchema = z.object({
-  id: z.string().min(1),
-  childProfileId: z.string().min(1),
-  sessionId: z.string().min(1),
-  mode: LocalSessionModeSchema,
-  turns: z.array(LocalTranscriptTurnSchema),
-  summary: z.string(),
-  createdAt: z.string().datetime()
-});
-
-export type LocalSessionTranscript = z.infer<typeof LocalSessionTranscriptSchema>;
-
-export const LocalSafetyHistoryEventSchema = z.object({
-  id: z.string().min(1),
-  childProfileId: z.string().min(1),
-  severity: z.enum(["info", "warning", "high", "critical"]),
-  type: z.string().min(1),
-  triggerExcerpt: z.string(),
-  systemAction: z.string(),
-  reviewStatus: z.enum(["open", "reviewed"]),
-  createdAt: z.string().datetime(),
-  reviewedAt: z.string().datetime().optional()
-});
-
-export type LocalSafetyHistoryEvent = z.infer<typeof LocalSafetyHistoryEventSchema>;
-
 export function createStructuredStore(storage: KeyValueStorage, namespace: string) {
   const prefix = `primer.${namespace}.structured.`;
 
@@ -250,65 +218,6 @@ export function createHomeworkArtifactStore(storage: KeyValueStorage) {
   };
 }
 
-export function createSessionTranscriptStore(storage: KeyValueStorage) {
-  const structured = createStructuredStore(storage, "sessionTranscripts");
-  const listSchema = LocalSessionTranscriptSchema.array();
-  const indexKey = "transcripts";
-
-  return {
-    listByChildProfileId(childProfileId: string): LocalSessionTranscript[] {
-      return (structured.get(indexKey, listSchema) ?? []).filter((transcript) => transcript.childProfileId === childProfileId);
-    },
-    upsert(transcript: LocalSessionTranscript): LocalSessionTranscript {
-      const valid = LocalSessionTranscriptSchema.parse(transcript);
-      const current = structured.get(indexKey, listSchema) ?? [];
-      const nextTranscripts = current.filter((existing) => existing.id !== valid.id);
-      nextTranscripts.push(valid);
-      nextTranscripts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      structured.set(indexKey, listSchema, nextTranscripts);
-      return valid;
-    }
-  };
-}
-
-export function createSafetyHistoryStore(storage: KeyValueStorage) {
-  const structured = createStructuredStore(storage, "safetyHistory");
-  const listSchema = LocalSafetyHistoryEventSchema.array();
-  const indexKey = "events";
-
-  return {
-    listByChildProfileId(childProfileId: string): LocalSafetyHistoryEvent[] {
-      return (structured.get(indexKey, listSchema) ?? []).filter((event) => event.childProfileId === childProfileId);
-    },
-    upsert(event: LocalSafetyHistoryEvent): LocalSafetyHistoryEvent {
-      const valid = LocalSafetyHistoryEventSchema.parse(event);
-      const current = structured.get(indexKey, listSchema) ?? [];
-      const nextEvents = current.filter((existing) => existing.id !== valid.id);
-      nextEvents.push(valid);
-      nextEvents.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      structured.set(indexKey, listSchema, nextEvents);
-      return valid;
-    },
-    markReviewed(eventId: string, reviewedAt = new Date().toISOString()): LocalSafetyHistoryEvent | null {
-      const current = structured.get(indexKey, listSchema) ?? [];
-      let updatedEvent: LocalSafetyHistoryEvent | null = null;
-
-      const updated = current.map((event) => {
-        if (event.id !== eventId) return event;
-        updatedEvent = {
-          ...event,
-          reviewStatus: "reviewed",
-          reviewedAt
-        };
-        return updatedEvent;
-      });
-
-      structured.set(indexKey, listSchema, updated);
-      return updatedEvent;
-    }
-  };
-}
-
 export function createWebFileStore(storage: KeyValueStorage, namespace: string) {
   const prefix = `primer.${namespace}.file.`;
 
@@ -375,7 +284,5 @@ export const localStorageFoundationNotes = {
   learnerProfiles: "Child profiles persist in local structured storage and remain on-device by default.",
   learnerState: "Per-subject learner mastery and confidence state is stored locally and schema-validated.",
   storyInstances: "Story progress checkpoints persist locally with structured story state and completion markers.",
-  homeworkArtifacts: "Homework artifacts and guided solve steps persist locally for parent-visible review.",
-  sessionTranscripts: "Session transcript history is stored locally for parent-only review.",
-  safetyHistory: "Safety events are tracked locally with review status for parent controls."
+  homeworkArtifacts: "Homework artifacts and guided solve steps persist locally for parent-visible review."
 } as const;

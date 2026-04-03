@@ -5,8 +5,6 @@ import {
   createHomeworkArtifactStore,
   createLearnerProfileStore,
   createLearnerStateStore,
-  createSafetyHistoryStore,
-  createSessionTranscriptStore,
   createStoryInstanceStore,
   createStructuredStore,
   createWebFileStore,
@@ -185,47 +183,5 @@ describe("homework artifact store", () => {
 
     expect(artifactStore.listByChildProfileId("child_1")).toHaveLength(1);
     expect(artifactStore.get("artifact_1")?.parsedStructureJson.problemType).toBe("arithmetic");
-  });
-});
-
-
-describe("session transcript store", () => {
-  test("stores transcript records for parent review", () => {
-    const storage = createMemoryStorage();
-    const transcriptStore = createSessionTranscriptStore(storage);
-
-    transcriptStore.upsert({
-      id: "transcript_1",
-      childProfileId: "child_1",
-      sessionId: "session_1",
-      mode: "daily_session",
-      turns: [{ actor: "child", text: "I think it is 4.", createdAt: "2026-01-03T00:00:00.000Z" }],
-      summary: "Worked on number facts.",
-      createdAt: "2026-01-03T00:00:00.000Z"
-    });
-
-    expect(transcriptStore.listByChildProfileId("child_1")).toHaveLength(1);
-  });
-});
-
-describe("safety history store", () => {
-  test("marks safety events reviewed", () => {
-    const storage = createMemoryStorage();
-    const safetyStore = createSafetyHistoryStore(storage);
-
-    safetyStore.upsert({
-      id: "event_1",
-      childProfileId: "child_1",
-      severity: "warning",
-      type: "homework_safety_fallback",
-      triggerExcerpt: "keep this secret",
-      systemAction: "fallback",
-      reviewStatus: "open",
-      createdAt: "2026-01-03T00:00:00.000Z"
-    });
-
-    const reviewed = safetyStore.markReviewed("event_1", "2026-01-03T01:00:00.000Z");
-    expect(reviewed?.reviewStatus).toBe("reviewed");
-    expect(reviewed?.reviewedAt).toBe("2026-01-03T01:00:00.000Z");
   });
 });
