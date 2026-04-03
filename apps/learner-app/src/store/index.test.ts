@@ -1,5 +1,13 @@
 import { describe, expect, test } from "vitest";
-import { getLearnerState, listLearnerProfiles, upsertLearnerProfile } from "./index";
+import {
+  getLearnerState,
+  listHomeworkArtifacts,
+  listLearnerProfiles,
+  listStoryInstances,
+  upsertHomeworkArtifact,
+  upsertLearnerProfile,
+  upsertStoryInstance
+} from "./index";
 
 describe("learner store", () => {
   test("stores and lists local learner profiles", () => {
@@ -22,4 +30,38 @@ describe("learner store", () => {
     expect(state.childProfileId).toBe("child_local_1");
     expect(state.subject).toBe("reading");
   });
+
+  test("stores local story checkpoints", () => {
+    upsertStoryInstance({
+      id: "story_local_1",
+      childProfileId: "child_local_1",
+      curriculumNodeId: "reading-6-7-main-idea",
+      title: "Mystery Map",
+      branchStateJson: { branch: "north" },
+      progressJson: { checkpoint: 2, completed: false },
+      createdAt: "2026-03-03T00:00:00.000Z",
+      updatedAt: "2026-03-03T00:00:00.000Z"
+    });
+
+    expect(listStoryInstances("child_local_1")[0]?.id).toBe("story_local_1");
+  });
+  test("stores homework artifacts with guided solve steps", () => {
+    upsertHomeworkArtifact({
+      id: "artifact_local_1",
+      childProfileId: "child_local_1",
+      sourceType: "text",
+      blobUrl: "",
+      extractedText: "12 - 4",
+      parsedStructureJson: {
+        problemType: "arithmetic",
+        steps: ["read", "subtract", "check"],
+        confidence: 0.72
+      },
+      createdAt: "2026-03-03T00:00:00.000Z"
+    });
+
+    expect(listHomeworkArtifacts("child_local_1")[0]?.id).toBe("artifact_local_1");
+  });
+
+
 });

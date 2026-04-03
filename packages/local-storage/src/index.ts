@@ -44,6 +44,38 @@ export const LocalLearnerStateSchema = z.object({
 
 export type LocalLearnerState = z.infer<typeof LocalLearnerStateSchema>;
 
+export const LocalStoryInstanceSchema = z.object({
+  id: z.string().min(1),
+  childProfileId: z.string().min(1),
+  curriculumNodeId: z.string().min(1),
+  title: z.string().min(1),
+  branchStateJson: z.record(z.unknown()),
+  progressJson: z.object({
+    checkpoint: z.number().int().min(0),
+    completed: z.boolean()
+  }),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+export type LocalStoryInstance = z.infer<typeof LocalStoryInstanceSchema>;
+
+export const LocalHomeworkArtifactSchema = z.object({
+  id: z.string().min(1),
+  childProfileId: z.string().min(1),
+  sourceType: z.enum(["image", "text"]),
+  blobUrl: z.string(),
+  extractedText: z.string(),
+  parsedStructureJson: z.object({
+    problemType: z.string(),
+    steps: z.array(z.string()),
+    confidence: z.number().min(0).max(1)
+  }),
+  createdAt: z.string().datetime()
+});
+
+export type LocalHomeworkArtifact = z.infer<typeof LocalHomeworkArtifactSchema>;
+
 export function createStructuredStore(storage: KeyValueStorage, namespace: string) {
   const prefix = `primer.${namespace}.structured.`;
 
@@ -130,6 +162,62 @@ export function createLearnerStateStore(storage: KeyValueStorage) {
   };
 }
 
+export function createStoryInstanceStore(storage: KeyValueStorage) {
+  const structured = createStructuredStore(storage, "storyInstances");
+  const listSchema = LocalStoryInstanceSchema.array();
+  const indexKey = "stories";
+
+  return {
+    listByChildProfileId(childProfileId: string): LocalStoryInstance[] {
+      return (structured.get(indexKey, listSchema) ?? []).filter((story) => story.childProfileId === childProfileId);
+    },
+    get(storyId: string): LocalStoryInstance | null {
+      return (structured.get(indexKey, listSchema) ?? []).find((story) => story.id === storyId) ?? null;
+    },
+    upsert(story: LocalStoryInstance): LocalStoryInstance {
+      const valid = LocalStoryInstanceSchema.parse(story);
+      const current = structured.get(indexKey, listSchema) ?? [];
+      const nextStories = current.filter((existing) => existing.id !== valid.id);
+      nextStories.push(valid);
+      nextStories.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      structured.set(indexKey, listSchema, nextStories);
+      return valid;
+    },
+    remove(storyId: string): void {
+      const nextStories = (structured.get(indexKey, listSchema) ?? []).filter((story) => story.id !== storyId);
+      structured.set(indexKey, listSchema, nextStories);
+    }
+  };
+}
+
+export function createHomeworkArtifactStore(storage: KeyValueStorage) {
+  const structured = createStructuredStore(storage, "homeworkArtifacts");
+  const listSchema = LocalHomeworkArtifactSchema.array();
+  const indexKey = "artifacts";
+
+  return {
+    listByChildProfileId(childProfileId: string): LocalHomeworkArtifact[] {
+      return (structured.get(indexKey, listSchema) ?? []).filter((artifact) => artifact.childProfileId === childProfileId);
+    },
+    get(artifactId: string): LocalHomeworkArtifact | null {
+      return (structured.get(indexKey, listSchema) ?? []).find((artifact) => artifact.id === artifactId) ?? null;
+    },
+    upsert(artifact: LocalHomeworkArtifact): LocalHomeworkArtifact {
+      const valid = LocalHomeworkArtifactSchema.parse(artifact);
+      const current = structured.get(indexKey, listSchema) ?? [];
+      const nextArtifacts = current.filter((existing) => existing.id !== valid.id);
+      nextArtifacts.push(valid);
+      nextArtifacts.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      structured.set(indexKey, listSchema, nextArtifacts);
+      return valid;
+    },
+    remove(artifactId: string): void {
+      const nextArtifacts = (structured.get(indexKey, listSchema) ?? []).filter((artifact) => artifact.id !== artifactId);
+      structured.set(indexKey, listSchema, nextArtifacts);
+    }
+  };
+}
+
 export function createWebFileStore(storage: KeyValueStorage, namespace: string) {
   const prefix = `primer.${namespace}.file.`;
 
@@ -194,5 +282,7 @@ export const localStorageFoundationNotes = {
   fileStorage: "Web file records are stored as base64 payloads and metadata in browser-local storage.",
   secrets: "Web secret storage is local-only and should be replaced by secure native storage on iOS/Android.",
   learnerProfiles: "Child profiles persist in local structured storage and remain on-device by default.",
-  learnerState: "Per-subject learner mastery and confidence state is stored locally and schema-validated."
+  learnerState: "Per-subject learner mastery and confidence state is stored locally and schema-validated.",
+  storyInstances: "Story progress checkpoints persist locally with structured story state and completion markers.",
+  homeworkArtifacts: "Homework artifacts and guided solve steps persist locally for parent-visible review."
 } as const;

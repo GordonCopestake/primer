@@ -1,7 +1,15 @@
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
 
-import { createLearnerProfileStore, createLearnerStateStore, createStructuredStore, createWebFileStore, createWebSecretStore } from "../src/index";
+import {
+  createHomeworkArtifactStore,
+  createLearnerProfileStore,
+  createLearnerStateStore,
+  createStoryInstanceStore,
+  createStructuredStore,
+  createWebFileStore,
+  createWebSecretStore
+} from "../src/index";
 
 function createMemoryStorage(): Storage {
   const data = new Map<string, string>();
@@ -128,5 +136,52 @@ describe("learner state store", () => {
 
     expect(stateStore.get("child_1", "reading")?.masteryMapJson["reading-6-7-cvc-words"]).toBe(0.4);
     expect(stateStore.listByChildProfileId("child_1")).toHaveLength(1);
+  });
+});
+
+
+describe("story instance store", () => {
+  test("persists per-child story checkpoints locally", () => {
+    const storage = createMemoryStorage();
+    const storyStore = createStoryInstanceStore(storage);
+
+    storyStore.upsert({
+      id: "story_1",
+      childProfileId: "child_1",
+      curriculumNodeId: "reading-1",
+      title: "Forest Puzzle",
+      branchStateJson: { choice: "path_a" },
+      progressJson: { checkpoint: 1, completed: false },
+      createdAt: "2026-01-03T00:00:00.000Z",
+      updatedAt: "2026-01-03T00:00:00.000Z"
+    });
+
+    expect(storyStore.listByChildProfileId("child_1")).toHaveLength(1);
+    expect(storyStore.get("story_1")?.progressJson.checkpoint).toBe(1);
+  });
+});
+
+
+describe("homework artifact store", () => {
+  test("persists guided solve artifacts locally", () => {
+    const storage = createMemoryStorage();
+    const artifactStore = createHomeworkArtifactStore(storage);
+
+    artifactStore.upsert({
+      id: "artifact_1",
+      childProfileId: "child_1",
+      sourceType: "text",
+      blobUrl: "",
+      extractedText: "7 + 5",
+      parsedStructureJson: {
+        problemType: "arithmetic",
+        steps: ["identify numbers", "add", "check"],
+        confidence: 0.8
+      },
+      createdAt: "2026-01-03T00:00:00.000Z"
+    });
+
+    expect(artifactStore.listByChildProfileId("child_1")).toHaveLength(1);
+    expect(artifactStore.get("artifact_1")?.parsedStructureJson.problemType).toBe("arithmetic");
   });
 });
