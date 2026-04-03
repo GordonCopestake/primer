@@ -2,15 +2,23 @@
 
 ## Learner UX
 
-- Child flows should be short, guided, and age-appropriate.
+- Child flows must stay short, guided, and age-appropriate.
 - Use clear prompts, limited choices, and predictable progression.
-- Keep homework help and tutoring visually distinct from open chat.
+- Keep tutoring and homework help visually distinct from open chat.
+- Persist learner progress, stories, and homework artifacts locally on-device.
 
-## Parent UX
+## Parent UX (on-device parent area)
 
-- Prioritize transparency, control, and reviewability.
-- Progress, transcripts, and safety events should be easy to find.
-- Settings that affect the child experience should require explicit confirmation.
+- Parent controls are available only on the same device.
+- Access to parent features requires a local parent gate (PIN, optional biometrics).
+- Prioritize transparency, control, and reviewability from local data.
+- Progress, transcripts, permissions, and safety events should be easy to find.
+- Sensitive actions require explicit confirmation after parent unlock.
+
+## Platform UX posture
+
+- Native (iOS/Android) is primary and expected to deliver the strongest privacy and persistence behavior.
+- Web is secondary and should clearly communicate browser-storage limitations.
 
 ## Design direction
 

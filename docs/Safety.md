@@ -5,7 +5,7 @@
 1. Input classification
 2. Policy rules
 3. Model-based output review
-4. Escalation workflow
+4. Local parent escalation/review workflow
 
 ## Severity levels
 
@@ -22,3 +22,9 @@
 - sexual content
 - dangerous instructions
 - diagnosis-like statements
+
+## Review and traceability
+
+- Safety events are stored locally by default.
+- Parent review occurs in the on-device parent area after local parent unlock.
+- Safety decisions and overrides must remain auditable in local history.
