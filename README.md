@@ -4,9 +4,9 @@ Primer is an AI-powered adaptive tutoring monorepo for child learning experience
 
 ## Repository layout
 
-- `apps/learner-mobile`
+- `apps/learner-app`
 - `apps/parent-web`
-- `apps/backend`
+- `apps/api`
 - `packages/*`
 - `prisma/`
 - `docs/`

@@ -1,5 +1,5 @@
 {
-  "name": "@primer/backend",
+  "name": "@primer/api",
   "private": true,
   "scripts": {
     "build": "next build",

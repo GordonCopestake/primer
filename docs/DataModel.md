@@ -1,9 +1,8 @@
 # DataModel.md
 
-## Core entities
+## Core local entities
 
-- ParentAccount
-- Household
+- ParentGateConfig
 - ChildProfile
 - LearnerState
 - CurriculumNode
@@ -13,11 +12,26 @@
 - SafetyEvent
 - StoryInstance
 - HomeworkArtifact
-- AuditEvent
+- LocalAuditEvent
+- ExportBundleManifest
 
 ## Persistence strategy
 
-- Use PostgreSQL and Prisma.
-- Keep relational tables for core records.
-- Use JSON columns for learner state, curriculum metadata, session summaries, and permissions/settings.
-- Seed curriculum from versioned fixtures in-repo.
+### Native (primary)
+
+- Structured app data: local database
+- Binary artifacts (homework photos, avatars, exports): local filesystem
+- Secrets (parent gate hash/material, relay tokens if needed): secure local secret storage
+
+### Web (secondary)
+
+- Browser-local storage only (IndexedDB/localStorage as implemented)
+- No durability guarantees beyond browser constraints
+
+## Data handling rules
+
+- Store learner and parent-area records on-device only by default.
+- Keep transcripts, safety reviews, and permissions in local structured storage.
+- Keep media blobs and export/import bundles in local file storage.
+- Use Zod validation at all module boundaries.
+- Optional relay calls are ephemeral and do not become server-side source of truth.
