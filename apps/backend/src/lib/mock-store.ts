@@ -158,7 +158,7 @@ export function submitSessionTurn(input: { sessionId: string; content: Record<st
       id: randomUUID(),
       childProfileId: child.id,
       type: "unsafe_tutor_output",
-      triggerExcerpt: input.content.inputType,
+      triggerExcerpt: input.inputType,
       systemAction: orchestration.issue.fallbackMessage,
       severity: orchestration.issue.severity
     });

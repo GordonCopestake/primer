@@ -9,11 +9,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit false",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@primer/schemas": "workspace:*"
+    "@primer/schemas": "workspace:*",
+    "@primer/types": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.5.4"
