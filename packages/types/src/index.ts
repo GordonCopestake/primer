@@ -1,4 +1,4 @@
-export type PackageName = "@primer/types" | "@primer/schemas" | "@primer/curriculum-engine" | "@primer/learner-model" | "@primer/tutor-orchestrator" | "@primer/safety-engine" | "@primer/analytics" | "@primer/api-client" | "@primer/ui" | "@primer/design-tokens" | "@primer/config";
+export type PackageName = "@primer/types" | "@primer/schemas" | "@primer/curriculum-engine" | "@primer/learner-model" | "@primer/tutor-orchestrator" | "@primer/safety-engine" | "@primer/analytics" | "@primer/api-client" | "@primer/ui" | "@primer/design-tokens" | "@primer/config" | "@primer/local-storage";
 
 export type Subject = "reading" | "maths" | "science";
 export type AgeBand = "4-5" | "6-7" | "8-9" | "10-11";
