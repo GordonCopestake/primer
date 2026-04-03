@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createLearnerState } from "@primer/learner-model";
-import { createSafetyEventPayload } from "@primer/safety-engine";
+import { createSafetyEventPayload, reviewHomeworkArtifact, reviewStoryContent } from "@primer/safety-engine";
 import { listCurriculumNodes, selectNextNode } from "@primer/curriculum-engine";
 import { orchestrateTutorTurn } from "@primer/tutor-orchestrator";
 import type { AgeBand, ChildProfile, Household, Session, SessionMode, SafetyEvent, Subject } from "@primer/types";
@@ -149,21 +149,29 @@ export function submitSessionTurn(input: { sessionId: string; content: Record<st
   const learner = ensureLearner(child.id, "reading");
   const targetNode =
     session.goalNodeId ? listCurriculumNodes(learner.subject, child.ageBand).find((node) => node.id === session.goalNodeId) : undefined;
+  const recentTranscript = (turns.get(session.id) ?? []).map((entry): { actor: "child" | "tutor"; content: string } => ({
+    actor: entry.actor === "child" ? "child" : "tutor",
+    content: typeof entry.contentJson.text === "string" ? entry.contentJson.text : JSON.stringify(entry.contentJson)
+  }));
+
   const orchestration = orchestrateTutorTurn({
     learnerState: learner,
     targetNode: targetNode ?? listCurriculumNodes(learner.subject, child.ageBand)[0]!,
     mode: session.mode,
-    recentTranscript: []
+    ageBand: child.ageBand,
+    recentTranscript,
+    needsMultimodal: input.inputType === "image_reference"
   });
 
-  if (!orchestration.ok && orchestration.issue) {
+  if (orchestration.meta.usedFallback) {
     const event = createSafetyEventPayload({
       id: randomUUID(),
       childProfileId: child.id,
-      type: "unsafe_tutor_output",
-      triggerExcerpt: input.inputType,
-      systemAction: orchestration.issue.fallbackMessage,
-      severity: orchestration.issue.severity
+      type: "tutor_fallback",
+      triggerExcerpt: orchestration.meta.fallbackReason ?? input.inputType,
+      systemAction: "safe_fallback_response",
+      severity: "warning",
+      sessionId: session.id
     });
     const existing = safetyEvents.get(child.id) ?? [];
     existing.push(event);
@@ -172,7 +180,8 @@ export function submitSessionTurn(input: { sessionId: string; content: Record<st
 
   return {
     turn,
-    tutorResponse: orchestration.ok ? orchestration.response : null
+    tutorResponse: orchestration.response,
+    orchestrationMeta: orchestration.meta
   };
 }
 
@@ -196,16 +205,46 @@ export function completeSession(sessionId: string) {
 }
 
 export function parseHomeworkArtifact(input: { childId: string; sourceType: "image" | "text"; blobUrl?: string; extractedText?: string }) {
-  ensureChild(input.childId);
+  const child = ensureChild(input.childId);
+  const rawText = input.extractedText ?? "";
+  const safety = reviewHomeworkArtifact({
+    ageBand: child.ageBand,
+    sourceType: input.sourceType,
+    attachmentCount: input.sourceType === "image" ? 1 : 0,
+    extractedText: rawText
+  });
+
+  const safeText = safety.safeExtractedText;
+  const problemType = /\d/.test(safeText) ? "arithmetic" : safeText.length > 0 ? "word_problem" : "guided";
+  const steps =
+    problemType === "arithmetic"
+      ? ["identify numbers", "choose operation", "compute", "check result"]
+      : ["read the question", "find key details", "solve one step", "check result"];
+
+  if (!safety.ok) {
+    const event = createSafetyEventPayload({
+      id: randomUUID(),
+      childProfileId: child.id,
+      type: "homework_safety_fallback",
+      triggerExcerpt: rawText.slice(0, 120),
+      systemAction: safety.reason,
+      severity: "warning"
+    });
+    const existing = safetyEvents.get(child.id) ?? [];
+    existing.push(event);
+    safetyEvents.set(child.id, existing);
+  }
+
   return {
     id: randomUUID(),
     childProfileId: input.childId,
     sourceType: input.sourceType,
     blobUrl: input.blobUrl ?? "",
-    extractedText: input.extractedText ?? "",
+    extractedText: safeText,
     parsedStructureJson: {
-      problemType: "guided",
-      steps: ["identify", "solve", "check"]
+      problemType,
+      steps,
+      confidence: safety.ok ? 0.82 : 0.55
     },
     createdAt: new Date().toISOString()
   };
@@ -257,16 +296,40 @@ export function captureParentalConsent(input: {
 }
 
 export function createStoryInstance(input: { childId: string; curriculumNodeId: string; title: string }) {
-  ensureChild(input.childId);
+  const child = ensureChild(input.childId);
+  const storySafety = reviewStoryContent({
+    ageBand: child.ageBand,
+    title: input.title,
+    segmentText: `${input.title} begins with a learning challenge.`
+  });
+
   const story = {
     id: randomUUID(),
     childProfileId: input.childId,
     curriculumNodeId: input.curriculumNodeId,
-    title: input.title,
-    branchStateJson: { checkpoint: 0 },
-    progressJson: { completed: false },
+    title: storySafety.fallbackTitle,
+    branchStateJson: {
+      checkpoint: 0,
+      latestSegment: storySafety.fallbackSegment
+    },
+    progressJson: { checkpoint: 0, completed: false },
     createdAt: new Date().toISOString()
   };
+
+  if (!storySafety.ok) {
+    const event = createSafetyEventPayload({
+      id: randomUUID(),
+      childProfileId: child.id,
+      severity: "warning",
+      type: "story_safety_fallback",
+      triggerExcerpt: input.title,
+      systemAction: storySafety.reason
+    });
+    const existing = safetyEvents.get(child.id) ?? [];
+    existing.push(event);
+    safetyEvents.set(child.id, existing);
+  }
+
   storyInstances.push(story);
   return story;
 }

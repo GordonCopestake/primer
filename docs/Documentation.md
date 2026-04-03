@@ -2,7 +2,11 @@
 
 ## Current status
 
-- Milestone 5 (local learner profiles, curriculum persistence, and learner state) is now underway with local profile and learner-state stores wired into `@primer/local-storage` and consumed by `apps/learner-app/src/store`.
+- Milestone 9 (local safety history, transcript review, and parent controls) is now underway with parent-area local review stores and in-app review actions for safety events.
+- Milestone 8 (homework help with local artifact capture and guided solve) is in place with local homework artifact persistence, guided step extraction, and homework safety fallback checks.
+- Milestone 7 (story mode with local persistence and safety checks) is in place with local story instance storage, per-child checkpoint persistence, and story safety fallback checks wired into story creation flow.
+- Milestone 6 (tutoring orchestration with a local-first inference pipeline) is in place via routing-mode decisions (`local_only`, `local_preferred_cloud_fallback`, `cloud_preferred_local_fallback`, `cloud_required`), structured orchestration metadata, and safety-first fallback responses in `@primer/tutor-orchestrator` and API session turns.
+- Milestone 5 (local learner profiles, curriculum persistence, and learner state) is in place with local profile and learner-state stores wired into `@primer/local-storage` and consumed by `apps/learner-app/src/store`.
 - Milestone 4 (local storage foundation) is now in place through a shared `@primer/local-storage` package that provides schema-validated structured storage, local file-record persistence helpers, and local secret-store adapters for web fallback.
 - Milestone 2 (local parent gate foundation) has started with a web-first implementation in `apps/parent-web`, including local PIN setup/unlock state management.
 - Milestone 3 (learner app shell + on-device parent area shell) has progressed on web with a gated parent-area shell across dashboard sections.
@@ -17,6 +21,10 @@
 - Web support remains available but is secondary and constrained to browser-local storage limitations.
 - Core learner/parent data (profiles, learner state, transcripts, safety events, homework artifacts) persists locally by default.
 - Structured storage reads/writes are now normalized behind shared helpers to reduce drift across learner and parent surfaces.
+- Tutoring turn orchestration now returns explicit routing metadata and fallback reasons so parent-review surfaces can explain why a response was local, cloud-required, or safely downgraded.
+- Story creation now runs local safety review and persists story checkpoint state locally so story progress remains on-device and reviewable.
+- Homework parse now applies local safety review, emits safety fallback events when needed, and stores guided solve structures suitable for on-device parent review.
+- Parent-area safety/session pages now read local transcript and safety-history stores so parent review works without cloud state.
 - Local learner profile records and per-subject learner state now persist in schema-validated structured storage rather than placeholder learner-app constants.
 - Cloud model usage is fallback-only and must go through a stateless relay that holds provider keys server-side.
 - Relay is explicitly forbidden from storing accounts, learner records, files, transcripts, or long-lived learner-content logs.

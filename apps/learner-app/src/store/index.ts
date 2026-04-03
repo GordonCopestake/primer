@@ -1,11 +1,22 @@
 import { createLearnerState } from "@primer/learner-model";
-import { createLearnerProfileStore, createLearnerStateStore, type LocalChildProfile, type LocalLearnerState } from "@primer/local-storage";
+import {
+  createHomeworkArtifactStore,
+  createLearnerProfileStore,
+  createLearnerStateStore,
+  createStoryInstanceStore,
+  type LocalChildProfile,
+  type LocalHomeworkArtifact,
+  type LocalLearnerState,
+  type LocalStoryInstance
+} from "@primer/local-storage";
 import type { Subject } from "@primer/types";
 import { getLearnerStorage } from "../lib";
 
 const storage = getLearnerStorage();
 const profileStore = createLearnerProfileStore(storage);
 const stateStore = createLearnerStateStore(storage);
+const storyStore = createStoryInstanceStore(storage);
+const homeworkArtifactStore = createHomeworkArtifactStore(storage);
 
 export function listLearnerProfiles(): LocalChildProfile[] {
   return profileStore.list();
@@ -27,4 +38,22 @@ export function getLearnerState(childProfileId: string, subject: Subject): Local
 
 export function upsertLearnerState(state: LocalLearnerState): LocalLearnerState {
   return stateStore.upsert(state);
+}
+
+
+export function listStoryInstances(childProfileId: string): LocalStoryInstance[] {
+  return storyStore.listByChildProfileId(childProfileId);
+}
+
+export function upsertStoryInstance(story: LocalStoryInstance): LocalStoryInstance {
+  return storyStore.upsert(story);
+}
+
+
+export function listHomeworkArtifacts(childProfileId: string): LocalHomeworkArtifact[] {
+  return homeworkArtifactStore.listByChildProfileId(childProfileId);
+}
+
+export function upsertHomeworkArtifact(artifact: LocalHomeworkArtifact): LocalHomeworkArtifact {
+  return homeworkArtifactStore.upsert(artifact);
 }

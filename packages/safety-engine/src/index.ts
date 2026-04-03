@@ -101,3 +101,66 @@ export function createSafetyEventPayload(input: {
     createdAt: new Date().toISOString()
   });
 }
+
+export function reviewStoryContent(input: {
+  ageBand: "4-5" | "6-7" | "8-9" | "10-11";
+  title: string;
+  segmentText: string;
+}) {
+  const titleCheck = classifyTextSafety(input.title);
+  if (!titleCheck.ok) {
+    return {
+      ok: false as const,
+      reason: "story_title_failed_safety",
+      fallbackTitle: "Learning Story",
+      fallbackSegment: "Let's choose a kinder story topic and keep learning together."
+    };
+  }
+
+  const segmentCheck = classifyTextSafety(input.segmentText);
+  if (!segmentCheck.ok || !isAgeBandLanguageSafe(input.segmentText, input.ageBand)) {
+    return {
+      ok: false as const,
+      reason: !segmentCheck.ok ? "story_segment_failed_safety" : "story_segment_age_band_mismatch",
+      fallbackTitle: input.title,
+      fallbackSegment: "Let's continue with a simpler, safer story moment."
+    };
+  }
+
+  return {
+    ok: true as const,
+    reason: "clean",
+    fallbackTitle: input.title,
+    fallbackSegment: input.segmentText
+  };
+}
+
+export function reviewHomeworkArtifact(input: {
+  ageBand: "4-5" | "6-7" | "8-9" | "10-11";
+  sourceType: "image" | "text";
+  attachmentCount: number;
+  extractedText: string;
+}) {
+  const attachmentAllowed = isAttachmentAllowed(input.sourceType, input.attachmentCount);
+  if (!attachmentAllowed) {
+    return {
+      ok: false as const,
+      reason: "homework_attachment_not_allowed",
+      safeExtractedText: ""
+    };
+  }
+
+  if (shouldEscalateSafety({ text: input.extractedText, ageBand: input.ageBand })) {
+    return {
+      ok: false as const,
+      reason: "homework_text_failed_safety",
+      safeExtractedText: "Let's focus on a school question you can solve step by step."
+    };
+  }
+
+  return {
+    ok: true as const,
+    reason: "clean",
+    safeExtractedText: input.extractedText
+  };
+}
