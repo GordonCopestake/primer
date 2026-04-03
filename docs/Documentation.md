@@ -3,6 +3,7 @@
 ## Current status
 
 - Milestone 8 (homework help with local artifact capture and guided solve) is in place with a learner-app homework flow, local homework artifact persistence, guided solve output, and homework safety fallback checks.
+- Milestone 10 (optional export/import backup + hardening) has started with a parent-area manual backup flow that exports and re-imports schema-validated local learner and parent-review records as on-device JSON bundles.
 - Milestone 9 (local safety history, transcript review, and parent controls) is now in place with local parent-area dashboard, progress, session-transcript, and safety-review flows backed by schema-validated on-device review stores.
 - Milestone 7 (story mode with local persistence and safety checks) is in place with a learner-app story flow, local story instance storage, per-child checkpoint persistence, and story safety fallback checks wired into story creation and checkpoint progression.
 - Milestone 6 (tutoring orchestration with a local-first inference pipeline) is in place via routing-mode decisions (`local_only`, `local_preferred_cloud_fallback`, `cloud_preferred_local_fallback`, `cloud_required`), structured orchestration metadata, safety-first fallback responses, and a learner-app session flow that runs the orchestrator locally while saving transcript turns on device.
@@ -22,6 +23,7 @@
 - Core learner/parent data (profiles, learner state, transcripts, safety events, homework artifacts) persists locally by default.
 - Structured storage reads/writes are now normalized behind shared helpers to reduce drift across learner and parent surfaces.
 - Parent dashboard and progress screens now read the same local review snapshot as safety/session pages, so the on-device parent area exposes learner-state, story, homework, transcript, and safety summaries without relying on server state.
+- Manual export/import bundles now round-trip local learner profiles, learner state, stories, homework artifacts, session transcripts, and safety history while deliberately excluding parent-gate secrets.
 - Tutoring turn orchestration now returns explicit routing metadata and fallback reasons so parent-review surfaces can explain why a response was local, cloud-required, or safely downgraded.
 - The learner session screen now exercises the orchestrator directly on-device instead of remaining a static shell, which keeps the local-first architecture honest in the main child flow.
 - Story mode now advances through local checkpoints with persisted branch paths, so the child-facing flow matches the stored story state rather than relying on a placeholder shell.

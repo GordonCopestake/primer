@@ -108,6 +108,33 @@ export const LocalSafetyHistoryEventSchema = z.object({
 
 export type LocalSafetyHistoryEvent = z.infer<typeof LocalSafetyHistoryEventSchema>;
 
+export const ExportBundleManifestSchema = z.object({
+  version: z.literal(1),
+  exportedAt: z.string().datetime(),
+  recordCounts: z.object({
+    profiles: z.number().int().min(0),
+    learnerStates: z.number().int().min(0),
+    stories: z.number().int().min(0),
+    homeworkArtifacts: z.number().int().min(0),
+    sessionTranscripts: z.number().int().min(0),
+    safetyEvents: z.number().int().min(0)
+  })
+});
+
+export type ExportBundleManifest = z.infer<typeof ExportBundleManifestSchema>;
+
+export const LocalBackupBundleSchema = z.object({
+  manifest: ExportBundleManifestSchema,
+  profiles: LocalChildProfileSchema.array(),
+  learnerStates: LocalLearnerStateSchema.array(),
+  stories: LocalStoryInstanceSchema.array(),
+  homeworkArtifacts: LocalHomeworkArtifactSchema.array(),
+  sessionTranscripts: LocalSessionTranscriptSchema.array(),
+  safetyEvents: LocalSafetyHistoryEventSchema.array()
+});
+
+export type LocalBackupBundle = z.infer<typeof LocalBackupBundleSchema>;
+
 export function createStructuredStore(storage: KeyValueStorage, namespace: string) {
   const prefix = `primer.${namespace}.structured.`;
 
@@ -375,6 +402,67 @@ export function createWebSecretStore(storage: KeyValueStorage, namespace: string
   };
 }
 
+function listStoredRecords<T>(storage: KeyValueStorage, namespace: string, key: string, schema: z.ZodType<T>): T {
+  const structured = createStructuredStore(storage, namespace);
+  return structured.get(key, schema) ?? schema.parse([]);
+}
+
+export function exportLocalBackupBundle(storage: KeyValueStorage, exportedAt = new Date().toISOString()): LocalBackupBundle {
+  const profiles = listStoredRecords(storage, "learnerProfiles", "profiles", LocalChildProfileSchema.array());
+  const learnerStates = listStoredRecords(storage, "learnerState", "states", LocalLearnerStateSchema.array());
+  const stories = listStoredRecords(storage, "storyInstances", "stories", LocalStoryInstanceSchema.array());
+  const homeworkArtifacts = listStoredRecords(storage, "homeworkArtifacts", "artifacts", LocalHomeworkArtifactSchema.array());
+  const sessionTranscripts = listStoredRecords(
+    storage,
+    "sessionTranscripts",
+    "transcripts",
+    LocalSessionTranscriptSchema.array()
+  );
+  const safetyEvents = listStoredRecords(storage, "safetyHistory", "events", LocalSafetyHistoryEventSchema.array());
+
+  return LocalBackupBundleSchema.parse({
+    manifest: {
+      version: 1,
+      exportedAt,
+      recordCounts: {
+        profiles: profiles.length,
+        learnerStates: learnerStates.length,
+        stories: stories.length,
+        homeworkArtifacts: homeworkArtifacts.length,
+        sessionTranscripts: sessionTranscripts.length,
+        safetyEvents: safetyEvents.length
+      }
+    },
+    profiles,
+    learnerStates,
+    stories,
+    homeworkArtifacts,
+    sessionTranscripts,
+    safetyEvents
+  });
+}
+
+export function importLocalBackupBundle(storage: KeyValueStorage, bundle: LocalBackupBundle): LocalBackupBundle {
+  const validBundle = LocalBackupBundleSchema.parse(bundle);
+
+  createStructuredStore(storage, "learnerProfiles").set("profiles", LocalChildProfileSchema.array(), validBundle.profiles);
+  createStructuredStore(storage, "learnerState").set("states", LocalLearnerStateSchema.array(), validBundle.learnerStates);
+  createStructuredStore(storage, "storyInstances").set("stories", LocalStoryInstanceSchema.array(), validBundle.stories);
+  createStructuredStore(storage, "homeworkArtifacts").set(
+    "artifacts",
+    LocalHomeworkArtifactSchema.array(),
+    validBundle.homeworkArtifacts
+  );
+  createStructuredStore(storage, "sessionTranscripts").set(
+    "transcripts",
+    LocalSessionTranscriptSchema.array(),
+    validBundle.sessionTranscripts
+  );
+  createStructuredStore(storage, "safetyHistory").set("events", LocalSafetyHistoryEventSchema.array(), validBundle.safetyEvents);
+
+  return validBundle;
+}
+
 export const localStorageFoundationNotes = {
   structuredData: "Structured records are schema-validated with Zod before read/write.",
   fileStorage: "Web file records are stored as base64 payloads and metadata in browser-local storage.",
@@ -384,5 +472,6 @@ export const localStorageFoundationNotes = {
   storyInstances: "Story progress checkpoints persist locally with structured story state and completion markers.",
   homeworkArtifacts: "Homework artifacts and guided solve steps persist locally for parent-visible review.",
   sessionTranscripts: "Session transcripts persist locally for parent review in the on-device parent area.",
-  safetyHistory: "Safety events persist locally with review status so parents can track follow-up actions."
+  safetyHistory: "Safety events persist locally with review status so parents can track follow-up actions.",
+  backupBundles: "Manual export and import bundles can round-trip core local learner and parent-review records."
 } as const;

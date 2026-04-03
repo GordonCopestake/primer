@@ -10,7 +10,9 @@ import {
   createStoryInstanceStore,
   createStructuredStore,
   createWebFileStore,
-  createWebSecretStore
+  createWebSecretStore,
+  exportLocalBackupBundle,
+  importLocalBackupBundle
 } from "../src/index";
 
 function createMemoryStorage(): Storage {
@@ -229,5 +231,91 @@ describe("safety history store", () => {
     const reviewed = safetyStore.markReviewed("event_1", "2026-01-03T00:05:00.000Z");
     expect(reviewed?.reviewStatus).toBe("reviewed");
     expect(reviewed?.reviewedAt).toBe("2026-01-03T00:05:00.000Z");
+  });
+});
+
+describe("local backup bundle", () => {
+  test("exports and imports a validated local backup bundle", () => {
+    const sourceStorage = createMemoryStorage();
+    const targetStorage = createMemoryStorage();
+
+    createLearnerProfileStore(sourceStorage).upsert({
+      id: "child_1",
+      displayName: "Alex",
+      birthDate: "2019-01-01T00:00:00.000Z",
+      ageBand: "6-7",
+      schoolYear: "Year 1",
+      accessibilitySettingsJson: {},
+      permissionsJson: {},
+      createdAt: "2026-01-01T00:00:00.000Z"
+    });
+    createLearnerStateStore(sourceStorage).upsert({
+      id: "state_child_1_reading",
+      childProfileId: "child_1",
+      subject: "reading",
+      masteryMapJson: { "reading-6-7-cvc-words": 0.7 },
+      confidenceMapJson: { "reading-6-7-cvc-words": 0.6 },
+      misconceptionLogJson: [],
+      interestTagsJson: ["stories"],
+      preferredModesJson: ["daily_session"],
+      sessionTolerance: 15,
+      updatedAt: "2026-01-03T00:00:00.000Z"
+    });
+    createStoryInstanceStore(sourceStorage).upsert({
+      id: "story_1",
+      childProfileId: "child_1",
+      curriculumNodeId: "reading-1",
+      title: "Forest Puzzle",
+      branchStateJson: { choice: "path_a" },
+      progressJson: { checkpoint: 1, completed: false },
+      createdAt: "2026-01-03T00:00:00.000Z",
+      updatedAt: "2026-01-03T00:00:00.000Z"
+    });
+    createHomeworkArtifactStore(sourceStorage).upsert({
+      id: "artifact_1",
+      childProfileId: "child_1",
+      sourceType: "text",
+      blobUrl: "",
+      extractedText: "7 + 5",
+      parsedStructureJson: {
+        problemType: "arithmetic",
+        steps: ["identify numbers", "add", "check"],
+        confidence: 0.8
+      },
+      createdAt: "2026-01-03T00:00:00.000Z"
+    });
+    createSessionTranscriptStore(sourceStorage).upsert({
+      id: "transcript_1",
+      childProfileId: "child_1",
+      sessionId: "session_1",
+      mode: "daily_session",
+      turns: [
+        { actor: "tutor", text: "Let's try 9 + 6.", createdAt: "2026-01-03T00:00:00.000Z" },
+        { actor: "child", text: "15", createdAt: "2026-01-03T00:01:00.000Z" }
+      ],
+      summary: "Worked through addition with confidence.",
+      createdAt: "2026-01-03T00:02:00.000Z"
+    });
+    createSafetyHistoryStore(sourceStorage).upsert({
+      id: "event_1",
+      childProfileId: "child_1",
+      severity: "warning",
+      type: "session_output_blocked",
+      triggerExcerpt: "unsafe response candidate",
+      systemAction: "safe_fallback_response",
+      reviewStatus: "open",
+      createdAt: "2026-01-03T00:00:00.000Z"
+    });
+
+    const bundle = exportLocalBackupBundle(sourceStorage, "2026-02-01T00:00:00.000Z");
+    importLocalBackupBundle(targetStorage, bundle);
+
+    expect(bundle.manifest.recordCounts.profiles).toBe(1);
+    expect(createLearnerProfileStore(targetStorage).list()).toHaveLength(1);
+    expect(createLearnerStateStore(targetStorage).listByChildProfileId("child_1")).toHaveLength(1);
+    expect(createStoryInstanceStore(targetStorage).listByChildProfileId("child_1")).toHaveLength(1);
+    expect(createHomeworkArtifactStore(targetStorage).listByChildProfileId("child_1")).toHaveLength(1);
+    expect(createSessionTranscriptStore(targetStorage).listByChildProfileId("child_1")).toHaveLength(1);
+    expect(createSafetyHistoryStore(targetStorage).listByChildProfileId("child_1")).toHaveLength(1);
   });
 });
