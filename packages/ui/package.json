@@ -1,0 +1,22 @@
+{
+  "name": "@primer/ui",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit false",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@primer/design-tokens": "workspace:*",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

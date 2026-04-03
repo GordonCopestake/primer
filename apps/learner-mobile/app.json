@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Primer",
+    "slug": "primer",
+    "scheme": "primer",
+    "version": "0.1.0",
+    "plugins": ["expo-router"],
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    }
+  }
+}

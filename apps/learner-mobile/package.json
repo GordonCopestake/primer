@@ -1,0 +1,21 @@
+{
+  "name": "@primer/learner-mobile",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "build": "expo export",
+    "dev": "expo start",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@primer/api-client": "workspace:*",
+    "@primer/ui": "workspace:*",
+    "@primer/design-tokens": "workspace:*",
+    "expo": "^51.0.0",
+    "expo-router": "^3.5.0",
+    "react": "^18.3.1",
+    "react-native": "^0.74.0"
+  }
+}
