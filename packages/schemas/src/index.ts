@@ -6,6 +6,18 @@ export const SessionModeSchema = z.enum(["daily_session", "live_tutor", "story_m
 export const SessionStatusSchema = z.enum(["created", "active", "paused", "awaiting_input", "processing", "completed", "cancelled", "safety_paused"]);
 export const ActorTypeSchema = z.enum(["child", "parent", "system"]);
 export const SafetySeveritySchema = z.enum(["info", "warning", "high", "critical"]);
+export const CurriculumNodeSchema = z.object({
+  id: z.string().min(1),
+  subject: SubjectSchema,
+  ageBand: AgeBandSchema,
+  skillCode: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  prerequisitesJson: z.array(z.string()),
+  difficulty: z.number(),
+  metadataJson: z.record(z.any()),
+  version: z.string().min(1)
+});
 
 export const TutorResponseSchema = z.object({
   message: z.string(),
@@ -85,3 +97,4 @@ export type HomeworkParse = z.infer<typeof HomeworkParseSchema>;
 export type SafetyReview = z.infer<typeof SafetyReviewSchema>;
 export type SafetyEvent = z.infer<typeof SafetyEventSchema>;
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
+export type CurriculumNode = z.infer<typeof CurriculumNodeSchema>;

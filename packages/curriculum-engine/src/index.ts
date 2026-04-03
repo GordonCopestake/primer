@@ -1,8 +1,9 @@
 import readingBasics from "../data/reading/basics.json";
 import mathsNumberSense from "../data/maths/number-sense.json";
+import { CurriculumNodeSchema } from "@primer/schemas";
 import type { AgeBand, CurriculumNode, Subject } from "@primer/types";
 
-const curriculumNodes: CurriculumNode[] = [...readingBasics, ...mathsNumberSense];
+const curriculumNodes: CurriculumNode[] = CurriculumNodeSchema.array().parse([...readingBasics, ...mathsNumberSense]);
 
 export function listCurriculumNodes(subject?: Subject, ageBand?: AgeBand): CurriculumNode[] {
   return curriculumNodes.filter((node) => {
