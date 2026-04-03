@@ -1,11 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
   getLearnerState,
+  getLearnerProfile,
+  listSessionTranscripts,
   listHomeworkArtifacts,
   listLearnerProfiles,
   listStoryInstances,
   upsertHomeworkArtifact,
   upsertLearnerProfile,
+  upsertSessionTranscript,
   upsertStoryInstance
 } from "./index";
 
@@ -23,6 +26,7 @@ describe("learner store", () => {
     });
 
     expect(listLearnerProfiles().some((profile) => profile.id === "child_local_1")).toBe(true);
+    expect(getLearnerProfile("child_local_1")?.displayName).toBe("Mia");
   });
 
   test("creates default learner state on first read", () => {
@@ -63,5 +67,23 @@ describe("learner store", () => {
     expect(listHomeworkArtifacts("child_local_1")[0]?.id).toBe("artifact_local_1");
   });
 
+  test("stores local tutoring transcripts", () => {
+    upsertSessionTranscript({
+      id: "transcript_local_1",
+      childProfileId: "child_local_1",
+      sessionId: "session_local_1",
+      mode: "daily_session",
+      turns: [
+        {
+          actor: "child",
+          text: "I think the answer is 8",
+          createdAt: "2026-03-03T00:00:00.000Z"
+        }
+      ],
+      summary: "Working on number bonds.",
+      createdAt: "2026-03-03T00:00:00.000Z"
+    });
 
+    expect(listSessionTranscripts("child_local_1")[0]?.id).toBe("transcript_local_1");
+  });
 });

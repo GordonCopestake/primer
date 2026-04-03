@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createParentReviewStores, seedParentReviewDemoData } from "./parent-review";
+import { createParentReviewStores, getParentDashboardSnapshot, seedParentReviewDemoData } from "./parent-review";
 import type { BrowserStorage } from "./parent-gate";
 
 function createStorage(seed: Record<string, string> = {}): BrowserStorage {
@@ -45,5 +45,24 @@ describe("parent review stores", () => {
 
     const reviewed = stores.markSafetyEventReviewed("event_local_1");
     expect(reviewed?.reviewStatus).toBe("reviewed");
+  });
+
+  it("builds a dashboard snapshot from seeded local review data", () => {
+    const storage = createStorage();
+    seedParentReviewDemoData(storage, "child_local_1");
+
+    const snapshot = getParentDashboardSnapshot(storage, "child_local_1");
+
+    expect(snapshot.profile?.displayName).toBe("Ava");
+    expect(snapshot.learnerStates.length).toBeGreaterThan(0);
+    expect(snapshot.transcripts.length).toBeGreaterThan(0);
+    expect(snapshot.safetyEvents.length).toBeGreaterThan(0);
+    expect(snapshot.stories.length).toBeGreaterThan(0);
+    expect(snapshot.homeworkArtifacts.length).toBeGreaterThan(0);
+    expect(snapshot.stats.masteryEntries).toBeGreaterThan(0);
+    expect(snapshot.stats.transcriptCount).toBeGreaterThan(0);
+    expect(snapshot.stats.openSafetyCount).toBeGreaterThan(0);
+    expect(snapshot.stats.homeworkCount).toBeGreaterThan(0);
+    expect(snapshot.stats.storyCount).toBeGreaterThan(0);
   });
 });

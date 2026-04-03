@@ -65,3 +65,21 @@ export function recordMisconception(state: LearnerState, misconception: string):
     updatedAt: new Date().toISOString()
   };
 }
+
+export function recordAssessmentOutcome(
+  state: LearnerState,
+  params: {
+    nodeId: string;
+    score: number;
+    confidence: number;
+    misconception?: string;
+  }
+): LearnerState {
+  const nextState = updateMasteryFromAssessment(state, params.nodeId, params.score, params.confidence);
+
+  if (params.misconception) {
+    return recordMisconception(nextState, params.misconception);
+  }
+
+  return nextState;
+}

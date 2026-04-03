@@ -1,4 +1,4 @@
-export { createParentReviewStores, seedParentReviewDemoData } from "./parent-review";
+export { createParentReviewStores, getParentDashboardSnapshot, seedParentReviewDemoData } from "./parent-review";
 export {
   clearParentPinHash,
   getParentPinHash,

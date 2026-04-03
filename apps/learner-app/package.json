@@ -12,15 +12,19 @@
   "dependencies": {
     "@babel/runtime": "^7.29.0",
     "@primer/api-client": "workspace:*",
+    "@primer/curriculum-engine": "workspace:*",
     "@primer/design-tokens": "workspace:*",
     "@primer/learner-model": "workspace:*",
     "@primer/local-storage": "workspace:*",
+    "@primer/safety-engine": "workspace:*",
+    "@primer/tutor-orchestrator": "workspace:*",
+    "@primer/types": "workspace:*",
     "@primer/ui": "workspace:*",
     "expo": "^51.0.0",
     "expo-router": "^3.5.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "react-native": "^0.74.0",
+    "react-native": "^0.74.5",
     "react-native-web": "~0.19.10"
   }
 }

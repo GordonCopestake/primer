@@ -117,6 +117,7 @@ export function startSession(input: { childId: string; mode: SessionMode; subjec
     endedAt: null,
     durationSeconds: null,
     summaryJson: {
+      subject,
       learnerSubject: learner.subject,
       targetNodeId: targetNode?.id ?? null
     }
@@ -146,9 +147,12 @@ export function submitSessionTurn(input: { sessionId: string; content: Record<st
   turns.get(session.id)?.push(turn);
 
   const child = ensureChild(session.childProfileId);
-  const learner = ensureLearner(child.id, "reading");
-  const targetNode =
-    session.goalNodeId ? listCurriculumNodes(learner.subject, child.ageBand).find((node) => node.id === session.goalNodeId) : undefined;
+  const sessionSubject =
+    session.summaryJson.subject === "maths" || session.summaryJson.subject === "science" ? session.summaryJson.subject : "reading";
+  const learner = ensureLearner(child.id, sessionSubject);
+  const targetNode = session.goalNodeId
+    ? listCurriculumNodes(sessionSubject, child.ageBand).find((node) => node.id === session.goalNodeId)
+    : undefined;
   const recentTranscript = (turns.get(session.id) ?? []).map((entry): { actor: "child" | "tutor"; content: string } => ({
     actor: entry.actor === "child" ? "child" : "tutor",
     content: typeof entry.contentJson.text === "string" ? entry.contentJson.text : JSON.stringify(entry.contentJson)
