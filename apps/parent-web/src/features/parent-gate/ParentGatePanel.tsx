@@ -8,8 +8,9 @@ import {
   isParentGateConfigured,
   isParentGateUnlocked,
   isValidParentPin,
-  PARENT_GATE_PIN_HASH_KEY,
-  setParentGateUnlocked
+  getParentPinHash,
+  setParentGateUnlocked,
+  storeParentPinHash
 } from "../../lib/parent-gate";
 import { parentAreaLinks } from "./parent-area-links";
 
@@ -66,7 +67,7 @@ export function ParentGatePanel() {
 
     try {
       const pinHash = await hashParentPin(setupPin);
-      localStorage.setItem(PARENT_GATE_PIN_HASH_KEY, pinHash);
+      storeParentPinHash(localStorage, pinHash);
       setParentGateUnlocked(localStorage);
       setConfigured(true);
       setUnlocked(true);
@@ -94,7 +95,7 @@ export function ParentGatePanel() {
 
     try {
       const enteredHash = await hashParentPin(unlockPin);
-      const storedHash = localStorage.getItem(PARENT_GATE_PIN_HASH_KEY);
+      const storedHash = getParentPinHash(localStorage);
 
       if (!storedHash || enteredHash !== storedHash) {
         setErrorMessage("Incorrect PIN.");

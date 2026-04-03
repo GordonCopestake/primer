@@ -2,6 +2,7 @@
 
 ## Current status
 
+- Milestone 4 (local storage foundation) is now in place through a shared `@primer/local-storage` package that provides schema-validated structured storage, local file-record persistence helpers, and local secret-store adapters for web fallback.
 - Milestone 2 (local parent gate foundation) has started with a web-first implementation in `apps/parent-web`, including local PIN setup/unlock state management.
 - Milestone 3 (learner app shell + on-device parent area shell) has progressed on web with a gated parent-area shell across dashboard sections.
 - Architecture has been pivoted to a strict local-only default model.
@@ -14,6 +15,7 @@
 - Native is the primary platform because it offers the strongest privacy, storage durability, and local control model.
 - Web support remains available but is secondary and constrained to browser-local storage limitations.
 - Core learner/parent data (profiles, learner state, transcripts, safety events, homework artifacts) persists locally by default.
+- Structured storage reads/writes are now normalized behind shared helpers to reduce drift across learner and parent surfaces.
 - Cloud model usage is fallback-only and must go through a stateless relay that holds provider keys server-side.
 - Relay is explicitly forbidden from storing accounts, learner records, files, transcripts, or long-lived learner-content logs.
 - Export/import is optional and manual for local backup portability.

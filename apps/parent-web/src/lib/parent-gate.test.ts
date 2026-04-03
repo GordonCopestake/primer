@@ -3,9 +3,9 @@ import {
   isParentGateConfigured,
   isParentGateUnlocked,
   isValidParentPin,
-  PARENT_GATE_PIN_HASH_KEY,
   PARENT_GATE_UNLOCKED_UNTIL_KEY,
   setParentGateUnlocked,
+  storeParentPinHash,
   type BrowserStorage
 } from "./parent-gate";
 
@@ -34,9 +34,8 @@ describe("parent-gate storage helpers", () => {
   });
 
   it("detects configured gate from stored pin hash", () => {
-    const configuredStorage = createStorage({
-      [PARENT_GATE_PIN_HASH_KEY]: "hash"
-    });
+    const configuredStorage = createStorage();
+    storeParentPinHash(configuredStorage, "hash");
 
     expect(isParentGateConfigured(configuredStorage)).toBe(true);
     expect(isParentGateConfigured(createStorage())).toBe(false);

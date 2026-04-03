@@ -1,16 +1,22 @@
-export const PARENT_GATE_PIN_HASH_KEY = "primer.parentGate.pinHash";
+import { createWebSecretStore, type KeyValueStorage } from "@primer/local-storage";
+
+export const PARENT_GATE_PIN_HASH_KEY = "pinHash";
 export const PARENT_GATE_UNLOCKED_UNTIL_KEY = "primer.parentGate.unlockedUntil";
 
 export const PARENT_GATE_UNLOCK_WINDOW_MS = 10 * 60 * 1000;
 
-export type BrowserStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+export type BrowserStorage = KeyValueStorage;
+
+function getParentGateSecretStore(storage: BrowserStorage) {
+  return createWebSecretStore(storage, "parentGate");
+}
 
 export function isValidParentPin(pin: string): boolean {
   return /^\d{4,8}$/.test(pin);
 }
 
 export function isParentGateConfigured(storage: BrowserStorage): boolean {
-  return Boolean(storage.getItem(PARENT_GATE_PIN_HASH_KEY));
+  return Boolean(getParentGateSecretStore(storage).get(PARENT_GATE_PIN_HASH_KEY));
 }
 
 export function isParentGateUnlocked(storage: BrowserStorage, nowMs = Date.now()): boolean {
@@ -45,4 +51,16 @@ async function digestSha256(value: string): Promise<string> {
 
 export async function hashParentPin(pin: string): Promise<string> {
   return digestSha256(pin);
+}
+
+export function storeParentPinHash(storage: BrowserStorage, pinHash: string): void {
+  getParentGateSecretStore(storage).set(PARENT_GATE_PIN_HASH_KEY, pinHash);
+}
+
+export function clearParentPinHash(storage: BrowserStorage): void {
+  getParentGateSecretStore(storage).remove(PARENT_GATE_PIN_HASH_KEY);
+}
+
+export function getParentPinHash(storage: BrowserStorage): string | null {
+  return getParentGateSecretStore(storage).get(PARENT_GATE_PIN_HASH_KEY);
 }
