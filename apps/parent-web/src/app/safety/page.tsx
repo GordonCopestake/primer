@@ -1,3 +1,10 @@
+import { ParentAreaShell } from "../../features/parent-area";
+
 export default function SafetyPage() {
-  return <main>Safety review</main>;
+  return (
+    <ParentAreaShell
+      title="Safety review"
+      description="Review local safety events and follow-up actions on this device."
+    />
+  );
 }

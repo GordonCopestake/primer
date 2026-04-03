@@ -1,3 +1,10 @@
+import { ParentAreaShell } from "../../features/parent-area";
+
 export default function SettingsPage() {
-  return <main>Parent settings</main>;
+  return (
+    <ParentAreaShell
+      title="Parent settings"
+      description="Update local parent controls, permissions, and privacy preferences."
+    />
+  );
 }

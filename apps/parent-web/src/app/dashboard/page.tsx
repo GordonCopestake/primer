@@ -1,3 +1,10 @@
+import { ParentAreaShell } from "../../features/parent-area";
+
 export default function DashboardPage() {
-  return <main>Parent dashboard overview</main>;
+  return (
+    <ParentAreaShell
+      title="Parent dashboard"
+      description="Review local progress, activity highlights, and safety status for this device."
+    />
+  );
 }

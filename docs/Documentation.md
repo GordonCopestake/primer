@@ -3,6 +3,7 @@
 ## Current status
 
 - Milestone 2 (local parent gate foundation) has started with a web-first implementation in `apps/parent-web`, including local PIN setup/unlock state management.
+- Milestone 3 (learner app shell + on-device parent area shell) has progressed on web with a gated parent-area shell across dashboard sections.
 - Architecture has been pivoted to a strict local-only default model.
 - Docs now define parent functionality as an on-device parent area protected by local parent gate (PIN, optional biometrics).
 - Cloud persistence assumptions were removed from architecture, API, data model, and milestone planning.

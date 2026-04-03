@@ -11,15 +11,7 @@ import {
   PARENT_GATE_PIN_HASH_KEY,
   setParentGateUnlocked
 } from "../../lib/parent-gate";
-
-const parentAreaLinks = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/children", label: "Children" },
-  { href: "/progress", label: "Progress" },
-  { href: "/sessions", label: "Sessions" },
-  { href: "/safety", label: "Safety" },
-  { href: "/settings", label: "Settings" }
-];
+import { parentAreaLinks } from "./parent-area-links";
 
 export function ParentGatePanel() {
   const [isHydrated, setIsHydrated] = useState(false);
