@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
 
-import { createStructuredStore, createWebFileStore, createWebSecretStore } from "../src/index";
+import { createLearnerProfileStore, createLearnerStateStore, createStructuredStore, createWebFileStore, createWebSecretStore } from "../src/index";
 
 function createMemoryStorage(): Storage {
   const data = new Map<string, string>();
@@ -84,5 +84,49 @@ describe("web secret store", () => {
 
     store.remove("pinHash");
     expect(store.get("pinHash")).toBeNull();
+  });
+});
+
+describe("learner profile store", () => {
+  test("upserts and retrieves local child profiles", () => {
+    const storage = createMemoryStorage();
+    const profileStore = createLearnerProfileStore(storage);
+
+    profileStore.upsert({
+      id: "child_1",
+      displayName: "Alex",
+      birthDate: "2019-01-01T00:00:00.000Z",
+      ageBand: "6-7",
+      schoolYear: "Year 1",
+      accessibilitySettingsJson: {},
+      permissionsJson: { homeworkHelpEnabled: true },
+      createdAt: "2026-01-01T00:00:00.000Z"
+    });
+
+    expect(profileStore.get("child_1")?.displayName).toBe("Alex");
+    expect(profileStore.list()).toHaveLength(1);
+  });
+});
+
+describe("learner state store", () => {
+  test("stores per-subject learner state by child profile", () => {
+    const storage = createMemoryStorage();
+    const stateStore = createLearnerStateStore(storage);
+
+    stateStore.upsert({
+      id: "state_child_1_reading",
+      childProfileId: "child_1",
+      subject: "reading",
+      masteryMapJson: { "reading-6-7-cvc-words": 0.4 },
+      confidenceMapJson: { "reading-6-7-cvc-words": 0.6 },
+      misconceptionLogJson: ["letters mixed up"],
+      interestTagsJson: ["animals"],
+      preferredModesJson: ["daily_session"],
+      sessionTolerance: 15,
+      updatedAt: "2026-01-03T00:00:00.000Z"
+    });
+
+    expect(stateStore.get("child_1", "reading")?.masteryMapJson["reading-6-7-cvc-words"]).toBe(0.4);
+    expect(stateStore.listByChildProfileId("child_1")).toHaveLength(1);
   });
 });

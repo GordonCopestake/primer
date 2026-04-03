@@ -13,6 +13,8 @@
     "@babel/runtime": "^7.29.0",
     "@primer/api-client": "workspace:*",
     "@primer/design-tokens": "workspace:*",
+    "@primer/learner-model": "workspace:*",
+    "@primer/local-storage": "workspace:*",
     "@primer/ui": "workspace:*",
     "expo": "^51.0.0",
     "expo-router": "^3.5.0",

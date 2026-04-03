@@ -83,6 +83,12 @@ importers:
       '@primer/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
+      '@primer/learner-model':
+        specifier: workspace:*
+        version: link:../../packages/learner-model
+      '@primer/local-storage':
+        specifier: workspace:*
+        version: link:../../packages/local-storage
       '@primer/ui':
         specifier: workspace:*
         version: link:../../packages/ui
