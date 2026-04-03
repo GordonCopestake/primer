@@ -1,3 +1,5 @@
+import { ParentGatePanel } from "../features/parent-gate";
+
 export default function Page() {
-  return <main>Primer parent dashboard</main>;
+  return <ParentGatePanel />;
 }

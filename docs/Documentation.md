@@ -2,6 +2,7 @@
 
 ## Current status
 
+- Milestone 2 (local parent gate foundation) has started with a web-first implementation in `apps/parent-web`, including local PIN setup/unlock state management.
 - Architecture has been pivoted to a strict local-only default model.
 - Docs now define parent functionality as an on-device parent area protected by local parent gate (PIN, optional biometrics).
 - Cloud persistence assumptions were removed from architecture, API, data model, and milestone planning.
