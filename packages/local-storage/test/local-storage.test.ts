@@ -5,6 +5,8 @@ import {
   createHomeworkArtifactStore,
   createLearnerProfileStore,
   createLearnerStateStore,
+  createSafetyHistoryStore,
+  createSessionTranscriptStore,
   createStoryInstanceStore,
   createStructuredStore,
   createWebFileStore,
@@ -183,5 +185,49 @@ describe("homework artifact store", () => {
 
     expect(artifactStore.listByChildProfileId("child_1")).toHaveLength(1);
     expect(artifactStore.get("artifact_1")?.parsedStructureJson.problemType).toBe("arithmetic");
+  });
+});
+
+describe("session transcript store", () => {
+  test("persists transcripts for parent review", () => {
+    const storage = createMemoryStorage();
+    const transcriptStore = createSessionTranscriptStore(storage);
+
+    transcriptStore.upsert({
+      id: "transcript_1",
+      childProfileId: "child_1",
+      sessionId: "session_1",
+      mode: "daily_session",
+      turns: [
+        { actor: "tutor", text: "Let's try 9 + 6.", createdAt: "2026-01-03T00:00:00.000Z" },
+        { actor: "child", text: "15", createdAt: "2026-01-03T00:01:00.000Z" }
+      ],
+      summary: "Worked through addition with confidence.",
+      createdAt: "2026-01-03T00:02:00.000Z"
+    });
+
+    expect(transcriptStore.listByChildProfileId("child_1")).toHaveLength(1);
+  });
+});
+
+describe("safety history store", () => {
+  test("marks local safety events as reviewed", () => {
+    const storage = createMemoryStorage();
+    const safetyStore = createSafetyHistoryStore(storage);
+
+    safetyStore.upsert({
+      id: "event_1",
+      childProfileId: "child_1",
+      severity: "warning",
+      type: "session_output_blocked",
+      triggerExcerpt: "unsafe response candidate",
+      systemAction: "safe_fallback_response",
+      reviewStatus: "open",
+      createdAt: "2026-01-03T00:00:00.000Z"
+    });
+
+    const reviewed = safetyStore.markReviewed("event_1", "2026-01-03T00:05:00.000Z");
+    expect(reviewed?.reviewStatus).toBe("reviewed");
+    expect(reviewed?.reviewedAt).toBe("2026-01-03T00:05:00.000Z");
   });
 });

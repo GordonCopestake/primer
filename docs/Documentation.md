@@ -3,6 +3,7 @@
 ## Current status
 
 - Milestone 8 (homework help with local artifact capture and guided solve) is now underway with local homework artifact persistence, guided step extraction, and homework safety fallback checks.
+- Milestone 9 (local safety history, transcript review, and parent controls) is now underway with schema-validated local transcript and safety-history stores, parent review helpers, and reviewed-status updates in the on-device parent area.
 - Milestone 7 (story mode with local persistence and safety checks) is in place with local story instance storage, per-child checkpoint persistence, and story safety fallback checks wired into story creation flow.
 - Milestone 6 (tutoring orchestration with a local-first inference pipeline) is in place via routing-mode decisions (`local_only`, `local_preferred_cloud_fallback`, `cloud_preferred_local_fallback`, `cloud_required`), structured orchestration metadata, and safety-first fallback responses in `@primer/tutor-orchestrator` and API session turns.
 - Milestone 5 (local learner profiles, curriculum persistence, and learner state) is in place with local profile and learner-state stores wired into `@primer/local-storage` and consumed by `apps/learner-app/src/store`.

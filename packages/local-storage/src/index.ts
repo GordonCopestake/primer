@@ -76,6 +76,38 @@ export const LocalHomeworkArtifactSchema = z.object({
 
 export type LocalHomeworkArtifact = z.infer<typeof LocalHomeworkArtifactSchema>;
 
+const LocalTranscriptTurnSchema = z.object({
+  actor: z.enum(["child", "tutor", "system"]),
+  text: z.string().min(1),
+  createdAt: z.string().datetime()
+});
+
+export const LocalSessionTranscriptSchema = z.object({
+  id: z.string().min(1),
+  childProfileId: z.string().min(1),
+  sessionId: z.string().min(1),
+  mode: LocalSessionModeSchema,
+  turns: z.array(LocalTranscriptTurnSchema),
+  summary: z.string(),
+  createdAt: z.string().datetime()
+});
+
+export type LocalSessionTranscript = z.infer<typeof LocalSessionTranscriptSchema>;
+
+export const LocalSafetyHistoryEventSchema = z.object({
+  id: z.string().min(1),
+  childProfileId: z.string().min(1),
+  severity: z.enum(["info", "warning", "high", "critical"]),
+  type: z.string().min(1),
+  triggerExcerpt: z.string(),
+  systemAction: z.string().min(1),
+  reviewStatus: z.enum(["open", "reviewed"]),
+  createdAt: z.string().datetime(),
+  reviewedAt: z.string().datetime().nullable().optional()
+});
+
+export type LocalSafetyHistoryEvent = z.infer<typeof LocalSafetyHistoryEventSchema>;
+
 export function createStructuredStore(storage: KeyValueStorage, namespace: string) {
   const prefix = `primer.${namespace}.structured.`;
 
@@ -261,6 +293,72 @@ export function createWebFileStore(storage: KeyValueStorage, namespace: string) 
   };
 }
 
+export function createSessionTranscriptStore(storage: KeyValueStorage) {
+  const structured = createStructuredStore(storage, "sessionTranscripts");
+  const listSchema = LocalSessionTranscriptSchema.array();
+  const indexKey = "transcripts";
+
+  return {
+    listByChildProfileId(childProfileId: string): LocalSessionTranscript[] {
+      return (structured.get(indexKey, listSchema) ?? []).filter((transcript) => transcript.childProfileId === childProfileId);
+    },
+    upsert(transcript: LocalSessionTranscript): LocalSessionTranscript {
+      const valid = LocalSessionTranscriptSchema.parse(transcript);
+      const current = structured.get(indexKey, listSchema) ?? [];
+      const next = current.filter((existing) => existing.id !== valid.id);
+      next.push(valid);
+      next.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      structured.set(indexKey, listSchema, next);
+      return valid;
+    },
+    remove(transcriptId: string): void {
+      const next = (structured.get(indexKey, listSchema) ?? []).filter((transcript) => transcript.id !== transcriptId);
+      structured.set(indexKey, listSchema, next);
+    }
+  };
+}
+
+export function createSafetyHistoryStore(storage: KeyValueStorage) {
+  const structured = createStructuredStore(storage, "safetyHistory");
+  const listSchema = LocalSafetyHistoryEventSchema.array();
+  const indexKey = "events";
+
+  return {
+    listByChildProfileId(childProfileId: string): LocalSafetyHistoryEvent[] {
+      return (structured.get(indexKey, listSchema) ?? []).filter((event) => event.childProfileId === childProfileId);
+    },
+    upsert(event: LocalSafetyHistoryEvent): LocalSafetyHistoryEvent {
+      const valid = LocalSafetyHistoryEventSchema.parse(event);
+      const current = structured.get(indexKey, listSchema) ?? [];
+      const next = current.filter((existing) => existing.id !== valid.id);
+      next.push(valid);
+      next.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      structured.set(indexKey, listSchema, next);
+      return valid;
+    },
+    markReviewed(eventId: string, reviewedAt: string): LocalSafetyHistoryEvent | null {
+      const current = structured.get(indexKey, listSchema) ?? [];
+      const existing = current.find((event) => event.id === eventId);
+      if (!existing) {
+        return null;
+      }
+
+      const nextEvent = LocalSafetyHistoryEventSchema.parse({
+        ...existing,
+        reviewStatus: "reviewed",
+        reviewedAt
+      });
+      const next = current.map((event) => (event.id === eventId ? nextEvent : event));
+      structured.set(indexKey, listSchema, next);
+      return nextEvent;
+    },
+    remove(eventId: string): void {
+      const next = (structured.get(indexKey, listSchema) ?? []).filter((event) => event.id !== eventId);
+      structured.set(indexKey, listSchema, next);
+    }
+  };
+}
+
 export function createWebSecretStore(storage: KeyValueStorage, namespace: string) {
   const prefix = `primer.${namespace}.secret.`;
 
@@ -284,5 +382,7 @@ export const localStorageFoundationNotes = {
   learnerProfiles: "Child profiles persist in local structured storage and remain on-device by default.",
   learnerState: "Per-subject learner mastery and confidence state is stored locally and schema-validated.",
   storyInstances: "Story progress checkpoints persist locally with structured story state and completion markers.",
-  homeworkArtifacts: "Homework artifacts and guided solve steps persist locally for parent-visible review."
+  homeworkArtifacts: "Homework artifacts and guided solve steps persist locally for parent-visible review.",
+  sessionTranscripts: "Session transcripts persist locally for parent review in the on-device parent area.",
+  safetyHistory: "Safety events persist locally with review status so parents can track follow-up actions."
 } as const;
