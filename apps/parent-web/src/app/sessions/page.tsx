@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ParentAreaShell } from "../../features/parent-area";
 import { createParentReviewStores, seedParentReviewDemoData } from "../../lib";
+import type { LocalSessionTranscript } from "@primer/local-storage";
 
 const CHILD_ID = "child_local_1";
 
@@ -31,7 +32,7 @@ export default function SessionsPage() {
               </p>
               <p>{transcript.summary}</p>
               <ul>
-                {transcript.turns.map((turn, index) => (
+                {transcript.turns.map((turn: LocalSessionTranscript["turns"][number], index: number) => (
                   <li key={`${transcript.id}_${index}`}>
                     {turn.actor}: {turn.text}
                   </li>
