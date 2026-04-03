@@ -1,0 +1,1369 @@
+# Primer
+
+## Technical Architecture Specification for Codex-Driven Implementation
+
+**Document version:** 1.0
+**Status:** Draft for implementation
+**Primary use:** Repository bootstrap and Codex-guided build execution
+**Target platforms:** iOS, Android, Web
+**Architecture style:** Modular monorepo with app clients, shared packages, and backend services
+
+---
+
+# 1. Purpose
+
+This document defines the technical architecture for building **Primer**, an AI-powered adaptive tutoring application for children.
+
+This version is intentionally written to be used as a **Codex implementation source document**. It is opinionated, concrete, and biased toward getting a buildable repository started quickly.
+
+This document should be copied into the repository as the basis for:
+
+* `Prompt.md`
+* `Plan.md`
+* `Implement.md`
+* `Documentation.md`
+* `AGENTS.md`
+
+It also defines the preferred monorepo structure, technology stack, domain boundaries, data model, service interfaces, quality gates, and milestone plan.
+
+---
+
+# 2. Build Objective
+
+Build an MVP of Primer with the following capabilities:
+
+1. Parent account creation and household management.
+2. Child profile creation and baseline assessment.
+3. Child mobile/web learning experience with:
+
+   * daily sessions
+   * live tutoring interaction
+   * story mode
+   * homework help via text and image upload
+4. Parent dashboard with progress and safety review.
+5. AI tutoring orchestration layer with safety gating.
+6. Persistent learner model and curriculum graph.
+7. Audit logging and reporting foundation.
+
+The app is a **tutoring system**, not a general chatbot.
+
+---
+
+# 3. Architectural Principles
+
+## 3.1 Controlled AI, not freeform AI
+
+LLM output must always be constrained by:
+
+* learner state
+* curriculum target
+* safety policy
+* interaction mode policy
+
+## 3.2 Local-first AI routing
+
+The default architecture shall prefer **on-device inference first** for supported devices and supported task classes.
+
+Cloud inference shall be used only when:
+
+* the task exceeds local model capability,
+* the device cannot run the local model at acceptable performance,
+* the feature explicitly requires a stronger model,
+* safety policy requires secondary review,
+* the user is on web without viable local acceleration,
+* the local model is unavailable or disabled.
+
+## 3.3 Mobile-first, web-supported
+
+The learner experience is mobile-first. Parent dashboard is responsive web first and may also be embedded in mobile.
+
+## 3.4 Monorepo from day one
+
+Use a monorepo so Codex can work across app, API, shared types, validation, and infrastructure with one project root.
+
+## 3.5 Type-safe boundaries
+
+Use shared TypeScript types, runtime validation, and generated contracts wherever practical.
+
+## 3.6 Eventful and auditable
+
+Major actions must emit structured events for:
+
+* learner state changes
+* lesson completion
+* safety interventions
+* settings changes
+
+## 3.7 Prefer simple infrastructure first
+
+Start with a modular monolith backend and clear internal service boundaries. Do not split into microservices at MVP unless scaling forces it.
+
+---
+
+# 4. Recommended Technology Stack
+
+## 4.1 Monorepo and build tooling
+
+* **Monorepo:** Turborepo
+* **Package manager:** pnpm
+* **Language:** TypeScript
+* **Runtime:** Node.js LTS
+
+## 4.2 Frontend
+
+### Learner mobile app
+
+* **Framework:** React Native with Expo
+* **Navigation:** Expo Router
+* **State:** Zustand or Redux Toolkit
+* **Forms:** React Hook Form + Zod
+* **UI:** Tamagui or NativeWind + shared design tokens
+* **Media:** Expo AV / camera / image picker
+
+### Parent web app
+
+* **Framework:** Next.js (App Router)
+* **Styling:** Tailwind CSS
+* **State/data:** TanStack Query
+* **Charts:** Recharts
+
+## 4.3 Backend
+
+* **API layer:** Next.js route handlers or NestJS
+* **Recommendation for MVP:** Next.js + server modules for faster repo cohesion
+* **Async jobs:** Trigger.dev, BullMQ, or a simple queue abstraction backed by Redis
+* **Realtime:** WebSocket or SSE for live tutoring sessions
+
+## 4.4 Data and storage
+
+* **Primary database:** PostgreSQL
+* **ORM:** Prisma
+* **Cache/session/pubsub:** Redis
+* **Blob storage:** S3-compatible object storage
+* **Search/log indexing:** postpone until needed; use DB-first querying for MVP
+
+## 4.5 Auth and identity
+
+* **Authentication:** Auth.js / NextAuth or Clerk
+* **Authorisation:** custom RBAC at service layer
+* **Parent gate:** application-level re-auth or challenge workflow
+
+## 4.6 AI and content pipeline
+
+* **Primary local model:** Gemma 4 E2B instruction-tuned, quantized for on-device execution where supported
+* **Local inference runtime (mobile):** native runtime integration via LiteRT-LM or equivalent device-native inference engine
+* **Local inference runtime (desktop/dev):** Ollama or llama.cpp-compatible runtime for development and fallback desktop execution
+* **Cloud orchestration:** backend service calling stronger cloud models only when routing rules require it
+* **Realtime voice tutoring:** use local-first turn processing where possible; escalate to cloud for difficult reasoning or richer conversation generation
+* **Moderation and policy checks:** dedicated safety service using rule layer plus model classification
+* **Structured generation:** schema-validated JSON outputs only
+* **AI routing policy:** explicit task router choosing local vs cloud per feature, device capability, latency, and safety profile
+
+## 4.7 Observability
+
+* **Logs:** structured JSON logs
+* **Metrics:** OpenTelemetry + hosted dashboard
+* **Errors:** Sentry
+* **Product analytics:** PostHog or equivalent
+
+## 4.8 Testing
+
+* **Unit:** Vitest
+* **Component:** React Testing Library
+* **E2E web:** Playwright
+* **E2E mobile:** Detox or Maestro
+* **Contract tests:** Vitest + Zod/OpenAPI validation
+
+---
+
+# 5. Monorepo Structure
+
+Use this repository shape:
+
+```text
+primer/
+  .codex/
+    config.toml
+  docs/
+    Prompt.md
+    Plan.md
+    Implement.md
+    Documentation.md
+    Architecture.md
+    UX.md
+    API.md
+    DataModel.md
+    Safety.md
+  apps/
+    learner-mobile/
+    parent-web/
+    backend/
+  packages/
+    ui/
+    design-tokens/
+    config/
+    types/
+    schemas/
+    curriculum-engine/
+    learner-model/
+    tutor-orchestrator/
+    safety-engine/
+    analytics/
+    api-client/
+  prisma/
+    schema.prisma
+    migrations/
+  infra/
+    docker/
+    terraform/
+  scripts/
+  AGENTS.md
+  package.json
+  pnpm-workspace.yaml
+  turbo.json
+  README.md
+```
+
+---
+
+# 6. Package and App Responsibilities
+
+## 6.1 apps/learner-mobile
+
+Purpose: Child-facing mobile app.
+
+Responsibilities:
+
+* child profile selection
+* home screen
+* daily session flow
+* live tutoring UI
+* story mode
+* homework help UI
+* progress/rewards view
+* accessibility settings
+
+Must not contain:
+
+* core business rules for curriculum progression
+* direct raw model prompts
+* unrestricted API credentials
+
+## 6.2 apps/parent-web
+
+Purpose: Parent/guardian responsive dashboard.
+
+Responsibilities:
+
+* parent onboarding
+* child profile management
+* settings and permissions
+* progress dashboards
+* transcript review
+* safety alert review
+* billing shell
+
+## 6.3 apps/backend
+
+Purpose: API and orchestration backend.
+
+Responsibilities:
+
+* auth integration
+* REST/JSON or tRPC API
+* session orchestration
+* learner state persistence
+* curriculum retrieval
+* AI prompt assembly and response validation
+* safety event generation
+* analytics event emission
+* media upload orchestration
+
+## 6.4 packages/types
+
+Shared TypeScript interfaces for domain models.
+
+## 6.5 packages/schemas
+
+Runtime validation schemas using Zod for:
+
+* API payloads
+* AI structured outputs
+* DB-adjacent service contracts
+* event payloads
+
+## 6.6 packages/curriculum-engine
+
+Encapsulates:
+
+* curriculum node graph
+* prerequisite logic
+* remediation selection
+* lesson target selection
+
+## 6.7 packages/learner-model
+
+Encapsulates:
+
+* learner state model
+* scoring/mastery updates
+* confidence updates
+* misconception recording
+
+## 6.8 packages/tutor-orchestrator
+
+Encapsulates:
+
+* lesson loop
+* prompt construction
+* tool invocation
+* content generation calls
+* session state transitions
+
+## 6.9 packages/safety-engine
+
+Encapsulates:
+
+* prohibited topic detection
+* age-band language policy
+* attachment-limitation checks
+* escalation decisions
+* output validation rules
+
+## 6.10 packages/api-client
+
+Typed client utilities for frontend apps.
+
+---
+
+# 7. High-Level Architecture
+
+```text
+[ Learner Mobile App ] ----\
+                             ---> [ Backend API / Orchestrator ] ---> [ PostgreSQL ]
+[ Parent Web App ] --------/                |                        [ Redis ]
+                                            |                        [ Blob Storage ]
+                                            |
+                                            +--> [ Curriculum Engine ]
+                                            +--> [ Learner Model Engine ]
+                                            +--> [ Safety Engine ]
+                                            +--> [ AI Routing Layer ] ---> [ Local Model Broker ] ---> [ Gemma 4 E2B ]
+                                            |                           \
+                                            |                            ---> [ Cloud Model Gateway ]
+                                            +--> [ Analytics / Events ]
+```
+
+## 7.1 MVP deployment model
+
+Deploy backend and parent web together if using Next.js monolith. Mobile app talks to same API.
+
+## 7.2 Internal architecture style
+
+Modular monolith with domain modules:
+
+* auth
+* household
+* learner-profile
+* curriculum
+* session
+* tutoring
+* story
+* homework
+* safety
+* analytics
+* reporting
+
+Each module has:
+
+* routes/controllers
+* service layer
+* repository layer
+* schemas/types
+* tests
+
+---
+
+# 8. Domain Model
+
+## 8.1 Core entities
+
+### ParentAccount
+
+* id
+* email
+* authProvider
+* createdAt
+* locale
+* subscriptionStatus
+
+### Household
+
+* id
+* ownerParentId
+* settingsJson
+* createdAt
+
+### ChildProfile
+
+* id
+* householdId
+* displayName
+* birthDate
+* ageBand
+* schoolYear
+* avatarUrl
+* accessibilitySettingsJson
+* permissionsJson
+* createdAt
+
+### LearnerState
+
+* id
+* childProfileId
+* subject
+* masteryMapJson
+* confidenceMapJson
+* misconceptionLogJson
+* interestTagsJson
+* preferredModesJson
+* sessionTolerance
+* updatedAt
+
+### CurriculumNode
+
+* id
+* subject
+* ageBand
+* skillCode
+* title
+* description
+* prerequisitesJson
+* difficulty
+* metadataJson
+
+### Session
+
+* id
+* childProfileId
+* mode
+* status
+* goalNodeId
+* startedAt
+* endedAt
+* durationSeconds
+* summaryJson
+
+### SessionTurn
+
+* id
+* sessionId
+* actor
+* contentJson
+* safetyStatus
+* createdAt
+
+### AssessmentResult
+
+* id
+* childProfileId
+* sessionId
+* curriculumNodeId
+* performanceType
+* score
+* confidenceEstimate
+* createdAt
+
+### SafetyEvent
+
+* id
+* childProfileId
+* sessionId
+* severity
+* type
+* triggerExcerpt
+* systemAction
+* reviewStatus
+* createdAt
+
+### StoryInstance
+
+* id
+* childProfileId
+* curriculumNodeId
+* title
+* branchStateJson
+* progressJson
+
+### HomeworkArtifact
+
+* id
+* childProfileId
+* sourceType
+* blobUrl
+* extractedText
+* parsedStructureJson
+* createdAt
+
+### AuditEvent
+
+* id
+* actorType
+* actorId
+* eventType
+* payloadJson
+* createdAt
+
+---
+
+# 9. Primary API Surface
+
+Prefer a typed API. Two good options:
+
+* **Option A:** REST with OpenAPI + generated client
+* **Option B:** tRPC for internal type sharing
+
+For MVP, choose one and do not mix casually.
+
+## Recommended choice
+
+Use **REST + OpenAPI** for clearer future interoperability.
+
+## 9.1 API namespaces
+
+* `/auth/*`
+* `/households/*`
+* `/children/*`
+* `/learner-states/*`
+* `/curriculum/*`
+* `/sessions/*`
+* `/stories/*`
+* `/homework/*`
+* `/safety/*`
+* `/reports/*`
+
+## 9.2 Example endpoints
+
+### POST /households
+
+Create household.
+
+### POST /children
+
+Create child profile.
+
+### GET /children/:id/home
+
+Return learner home payload:
+
+* current streak
+* recommended lesson
+* pending reviews
+* rewards snapshot
+
+### POST /children/:id/baseline-assessment/start
+
+Start baseline.
+
+### POST /sessions
+
+Start tutoring session.
+Payload:
+
+* childId
+* mode
+* subject
+* optional curriculumNodeId
+
+### POST /sessions/:id/turns
+
+Submit child turn.
+Payload:
+
+* inputType: text | voice | image_reference | structured_response
+* content
+
+### POST /sessions/:id/complete
+
+Complete session and persist summary.
+
+### POST /homework/parse
+
+Upload or reference image and return extracted problem structure.
+
+### GET /reports/children/:id/progress
+
+Return parent dashboard progress data.
+
+### GET /safety/events
+
+List safety events by household.
+
+### POST /safety/events/:id/review
+
+Mark reviewed.
+
+---
+
+# 10. AI Orchestration Design
+
+## 10.1 AI gateway rule
+
+No frontend app talks directly to a cloud model provider.
+Cloud AI traffic always goes through backend orchestration.
+
+Local on-device inference is permitted through the app’s local inference runtime, but local outputs must still pass through app-side or backend safety policy checks before being shown where required by feature policy.
+
+## 10.2 AI routing policy
+
+The AI router shall classify each request into one of three execution modes:
+
+* `local_only`
+* `local_preferred_cloud_fallback`
+* `cloud_required`
+
+Routing decisions shall consider:
+
+* device capability class
+* battery / thermal constraints if available
+* task type
+* required reasoning depth
+* safety sensitivity
+* network availability
+* subscription / feature flags
+
+## 10.3 Default task routing matrix
+
+### Local-first tasks
+
+* greeting and simple session transitions
+* lightweight age-banded explanations
+* recap generation
+* simple comprehension questions
+* local draft story continuation
+* first-pass intent classification
+* first-pass frustration / confusion detection
+* first-pass safety triage
+
+### Local-preferred with cloud fallback
+
+* ordinary guided tutoring turns
+* baseline assessment scoring
+* homework help on routine questions
+* story generation with curriculum constraints
+* learner-state summarisation
+
+### Cloud-required tasks
+
+* difficult multi-step reasoning
+* parent-visible report generation when quality matters
+* difficult homework interpretation
+* secondary safety review for flagged content
+* policy-sensitive child-facing responses after a safety trigger
+* content regeneration after failed local validation
+
+## 10.4 AI subcomponents
+
+### Tutor Orchestrator
+
+Inputs:
+
+* learner state
+* curriculum target
+* session mode
+* recent transcript window
+* safety context
+* device capability
+* routing mode
+
+Outputs:
+
+* child-facing structured response
+* state updates
+* analytics events
+
+### Local Model Adapter
+
+Responsibilities:
+
+* load Gemma 4 E2B runtime
+* manage quantized model lifecycle
+* expose typed inference calls
+* report runtime health and capability
+
+### Cloud Model Adapter
+
+Responsibilities:
+
+* call backend cloud model providers
+* enforce schemas and retries
+* provide stronger reasoning fallback
+
+### Content Generator
+
+Produces:
+
+* lesson variants
+* story segments
+* quizzes
+* examples
+
+Must emit schema-valid JSON only.
+
+### Safety Classifier
+
+Classifies:
+
+* restricted topic risk
+* emotional dependency language risk
+* age-band mismatch
+* unsafe instruction risk
+
+### Summariser
+
+Produces:
+
+* session summary
+* parent-visible summary
+* learner-state delta suggestion
+
+## 10.5 Required structured outputs
+
+Every AI response must conform to an explicit schema.
+
+Example tutor response schema:
+
+```ts
+export const TutorResponseSchema = z.object({
+  message: z.string(),
+  messageStyle: z.enum(["coach", "story", "question", "feedback"]),
+  suggestedUi: z.enum(["chat", "mcq", "free_text", "tap_choice", "story_panel"]),
+  hints: z.array(z.string()).default([]),
+  expectedResponseType: z.enum(["text", "choice", "number", "reading", "none"]),
+  masterySignal: z.enum(["unknown", "improving", "mastered", "struggling"]).default("unknown"),
+  shouldEscalateSafety: z.boolean().default(false),
+  lessonStatePatch: z.record(z.any()).default({})
+});
+```
+
+## 10.6 Session loop
+
+1. Load child + learner state.
+2. Resolve lesson target.
+3. Determine routing mode.
+4. Build orchestration input object.
+5. Generate candidate response locally if permitted.
+6. Run safety validation.
+7. If invalid or low-confidence, reroute to cloud or fall back.
+8. Persist response and turn metadata.
+9. After child reply, update learner model.
+10. Repeat until completion or interruption.
+
+# 11. Safety Architecture
+
+## 11.1 Safety layers
+
+Use multiple layers:
+
+### Layer 1: Input classification
+
+Classify incoming child text/image intent.
+
+### Layer 2: Policy rules
+
+Hard rules for forbidden content and routing.
+
+### Layer 3: Model-based output review
+
+Review candidate tutor response before delivery.
+
+### Layer 4: Escalation workflow
+
+Create safety event and notify adult workflow if needed.
+
+## 11.2 Safety event severities
+
+* `info`
+* `warning`
+* `high`
+* `critical`
+
+## 11.3 Prohibited outputs
+
+Do not allow output that:
+
+* encourages secrecy
+* claims exclusive emotional bond
+* gives self-harm instructions
+* gives sexual content
+* gives dangerous instructions
+* gives diagnosis-like statements
+
+---
+
+# 12. Realtime and Session Model
+
+## 12.1 Session states
+
+* `created`
+* `active`
+* `paused`
+* `awaiting_input`
+* `processing`
+* `completed`
+* `cancelled`
+* `safety_paused`
+
+## 12.2 Realtime transport
+
+For MVP:
+
+* use HTTP for most session steps
+* optionally add WebSocket/SSE for voice/live updates
+
+Do not begin with an overcomplicated event mesh.
+
+---
+
+# 13. Frontend Architecture
+
+## 13.1 Learner mobile app module structure
+
+```text
+apps/learner-mobile/src/
+  app/
+  features/
+    auth/
+    profile/
+    home/
+    session/
+    story/
+    homework/
+    progress/
+    settings/
+  components/
+  hooks/
+  store/
+  lib/
+  services/
+  test/
+```
+
+## 13.2 Parent web app module structure
+
+```text
+apps/parent-web/src/
+  app/
+  features/
+    onboarding/
+    dashboard/
+    children/
+    progress/
+    sessions/
+    safety/
+    settings/
+    billing/
+  components/
+  hooks/
+  lib/
+  services/
+  test/
+```
+
+## 13.3 Shared UI package
+
+`packages/ui` should contain reusable components:
+
+* cards
+* buttons
+* charts wrappers
+* modal shells
+* progress bars
+* empty states
+* permission gate wrappers
+
+---
+
+# 14. Data Layer and Persistence Strategy
+
+## 14.1 Database strategy
+
+Use PostgreSQL with Prisma.
+
+## 14.2 JSON-heavy early schema
+
+Use structured relational tables for core entities and JSON columns for:
+
+* mastery map
+* lesson summaries
+* permissions/settings
+* curriculum metadata
+
+This enables faster MVP iteration.
+
+## 14.3 Migration strategy
+
+* keep Prisma schema authoritative
+* create migrations for every model change
+* seed curriculum data from versioned fixtures
+
+---
+
+# 15. Curriculum Data Strategy
+
+## 15.1 Curriculum source
+
+Start with authored curriculum JSON fixtures in-repo.
+
+## 15.2 Curriculum versioning
+
+Every curriculum node should include:
+
+* version
+* subject
+* ageBand
+* skillCode
+* prereqs
+* metadata
+
+## 15.3 Curriculum file location
+
+```text
+packages/curriculum-engine/data/
+  reading/
+  maths/
+```
+
+---
+
+# 16. Analytics and Audit Strategy
+
+## 16.1 Product events
+
+Track:
+
+* session_started
+* session_completed
+* hint_used
+* homework_uploaded
+* story_completed
+* safety_event_created
+* parent_reviewed_event
+* settings_changed
+
+## 16.2 Audit events
+
+Must persist:
+
+* adult settings changes
+* safety decisions
+* baseline assessment outcome
+* major learner-state updates
+
+---
+
+# 17. Environment Variables
+
+Minimum environment variables:
+
+```bash
+DATABASE_URL=
+REDIS_URL=
+S3_ENDPOINT=
+S3_BUCKET=
+S3_ACCESS_KEY=
+S3_SECRET_KEY=
+OPENAI_API_KEY=
+AUTH_SECRET=
+NEXT_PUBLIC_API_BASE_URL=
+SENTRY_DSN=
+POSTHOG_KEY=
+```
+
+Local model and routing variables:
+
+```bash
+LOCAL_MODEL_PROVIDER=gemma4-e2b
+LOCAL_MODEL_RUNTIME=litertlm
+LOCAL_MODEL_QUANT=q4
+LOCAL_MODEL_ENABLED=true
+LOCAL_MODEL_MAX_CONTEXT=131072
+AI_ROUTER_DEFAULT=local_preferred_cloud_fallback
+AI_ROUTER_ALLOW_CLOUD=true
+AI_ROUTER_SAFETY_SECOND_PASS=true
+```
+
+Optional:
+
+```bash
+OPENAI_REALTIME_MODEL=
+OPENAI_TEXT_MODEL=
+OPENAI_VISION_MODEL=
+FEATURE_VOICE_ENABLED=
+FEATURE_HOMEWORK_IMAGE_ENABLED=
+FEATURE_TEACHER_MODE=
+```
+
+---
+
+# 18. Quality Gates
+
+Every milestone must pass:
+
+* typecheck
+* lint
+* unit tests
+* relevant integration tests
+* build for parent web
+* build for learner mobile
+
+Recommended root commands:
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm test:e2e:web
+pnpm test:e2e:mobile
+```
+
+---
+
+# 19. Initial Milestone Plan
+
+## Milestone 1: Repo bootstrap
+
+Deliverables:
+
+* monorepo created
+* apps and packages scaffolded
+* pnpm + turbo configured
+* lint/typecheck/test/build pipelines configured
+
+## Milestone 2: Auth and household foundation
+
+Deliverables:
+
+* parent auth
+* household model
+* child profile CRUD
+* role gating
+
+## Milestone 3: Parent dashboard shell
+
+Deliverables:
+
+* onboarding screens
+* dashboard home
+* child detail views
+* settings shell
+
+## Milestone 4: Learner app shell
+
+Deliverables:
+
+* child profile chooser
+* child home
+* navigation
+* static session flow shell
+
+## Milestone 5: Curriculum and learner model
+
+Deliverables:
+
+* curriculum fixtures
+* learner state schema
+* baseline assessment flow
+* recommendation logic v1
+
+## Milestone 6: Tutoring session orchestration
+
+Deliverables:
+
+* session start/turn/complete APIs
+* tutor orchestrator
+* schema-validated AI responses
+* safe fallback path
+
+## Milestone 7: Story mode
+
+Deliverables:
+
+* story engine v1
+* story UI
+* checkpoint logic
+
+## Milestone 8: Homework help
+
+Deliverables:
+
+* image upload
+* OCR/parse pipeline
+* guided problem solve flow
+
+## Milestone 9: Safety and parent review
+
+Deliverables:
+
+* safety event generation
+* parent safety dashboard
+* transcript and review flow
+
+## Milestone 10: Hardening
+
+Deliverables:
+
+* analytics
+* observability
+* end-to-end tests
+* docs update
+
+---
+
+# 20. Definition of Done
+
+The MVP is done when:
+
+1. A parent can sign up and create a household.
+2. A child can be created and onboarded.
+3. Baseline assessment sets learner state.
+4. The child app can run a complete tutoring session.
+5. Parent dashboard displays progress and recent sessions.
+6. Story mode works.
+7. Homework help via uploaded image works in guided mode.
+8. Safety events are generated and reviewable.
+9. Core commands pass in CI.
+10. The repository can be understood and extended by Codex with the included docs.
+
+---
+
+# 21. Codex Operating Pack
+
+This section should be split into actual repo files.
+
+---
+
+## 21.1 AGENTS.md
+
+```md
+# AGENTS.md
+
+You are working on Primer, an AI-powered tutoring product for children.
+
+## Product posture
+- Primer is a tutor, not a general chatbot or social companion.
+- Safety, adult visibility, and pedagogy take priority over novelty.
+- Do not introduce unscoped features.
+
+## Engineering rules
+- Respect the architecture docs in /docs.
+- Keep changes scoped to the current milestone.
+- Prefer simple, explicit code over clever abstractions.
+- Shared types and schemas must stay consistent across apps and backend.
+- Never bypass safety validation for child-facing AI output.
+- Add or update tests for meaningful behavior changes.
+- Run lint, typecheck, and relevant tests after each milestone.
+
+## Repository rules
+- Apps live in /apps.
+- Shared libraries live in /packages.
+- API contracts must be validated with Zod.
+- Update docs when architectural or workflow changes are made.
+
+## UX rules
+- Child-facing UX must remain simple and age-appropriate.
+- Parent-facing UX should prioritise transparency and control.
+- Avoid manipulative reward loops or emotionally dependent language.
+
+## Delivery rules
+- Always check Plan.md before implementing.
+- If a validation command fails, fix it before proceeding.
+- If requirements conflict, Prompt.md is source of truth.
+```
+
+---
+
+## 21.2 docs/Prompt.md
+
+```md
+# Prompt.md
+
+## Goal
+Build the Primer MVP as defined in Architecture.md and UX.md.
+
+## Hard constraints
+- TypeScript monorepo using pnpm + turbo
+- React Native (Expo) learner app
+- Next.js parent web and backend
+- PostgreSQL + Prisma
+- Structured AI outputs only
+- Safety gating required for all child-facing AI responses
+- Parent visibility required for progress and safety reviews
+
+## Must-have deliverables
+- Parent onboarding and household setup
+- Child profiles
+- Baseline assessment
+- Learner home screen
+- Tutoring session flow
+- Story mode
+- Homework help upload and guided solve
+- Parent dashboard
+- Safety event workflow
+
+## Non-goals
+- Open-ended social companion features
+- Teacher multi-tenant classroom management in MVP
+- Arbitrary internet search inside learner flow
+- Microservice decomposition before MVP completion
+
+## Done when
+- The MVP definition of done in Architecture.md is satisfied
+- Core lint/typecheck/test/build commands pass
+- Documentation is updated
+```
+
+---
+
+## 21.3 docs/Plan.md
+
+```md
+# Plan.md
+
+## Milestones
+1. Repo bootstrap
+2. Auth and household foundation
+3. Parent dashboard shell
+4. Learner app shell
+5. Curriculum and learner model
+6. Tutoring orchestration
+7. Story mode
+8. Homework help
+9. Safety and parent review
+10. Hardening
+
+## Validation rule
+After each milestone:
+- run lint
+- run typecheck
+- run tests relevant to changed modules
+- fix failures before continuing
+
+## Decision rule
+Do not expand scope outside the current milestone unless a blocking dependency requires it.
+```
+
+---
+
+## 21.4 docs/Implement.md
+
+```md
+# Implement.md
+
+Treat Plan.md as the execution plan.
+
+## Execution rules
+- Work milestone by milestone.
+- Keep diffs scoped and reviewable.
+- Prefer vertical slices that produce usable screens and APIs.
+- Use placeholder/mock implementations only when explicitly marked and tracked.
+- Update Documentation.md after each milestone.
+- Do not leave broken tests, type errors, or lint failures behind.
+
+## Validation commands
+- pnpm lint
+- pnpm typecheck
+- pnpm test
+- pnpm build
+```
+
+---
+
+## 21.5 docs/Documentation.md
+
+```md
+# Documentation.md
+
+## Current status
+- Track milestone completion status here.
+
+## Decisions
+- Record implementation decisions and rationale.
+
+## Runbook
+- How to start apps and services locally.
+
+## Known issues
+- Track temporary shortcuts and follow-ups.
+```
+
+---
+
+## 21.6 .codex/config.toml
+
+```toml
+model = "gpt-5.4"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[windows]
+sandbox = "elevated"
+```
+
+Notes:
+
+* Keep project-specific instructions in `AGENTS.md` and the files under `/docs`.
+* Use Codex plan mode explicitly when starting larger tasks.
+* Do not invent additional config keys unless they are confirmed by current Codex docs.
+
+---
+
+# 22. Bootstrap Instructions for Codex
+
+Use this as the first message to Codex after the repo is created:
+
+```text
+Read AGENTS.md and the files in /docs first. Treat docs/Prompt.md as the product source of truth, docs/Plan.md as the milestone plan, and docs/Implement.md as the execution runbook. Build milestone 1 completely, then run validation commands and fix any issues before moving on. Keep the repo modular, typed, and testable.
+```
+
+---
+
+# 23. Recommended First Build Sequence
+
+1. Create repo and monorepo scaffold.
+2. Add shared package structure.
+3. Add Next.js parent web app.
+4. Add Expo learner app.
+5. Add backend modules in Next.js.
+6. Add Prisma and DB schema.
+7. Add first API contracts.
+8. Implement auth and household flows.
+9. Implement child home screen and parent dashboard shell.
+10. Add local Gemma 4 E2B adapter behind mocked interfaces.
+11. Add AI routing layer.
+12. Add cloud fallback adapter.
+13. Add tutoring orchestrator behind mocked AI responses before full live provider integration.
+
+This is important: build the vertical skeleton first, then add local AI, then add cloud fallback.
+
+---
+
+# 24. Opinionated Call
+
+The right way to start this is **not** with prompt engineering. It is with:
+
+* repository structure
+* contracts
+* learner model
+* curriculum fixtures
+* safety rules
+* screen skeletons
+
+Then Codex can fill in implementation slices without the project drifting into “chatbot demo” territory.
+
+---
+
+# 25. Immediate Next Step
+
+After creating the repo and these files, instruct Codex to implement **Milestone 1: Repo bootstrap** and stop at passing validation.
+
