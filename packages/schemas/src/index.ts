@@ -27,6 +27,7 @@ export const TutorResponseSchema = z.object({
   expectedResponseType: z.enum(["text", "choice", "number", "reading", "none"]),
   masterySignal: z.enum(["unknown", "improving", "mastered", "struggling"]).default("unknown"),
   shouldEscalateSafety: z.boolean().default(false),
+  shouldRequireCloudReview: z.boolean().default(false),
   lessonStatePatch: z.record(z.any()).default({})
 });
 
@@ -52,7 +53,7 @@ export const ChildCreateSchema = z.object({
 });
 
 export const SessionTurnCreateSchema = z.object({
-  inputType: z.enum(["text", "voice", "image_reference", "structured_response"]),
+  inputType: z.enum(["text", "image_reference", "structured_response"]),
   content: z.union([z.string(), z.record(z.any())])
 });
 
@@ -65,6 +66,28 @@ export const HomeworkParseSchema = z.object({
 
 export const SafetyReviewSchema = z.object({
   childId: z.string().min(1)
+});
+
+
+
+export const ConsentRecordSchema = z.object({
+  householdId: z.string().min(1),
+  childProfileId: z.string().min(1).optional().nullable(),
+  parentAccountId: z.string().min(1),
+  consentType: z.enum(["parental_consent", "data_processing", "safety_review"]),
+  status: z.enum(["granted", "revoked", "pending"]).default("granted"),
+  capturedAt: z.string().datetime().optional()
+});
+
+export const PrivacyRequestSchema = z.object({
+  parentAccountId: z.string().min(1),
+  reason: z.string().min(1).optional()
+});
+
+export const StoryCreateSchema = z.object({
+  childId: z.string().min(1),
+  curriculumNodeId: z.string().min(1),
+  title: z.string().min(1).default("New Story")
 });
 
 export const SafetyEventSchema = z.object({
@@ -94,6 +117,9 @@ export type HouseholdCreate = z.infer<typeof HouseholdCreateSchema>;
 export type ChildCreate = z.infer<typeof ChildCreateSchema>;
 export type SessionTurnCreate = z.infer<typeof SessionTurnCreateSchema>;
 export type HomeworkParse = z.infer<typeof HomeworkParseSchema>;
+export type ConsentRecord = z.infer<typeof ConsentRecordSchema>;
+export type PrivacyRequest = z.infer<typeof PrivacyRequestSchema>;
+export type StoryCreate = z.infer<typeof StoryCreateSchema>;
 export type SafetyReview = z.infer<typeof SafetyReviewSchema>;
 export type SafetyEvent = z.infer<typeof SafetyEventSchema>;
 export type AuditEvent = z.infer<typeof AuditEventSchema>;

@@ -22,6 +22,9 @@ const learners = new Map<string, LearnerRecord>();
 const sessions = new Map<string, Session>();
 const turns = new Map<string, SessionTurn[]>();
 const safetyEvents = new Map<string, SafetyEvent[]>();
+const consentRecords: Record<string, unknown>[] = [];
+const storyInstances: Record<string, unknown>[] = [];
+const privacyRequests: Record<string, unknown>[] = [];
 
 function ensureChild(childId: string) {
   const child = children.get(childId);
@@ -230,6 +233,71 @@ export function getProgressReport(childId: string) {
     curriculumCount: listCurriculumNodes(learner.subject, child.ageBand).length,
     completedSessions: Array.from(sessions.values()).filter((session) => session.childProfileId === childId && session.status === "completed").length
   };
+}
+
+export function captureParentalConsent(input: {
+  householdId: string;
+  childProfileId?: string | null;
+  parentAccountId: string;
+  consentType: string;
+  status: "granted" | "revoked" | "pending";
+  capturedAt?: string;
+}) {
+  const record = {
+    id: randomUUID(),
+    householdId: input.householdId,
+    childProfileId: input.childProfileId ?? null,
+    parentAccountId: input.parentAccountId,
+    consentType: input.consentType,
+    status: input.status,
+    capturedAt: input.capturedAt ?? new Date().toISOString()
+  };
+  consentRecords.push(record);
+  return record;
+}
+
+export function createStoryInstance(input: { childId: string; curriculumNodeId: string; title: string }) {
+  ensureChild(input.childId);
+  const story = {
+    id: randomUUID(),
+    childProfileId: input.childId,
+    curriculumNodeId: input.curriculumNodeId,
+    title: input.title,
+    branchStateJson: { checkpoint: 0 },
+    progressJson: { completed: false },
+    createdAt: new Date().toISOString()
+  };
+  storyInstances.push(story);
+  return story;
+}
+
+export function listStoriesForChild(childId: string) {
+  return storyInstances.filter((story) => story.childProfileId === childId);
+}
+
+export function requestPrivacyOperation(input: {
+  childId: string;
+  parentAccountId: string;
+  requestType: "export" | "delete";
+  reason?: string;
+}) {
+  ensureChild(input.childId);
+  const request = {
+    id: randomUUID(),
+    childId: input.childId,
+    parentAccountId: input.parentAccountId,
+    requestType: input.requestType,
+    reason: input.reason ?? null,
+    status: "queued",
+    createdAt: new Date().toISOString()
+  };
+  privacyRequests.push(request);
+  return request;
+}
+
+export function getLearnerState(childId: string, subject: Subject = "reading") {
+  ensureChild(childId);
+  return ensureLearner(childId, subject);
 }
 
 export function seedDemoData() {
