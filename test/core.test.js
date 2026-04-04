@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  APP_CONFIG,
+  advanceAssessment,
   appendRecentTurn,
   applyMasteryEvidence,
   createDefaultState,
@@ -45,21 +47,58 @@ test("detectCapabilities classifies accelerated tier only with richer features",
 test("new learner starts in embedded baseline assessment", () => {
   const decision = nextCurriculumDecision(createDefaultState());
   assert.equal(decision.activeDomain, "preliteracy");
+  assert.equal(decision.objectiveId, "baseline.observe-sound.0");
   assert.deepEqual(decision.allowedSceneKinds, ["assessment", "fallback"]);
 });
 
-test("completed assessment unlocks deterministic reading flow", () => {
-  const state = recordAssessmentCompletion(createDefaultState(), 1);
-  const decision = nextCurriculumDecision(state);
-  assert.equal(decision.activeDomain, "reading");
-  assert.equal(decision.objectiveId, "reading.symbol-match.1");
+test("assessment advances through staged baseline checkpoints", () => {
+  let state = createDefaultState();
+  state = advanceAssessment(state, 0);
+  assert.equal(nextCurriculumDecision(state).objectiveId, "baseline.symbol-match.1");
+
+  state = advanceAssessment(state, 1);
+  assert.equal(nextCurriculumDecision(state).objectiveId, "baseline.trace-letter.2");
+
+  state = advanceAssessment(state, 2);
+  assert.equal(nextCurriculumDecision(state).objectiveId, "baseline.read-short.3");
 });
 
-test("mastery evidence can shift the next domain decision", () => {
-  const assessed = recordAssessmentCompletion(createDefaultState(), 1);
-  const shifted = applyMasteryEvidence(assessed, "reading", 2);
-  const decision = nextCurriculumDecision(shifted);
-  assert.equal(decision.activeDomain, "numeracy");
+test("completed assessment unlocks deterministic reading flow", () => {
+  const state = recordAssessmentCompletion(createDefaultState(), 2);
+  const decision = nextCurriculumDecision(state);
+  assert.equal(decision.activeDomain, "reading");
+  assert.equal(decision.objectiveId, "reading.symbol-match.2");
+});
+
+test("writing enters the rotation before numeracy when weaker than reading", () => {
+  const state = recordAssessmentCompletion(createDefaultState(), 3);
+  const decision = nextCurriculumDecision(state);
+  assert.equal(decision.activeDomain, "writing");
+  assert.equal(decision.objectiveId, "writing.trace-and-build.2");
+});
+
+test("export/import feature flag defaults to the spec contract", () => {
+  assert.equal(APP_CONFIG.features.exportImport, false);
+});
+
+test("assessment completion records a bounded stage", () => {
+  const completed = advanceAssessment(
+    advanceAssessment(advanceAssessment(advanceAssessment(createDefaultState(), 0), 1), 2),
+    3,
+  );
+  assert.equal(completed.pedagogicalState.assessmentStatus, "complete");
+  assert.equal(completed.pedagogicalState.literacyStage, 3);
+});
+
+test("mastery evidence rotates from reading to writing to numeracy deterministically", () => {
+  const assessed = recordAssessmentCompletion(createDefaultState(), 2);
+  const shifted = applyMasteryEvidence(assessed, "writing", 1);
+  const shiftedAgain = applyMasteryEvidence(shifted, "reading", 2);
+  const shiftedFinal = applyMasteryEvidence(shiftedAgain, "writing", 1);
+
+  assert.equal(nextCurriculumDecision(shifted).activeDomain, "reading");
+  assert.equal(nextCurriculumDecision(shiftedAgain).activeDomain, "writing");
+  assert.equal(nextCurriculumDecision(shiftedFinal).activeDomain, "numeracy");
 });
 
 test("invalid scene output is replaced by the safe fallback scene", () => {

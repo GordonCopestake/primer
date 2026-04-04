@@ -9,7 +9,7 @@ export const APP_CONFIG = {
     cloudDirector: env.FEATURE_CLOUD_DIRECTOR === "true",
     cloudImage: env.FEATURE_CLOUD_IMAGE === "true",
     cloudVision: env.FEATURE_CLOUD_VISION === "true",
-    exportImport: env.FEATURE_EXPORT_IMPORT !== "false",
+    exportImport: env.FEATURE_EXPORT_IMPORT === "true",
     encryptedExport: env.FEATURE_ENCRYPTED_EXPORT === "true",
     debugTools: env.FEATURE_DEBUG_TOOLS === "true",
   },

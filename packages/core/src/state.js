@@ -24,3 +24,22 @@ export const appendRecentTurn = (state, turn) => {
     },
   });
 };
+
+export const setActiveScene = (state, scene) =>
+  createDefaultState({
+    ...state,
+    runtimeSession: {
+      ...state.runtimeSession,
+      activeSceneId: scene?.scene?.id ?? null,
+      lastScene: scene ?? null,
+    },
+  });
+
+export const updateConsentSettings = (state, updates) =>
+  createDefaultState({
+    ...state,
+    consentAndSettings: {
+      ...state.consentAndSettings,
+      ...updates,
+    },
+  });

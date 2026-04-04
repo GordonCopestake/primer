@@ -21,6 +21,7 @@ export const createStateShape = (overrides = {}) => ({
   },
   pedagogicalState: {
     literacyStage: 0,
+    assessmentStep: 0,
     domainStage: {
       reading: 0,
       writing: 0,
@@ -36,6 +37,7 @@ export const createStateShape = (overrides = {}) => ({
   },
   runtimeSession: {
     activeSceneId: null,
+    lastScene: null,
     recentTurns: [],
     runningSummary: null,
     pendingAssetJobs: [],

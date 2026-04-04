@@ -1,33 +1,635 @@
 import {
   APP_CONFIG,
+  advanceAssessment,
+  appendRecentTurn,
+  applyMasteryEvidence,
   createDefaultState,
   createFallbackScene,
   detectCapabilities,
   interpretScene,
+  migrateState,
   nextCurriculumDecision,
-} from "../../../../packages/core/src/index.js";
+  queueImageGeneration,
+  requestDirectorScene,
+  requestVisionInterpretation,
+  scoreTrace,
+  setActiveScene,
+  updateConsentSettings,
+} from "./runtime.js";
 
 const sceneRoot = document.querySelector("#scene-root");
+const capabilityIndicator = document.querySelector("#capability-indicator");
+const statusIndicator = document.querySelector("#status-indicator");
+const loadingIndicator = document.querySelector("#loading-indicator");
+const listenButton = document.querySelector("#listen-button");
 const replayButton = document.querySelector("#replay-button");
+const settingsButton = document.querySelector("#settings-button");
+const stopButton = document.querySelector("#stop-button");
 const fallbackButton = document.querySelector("#fallback-button");
+const settingsDialog = document.querySelector("#settings-dialog");
+const soundEnabledInput = document.querySelector("#sound-enabled");
+const captionsEnabledInput = document.querySelector("#captions-enabled");
+const cloudEnabledInput = document.querySelector("#cloud-enabled");
+const storageIndicator = document.querySelector("#storage-indicator");
+const requestPersistenceButton = document.querySelector("#request-persistence-button");
+const exportButton = document.querySelector("#export-button");
+const importButton = document.querySelector("#import-button");
+const importInput = document.querySelector("#import-input");
 
-const state = createDefaultState({
-  capabilities: detectCapabilities(globalThis),
-});
+const STORAGE_KEY = "primer.state.v1";
+const SCENE_KEY = "primer.scene.v1";
+
+const capabilitySnapshot = detectCapabilities(globalThis);
+const recognitionCtor = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
+let recognition = null;
+let currentDecision = null;
+let currentScene = null;
+let latestInput = {
+  type: "system-start",
+  content: "startup",
+};
+
+const createTracePad = (canvas, onStateChange) => {
+  if (!canvas) {
+    return;
+  }
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return;
+  }
+
+  const resize = () => {
+    const ratio = globalThis.devicePixelRatio || 1;
+    const bounds = canvas.getBoundingClientRect();
+    canvas.width = Math.floor(bounds.width * ratio);
+    canvas.height = Math.floor(bounds.height * ratio);
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.scale(ratio, ratio);
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = "#16324f";
+    context.lineWidth = 10;
+  };
+
+  let drawing = false;
+  let hasDrawn = false;
+  const points = [];
+
+  const pointFromEvent = (event) => {
+    const bounds = canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+    };
+  };
+
+  const start = (event) => {
+    drawing = true;
+    const point = pointFromEvent(event);
+    points.push(point);
+    context.beginPath();
+    context.moveTo(point.x, point.y);
+    event.preventDefault();
+  };
+
+  const move = (event) => {
+    if (!drawing) {
+      return;
+    }
+
+    const point = pointFromEvent(event);
+    points.push(point);
+    context.lineTo(point.x, point.y);
+    context.stroke();
+    if (!hasDrawn) {
+      hasDrawn = true;
+      onStateChange(true);
+    }
+    event.preventDefault();
+  };
+
+  const stop = () => {
+    drawing = false;
+  };
+
+  resize();
+  globalThis.addEventListener("resize", resize);
+
+  canvas.addEventListener("pointerdown", start);
+  canvas.addEventListener("pointermove", move);
+  canvas.addEventListener("pointerup", stop);
+  canvas.addEventListener("pointerleave", stop);
+
+  return {
+    getTraceMetrics() {
+      return {
+        points: [...points],
+        bounds: canvas.getBoundingClientRect(),
+        dataUrl: canvas.toDataURL("image/png"),
+      };
+    },
+    clear() {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      points.length = 0;
+      hasDrawn = false;
+      onStateChange(false);
+    },
+  };
+};
+
+const setStatus = (message) => {
+  if (statusIndicator) {
+    statusIndicator.textContent = message;
+  }
+};
+
+const setLoading = (message) => {
+  if (loadingIndicator) {
+    loadingIndicator.textContent = message;
+  }
+};
+
+const readStorage = (key) => {
+  try {
+    return globalThis.localStorage?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const writeStorage = (key, value) => {
+  try {
+    globalThis.localStorage?.setItem(key, value);
+  } catch (error) {
+    console.error("Storage write failed", error);
+    setStatus("Storage is unavailable. Progress will only last this session.");
+  }
+};
+
+const hydrateState = () => {
+  const raw = readStorage(STORAGE_KEY);
+  let parsed = null;
+  try {
+    parsed = raw ? JSON.parse(raw) : null;
+  } catch {
+    parsed = null;
+  }
+  const migrated = migrateState(parsed);
+  return createDefaultState({
+    ...migrated,
+    capabilities: capabilitySnapshot,
+  });
+};
+
+const hydrateScene = () => {
+  const raw = readStorage(SCENE_KEY);
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+let state = hydrateState();
+
+const persistState = () => {
+  writeStorage(STORAGE_KEY, JSON.stringify(state));
+};
+
+const persistScene = (scene) => {
+  writeStorage(SCENE_KEY, JSON.stringify(scene));
+};
+
+const createSceneFromDecision = (decision) => {
+  const fallbackScene = createFallbackScene("decision");
+  const byObjective = {
+    "baseline.observe-sound.0": {
+      scene: {
+        id: "scene_baseline_observe_sound_0",
+        kind: "assessment",
+        objectiveId: decision.objectiveId,
+        transition: "fade",
+        tone: "calm",
+      },
+      narration: {
+        text: "Tap the sound that feels longest. We are checking where to begin.",
+        maxChars: 90,
+        estDurationMs: 2800,
+        bargeInAllowed: true,
+      },
+      interaction: {
+        type: "tap-choice",
+        options: [
+          { id: "rain", label: "Soft rain", audioLabel: "Soft rain", correct: false },
+          { id: "bell", label: "Bell bell bell", audioLabel: "Bell bell bell", correct: true },
+        ],
+      },
+    },
+    "baseline.symbol-match.1": {
+      scene: {
+        id: "scene_baseline_symbol_match_1",
+        kind: "assessment",
+        objectiveId: decision.objectiveId,
+        transition: "fade",
+        tone: "focused",
+      },
+      narration: {
+        text: "Choose the letter A. This helps place the next reading step.",
+        maxChars: 96,
+        estDurationMs: 2500,
+        bargeInAllowed: true,
+      },
+      interaction: {
+        type: "tap-choice",
+        options: [
+          { id: "A", label: "A", audioLabel: "Letter A", correct: true },
+          { id: "M", label: "M", audioLabel: "Letter M", correct: false },
+          { id: "S", label: "S", audioLabel: "Letter S", correct: false },
+        ],
+      },
+    },
+    "baseline.trace-letter.2": {
+      scene: {
+        id: "scene_baseline_trace_letter_2",
+        kind: "assessment",
+        objectiveId: decision.objectiveId,
+        transition: "slide",
+        tone: "focused",
+      },
+      narration: {
+        text: "Trace the curve and line for B, then continue when it feels steady.",
+        maxChars: 104,
+        estDurationMs: 2600,
+        bargeInAllowed: true,
+      },
+      interaction: {
+        type: "trace-symbol",
+        target: "B",
+      },
+    },
+    "baseline.read-short.3": {
+      scene: {
+        id: "scene_baseline_read_short_3",
+        kind: "assessment",
+        objectiveId: decision.objectiveId,
+        transition: "fade",
+        tone: "curious",
+      },
+      narration: {
+        text: "Pick the short sentence that matches a bright sky.",
+        maxChars: 120,
+        estDurationMs: 2500,
+        bargeInAllowed: true,
+      },
+      interaction: {
+        type: "tap-choice",
+        options: [
+          { id: "blue", label: "The sky is blue.", audioLabel: "The sky is blue.", correct: true },
+          { id: "night", label: "The cave is dark.", audioLabel: "The cave is dark.", correct: false },
+        ],
+      },
+    },
+  };
+
+  if (byObjective[decision.objectiveId]) {
+    return {
+      version: 1,
+      visualIntent: fallbackScene.visualIntent,
+      evidence: fallbackScene.evidence,
+      ...byObjective[decision.objectiveId],
+    };
+  }
+
+  if (decision.activeDomain === "reading") {
+    return {
+      version: 1,
+      scene: {
+        id: `scene_${decision.objectiveId.replaceAll(".", "_")}`,
+        kind: "lesson",
+        objectiveId: decision.objectiveId,
+        transition: "slide",
+        tone: "encouraging",
+      },
+      narration: {
+        text:
+          decision.literacyStage >= 3
+            ? "Choose the sentence that matches the picture in your mind: a calm map."
+            : "Match the symbol that starts the sound you hear: M.",
+        maxChars: 120,
+        estDurationMs: 2400,
+        bargeInAllowed: true,
+      },
+      visualIntent: fallbackScene.visualIntent,
+      interaction:
+        decision.literacyStage >= 2
+          ? {
+              type: "tap-choice",
+              options: [
+                { id: "map", label: "Map", audioLabel: "Map", correct: true },
+                { id: "sun", label: "Sun", audioLabel: "Sun", correct: false },
+                { id: "tree", label: "Tree", audioLabel: "Tree", correct: false },
+              ],
+            }
+          : {
+              type: "repeat-sound",
+              phoneme: "m",
+            },
+      evidence: fallbackScene.evidence,
+    };
+  }
+
+  if (decision.activeDomain === "writing") {
+    return {
+      version: 1,
+      scene: {
+        id: `scene_${decision.objectiveId.replaceAll(".", "_")}`,
+        kind: "practice",
+        objectiveId: decision.objectiveId,
+        transition: "slide",
+        tone: "focused",
+      },
+      narration: {
+        text: "Trace the letter M, then tap continue when the strokes feel clear.",
+        maxChars: 110,
+        estDurationMs: 2200,
+        bargeInAllowed: true,
+      },
+      visualIntent: fallbackScene.visualIntent,
+      interaction: {
+        type: "trace-symbol",
+        target: "M",
+      },
+      evidence: fallbackScene.evidence,
+    };
+  }
+
+  if (decision.activeDomain === "numeracy") {
+    return {
+      version: 1,
+      scene: {
+        id: `scene_${decision.objectiveId.replaceAll(".", "_")}`,
+        kind: "practice",
+        objectiveId: decision.objectiveId,
+        transition: "fade",
+        tone: "curious",
+      },
+      narration: {
+        text: "Which group has more dots?",
+        maxChars: 120,
+        estDurationMs: 1800,
+        bargeInAllowed: true,
+      },
+      visualIntent: fallbackScene.visualIntent,
+      interaction: {
+        type: "tap-choice",
+        options: [
+          { id: "two", label: "••", audioLabel: "Two dots", correct: false },
+          { id: "four", label: "••••", audioLabel: "Four dots", correct: true },
+        ],
+      },
+      evidence: fallbackScene.evidence,
+    };
+  }
+
+  return createFallbackScene("decision-miss");
+};
+
+const stopAudioAndInput = () => {
+  globalThis.speechSynthesis?.cancel();
+  recognition?.stop();
+  setLoading("Interrupted");
+};
+
+const speakScene = (scene) => {
+  if (!state.consentAndSettings.soundEnabled) {
+    return;
+  }
+
+  if (!capabilitySnapshot.localTTS || !globalThis.speechSynthesis) {
+    setStatus("Text audio is unavailable here. Tap controls remain available.");
+    return;
+  }
+
+  stopAudioAndInput();
+  const utterance = new SpeechSynthesisUtterance(scene.narration.text);
+  utterance.onstart = () => setLoading("Narrating");
+  utterance.onend = () => setLoading("Idle");
+  utterance.onerror = () => {
+    setLoading("Idle");
+    setStatus("Narration could not start. Tap controls are still available.");
+  };
+  globalThis.speechSynthesis.speak(utterance);
+};
 
 const renderScene = (scene) => {
-  const result = interpretScene(scene, nextCurriculumDecision(state));
+  currentDecision = nextCurriculumDecision(state);
+  const result = interpretScene(scene, currentDecision);
   const safeScene = result.ok ? result.blueprint : createFallbackScene("validation-failure");
   const interactionType = safeScene.interaction.type;
 
+  currentScene = safeScene;
+  state = setActiveScene(state, safeScene);
+  persistState();
+  persistScene(safeScene);
+
+  const choiceMarkup = safeScene.interaction.options
+    ?.map(
+      (option) => `
+        <button
+          type="button"
+          class="choice-button"
+          data-choice-id="${option.id}"
+          data-correct="${option.correct ? "true" : "false"}"
+        >
+          ${option.label}
+        </button>
+      `,
+    )
+    .join("");
+
+  const traceMarkup =
+    interactionType === "trace-symbol"
+      ? `
+        <div class="trace-stage">
+          <div class="trace-board">
+            <div class="trace-guide">${safeScene.interaction.target}</div>
+            <canvas class="trace-canvas" id="trace-canvas"></canvas>
+          </div>
+          <p class="trace-hint">Trace over the large ${safeScene.interaction.target}. When the shape feels clear, tap Continue.</p>
+          <div class="trace-actions">
+            <button type="button" class="choice-button" id="trace-clear-button">Clear</button>
+            <button
+              type="button"
+              class="choice-button"
+              id="trace-continue-button"
+              data-trace-action="continue"
+              disabled
+            >
+              Continue
+            </button>
+            <button type="button" class="choice-button" data-choice-id="skip" data-correct="false">
+              Skip for now
+            </button>
+          </div>
+        </div>
+      `
+      : "";
+
+  const repeatMarkup =
+    interactionType === "repeat-sound"
+      ? `
+        <div class="choice-grid">
+          <button type="button" class="choice-button" data-choice-id="repeat" data-correct="true">
+            Repeat "${safeScene.interaction.phoneme}"
+          </button>
+          <button type="button" class="choice-button" data-choice-id="tap" data-correct="true">
+            Use tap path
+          </button>
+        </div>
+      `
+      : "";
+
   sceneRoot.innerHTML = `
-    <div class="scene-meta">
-      <span>${safeScene.scene.kind}</span>
-      <span>${interactionType}</span>
+    <div class="scene-body">
+      <div class="scene-meta">
+        <span>${safeScene.scene.kind}</span>
+        <span>${interactionType}</span>
+      </div>
+      <h2>${safeScene.narration.text}</h2>
+      ${
+        interactionType === "tap-choice"
+          ? `<div class="choice-grid">${choiceMarkup}</div>`
+          : traceMarkup || repeatMarkup
+      }
+      ${
+        state.consentAndSettings.captionsEnabled
+          ? `<p class="helper">Objective: ${safeScene.scene.objectiveId}</p>`
+          : ""
+      }
     </div>
-    <h2>${safeScene.narration.text}</h2>
-    <p class="helper">Capability tier: ${state.capabilities.tier}</p>
   `;
+
+  sceneRoot.querySelectorAll("[data-choice-id]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const correct = button.dataset.correct === "true";
+      const choiceId = button.dataset.choiceId;
+
+      state = appendRecentTurn(state, {
+        role: "user",
+        content: `interaction:${safeScene.scene.objectiveId}:${choiceId}`,
+      });
+      latestInput = {
+        type: "tap-choice",
+        content: `${safeScene.scene.objectiveId}:${choiceId}`,
+      };
+
+      if (state.pedagogicalState.assessmentStatus !== "complete") {
+        const demonstratedStage = correct
+          ? currentDecision.literacyStage
+          : Math.max(0, currentDecision.literacyStage - 1);
+        state = advanceAssessment(state, demonstratedStage);
+        setStatus("Assessment updated locally.");
+      } else {
+        state = applyMasteryEvidence(state, currentDecision.activeDomain, correct ? 1 : 0);
+        setStatus(correct ? "Progress saved." : "Saved. Another path is ready.");
+      }
+
+      persistState();
+      await renderCurrentDecisionScene();
+    });
+  });
+
+  if (interactionType === "trace-symbol") {
+    const canvas = sceneRoot.querySelector("#trace-canvas");
+    const continueButton = sceneRoot.querySelector("#trace-continue-button");
+    const clearButton = sceneRoot.querySelector("#trace-clear-button");
+    const skipButton = [...sceneRoot.querySelectorAll("[data-choice-id='skip']")][0];
+    const pad = createTracePad(canvas, (ready) => {
+      if (continueButton) {
+        continueButton.disabled = !ready;
+      }
+    });
+
+    continueButton?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      const traceMetrics = pad?.getTraceMetrics();
+      const traceScore = scoreTrace(traceMetrics?.points ?? [], traceMetrics?.bounds);
+      latestInput = {
+        type: "trace-result",
+        content: `confidence:${traceScore.confidence}`,
+      };
+
+      if (traceScore.success) {
+        state = appendRecentTurn(state, {
+          role: "user",
+          content: `trace:${safeScene.interaction.target}:local:${traceScore.confidence}`,
+        });
+        if (state.pedagogicalState.assessmentStatus !== "complete") {
+          state = advanceAssessment(state, currentDecision.literacyStage);
+        } else {
+          state = applyMasteryEvidence(state, currentDecision.activeDomain, 1);
+        }
+        persistState();
+        setStatus(`Trace accepted locally (${traceScore.confidence}).`);
+        await renderCurrentDecisionScene();
+        return;
+      }
+
+      if (
+        traceScore.ambiguous &&
+        state.consentAndSettings.cloudEnabled &&
+        state.consentAndSettings.cloudVisionEnabled &&
+        APP_CONFIG.features.cloudVision
+      ) {
+        setLoading("Checking trace");
+        const relayResult = await requestVisionInterpretation({
+          traceDataUrl: traceMetrics?.dataUrl ?? "",
+          decision: currentDecision,
+          target: safeScene.interaction.target,
+        });
+        setLoading("Idle");
+
+        if (relayResult.ok && relayResult.response.success) {
+          state = appendRecentTurn(state, {
+            role: "user",
+            content: `trace:${safeScene.interaction.target}:vision:${relayResult.response.confidence}`,
+          });
+          if (state.pedagogicalState.assessmentStatus !== "complete") {
+            state = advanceAssessment(state, currentDecision.literacyStage);
+          } else {
+            state = applyMasteryEvidence(state, currentDecision.activeDomain, 1);
+          }
+          persistState();
+          setStatus(relayResult.response.feedbackAudio || "Trace accepted after review.");
+          await renderCurrentDecisionScene();
+          return;
+        }
+      }
+
+      setStatus(
+        traceScore.ambiguous
+          ? "Trace was close. Try one clearer stroke before continuing."
+          : "Trace needs a larger, clearer shape before continuing.",
+      );
+    });
+
+    clearButton?.addEventListener("click", () => {
+      pad?.clear();
+      setStatus("Trace cleared.");
+    });
+
+    skipButton?.addEventListener("click", () => {
+      latestInput = {
+        type: "trace-result",
+        content: "skipped",
+      };
+    });
+  }
+
+  capabilityIndicator.textContent = `Capability tier: ${state.capabilities.tier}`;
+  listenButton.disabled = !(capabilitySnapshot.localSTT && capabilitySnapshot.microphone);
+  speakScene(safeScene);
 };
 
 const registerServiceWorker = async () => {
@@ -36,22 +638,246 @@ const registerServiceWorker = async () => {
   }
 
   try {
-    await navigator.serviceWorker.register("./public/sw.js");
+    await navigator.serviceWorker.register("./sw.js");
   } catch (error) {
     console.error("Service worker registration failed", error);
   }
 };
 
+const maybeQueueSceneImage = async (scene) => {
+  if (
+    !state.consentAndSettings.cloudEnabled ||
+    !state.consentAndSettings.cloudImageEnabled ||
+    !APP_CONFIG.features.cloudImage
+  ) {
+    return;
+  }
+
+  const result = await queueImageGeneration({ scene });
+  if (result.ok && result.response.status === "queued") {
+    setStatus("Scene ready. Optional image queued in the background.");
+  }
+};
+
+const renderCurrentDecisionScene = async () => {
+  const decision = nextCurriculumDecision(state);
+  const localScene = createSceneFromDecision(decision);
+
+  if (state.consentAndSettings.cloudEnabled && decision.cloudEscalationAllowed) {
+    setLoading("Checking scene");
+    const relayResult = await requestDirectorScene({
+      state,
+      decision,
+      latestInput,
+      localScene,
+    });
+    setLoading("Idle");
+
+    if (relayResult.ok) {
+      renderScene(relayResult.blueprint);
+      maybeQueueSceneImage(relayResult.blueprint).catch((error) => {
+        console.error("Image queue failed", error);
+      });
+      return;
+    }
+
+    setStatus("Relay unavailable. Continuing in local-only mode.");
+  }
+
+  renderScene(localScene);
+  maybeQueueSceneImage(localScene).catch((error) => {
+    console.error("Image queue failed", error);
+  });
+};
+
+const updateSettingsForm = () => {
+  soundEnabledInput.checked = state.consentAndSettings.soundEnabled;
+  captionsEnabledInput.checked = state.consentAndSettings.captionsEnabled;
+  cloudEnabledInput.checked = state.consentAndSettings.cloudEnabled;
+  storageIndicator.textContent =
+    `Storage persistence: ${state.consentAndSettings.storagePersistenceGranted}. ` +
+    `Relay: ${APP_CONFIG.relayBaseUrl || "disabled"}.`;
+};
+
+const syncStorageStatus = async () => {
+  if (!navigator.storage?.persisted) {
+    return;
+  }
+
+  const persisted = await navigator.storage.persisted();
+  state = updateConsentSettings(state, {
+    storagePersistenceGranted: persisted ? "granted" : "not-granted",
+  });
+  persistState();
+  updateSettingsForm();
+};
+
+const exportBackup = () => {
+  const payload = JSON.stringify({ state, scene: currentScene }, null, 2);
+  const blob = new Blob([payload], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "primer-backup.json";
+  anchor.click();
+  URL.revokeObjectURL(url);
+  setStatus("Backup exported locally.");
+};
+
+const importBackup = async (file) => {
+  const text = await file.text();
+  const parsed = JSON.parse(text);
+  state = createDefaultState({
+    ...migrateState(parsed.state),
+    capabilities: capabilitySnapshot,
+  });
+  currentScene = parsed.scene ?? null;
+  persistState();
+  if (currentScene) {
+    persistScene(currentScene);
+    renderScene(currentScene);
+  } else {
+    renderCurrentDecisionScene();
+  }
+  updateSettingsForm();
+  setStatus("Backup restored locally.");
+};
+
 fallbackButton?.addEventListener("click", () => {
+  stopAudioAndInput();
   renderScene(createFallbackScene("manual"));
 });
 
 replayButton?.addEventListener("click", () => {
-  renderScene(createFallbackScene("replay"));
+  if (currentScene) {
+    speakScene(currentScene);
+    setStatus("Narration replayed.");
+  }
+});
+
+stopButton?.addEventListener("click", () => {
+  stopAudioAndInput();
+  setStatus("Playback stopped.");
+});
+
+listenButton?.addEventListener("click", () => {
+  if (!recognitionCtor || !(capabilitySnapshot.localSTT && capabilitySnapshot.microphone)) {
+    setStatus("Listening is unavailable. Tap controls remain available.");
+    return;
+  }
+
+  stopAudioAndInput();
+  recognition = new recognitionCtor();
+  recognition.lang = state.learnerProfile.locale;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  recognition.onstart = () => {
+    setLoading("Listening");
+    setStatus("Listening locally where supported.");
+  };
+  recognition.onresult = (event) => {
+    const transcript = event.results?.[0]?.[0]?.transcript ?? "";
+    state = appendRecentTurn(state, { role: "user", content: `speech:${transcript}` });
+    persistState();
+    latestInput = {
+      type: "transcript",
+      content: transcript || "empty",
+    };
+    setStatus(`Heard: ${transcript || "nothing clear"}`);
+    renderCurrentDecisionScene().catch((error) => {
+      console.error("Voice follow-up failed", error);
+    });
+  };
+  recognition.onerror = () => {
+    setStatus("Listening failed. Tap controls remain available.");
+    setLoading("Idle");
+  };
+  recognition.onend = () => {
+    setLoading("Idle");
+  };
+  recognition.start();
+});
+
+settingsButton?.addEventListener("click", () => {
+  updateSettingsForm();
+  settingsDialog?.showModal();
+});
+
+soundEnabledInput?.addEventListener("change", () => {
+  state = updateConsentSettings(state, { soundEnabled: soundEnabledInput.checked });
+  persistState();
+});
+
+captionsEnabledInput?.addEventListener("change", () => {
+  state = updateConsentSettings(state, { captionsEnabled: captionsEnabledInput.checked });
+  persistState();
+  renderScene(currentScene ?? createFallbackScene("captions"));
+});
+
+cloudEnabledInput?.addEventListener("change", () => {
+  state = updateConsentSettings(state, {
+    cloudEnabled: cloudEnabledInput.checked,
+    cloudImageEnabled: cloudEnabledInput.checked,
+    cloudVisionEnabled: cloudEnabledInput.checked,
+  });
+  persistState();
+  updateSettingsForm();
+});
+
+requestPersistenceButton?.addEventListener("click", async () => {
+  if (!navigator.storage?.persist) {
+    setStatus("Persistent storage request is unavailable here.");
+    return;
+  }
+
+  const granted = await navigator.storage.persist();
+  state = updateConsentSettings(state, {
+    storagePersistenceGranted: granted ? "granted" : "not-granted",
+  });
+  persistState();
+  updateSettingsForm();
+  setStatus(granted ? "Persistent storage granted." : "Persistent storage not granted.");
+});
+
+exportButton?.addEventListener("click", () => {
+  exportBackup();
+});
+
+importButton?.addEventListener("click", () => {
+  importInput?.click();
+});
+
+importInput?.addEventListener("change", async () => {
+  const file = importInput.files?.[0];
+  if (!file) {
+    return;
+  }
+  try {
+    await importBackup(file);
+  } catch (error) {
+    console.error("Import failed", error);
+    setStatus("Import failed. The existing learner data was kept.");
+  } finally {
+    importInput.value = "";
+  }
 });
 
 if (APP_CONFIG.appMode !== "test") {
   registerServiceWorker();
 }
 
-renderScene(createFallbackScene("startup"));
+syncStorageStatus().catch((error) => {
+  console.error("Storage check failed", error);
+});
+
+const restoredScene = hydrateScene();
+if (restoredScene) {
+  setStatus("Restored the last safe scene.");
+  renderScene(restoredScene);
+} else {
+  setStatus("Starting with the local baseline path.");
+  renderCurrentDecisionScene().catch((error) => {
+    console.error("Initial scene render failed", error);
+    renderScene(createFallbackScene("startup-failure"));
+  });
+}

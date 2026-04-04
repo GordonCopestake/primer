@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#16324f" />
-    <link rel="manifest" href="./public/manifest.webmanifest" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./src/styles/app.css" />
     <title>Primer</title>
   </head>
@@ -15,15 +16,59 @@
           <p class="eyebrow">Local-first adaptive learning</p>
           <h1>Primer</h1>
         </div>
-        <button id="replay-button" type="button" class="shell-button">Replay</button>
+        <div class="shell-actions">
+          <button id="listen-button" type="button" class="shell-button">Listen</button>
+          <button id="stop-button" type="button" class="shell-button tertiary">Stop</button>
+          <button id="replay-button" type="button" class="shell-button">Replay</button>
+          <button id="settings-button" type="button" class="shell-button secondary">Settings</button>
+        </div>
       </header>
+      <div class="status-row">
+        <span id="status-indicator" class="status-pill" aria-live="polite">Ready offline.</span>
+        <span id="capability-indicator" class="status-pill subtle"></span>
+      </div>
       <section id="scene-root" class="scene-card" aria-live="polite"></section>
       <footer class="shell-footer">
         <button id="fallback-button" type="button" class="shell-button secondary">
           Safe fallback
         </button>
+        <span id="loading-indicator" class="helper" aria-live="polite">Idle</span>
       </footer>
     </main>
+    <dialog id="settings-dialog" class="settings-dialog">
+      <form method="dialog" class="settings-panel">
+        <div class="settings-header">
+          <div>
+            <p class="eyebrow">Local settings</p>
+            <h2>Runtime controls</h2>
+          </div>
+          <button id="close-settings-button" class="shell-button tertiary" value="cancel">Close</button>
+        </div>
+        <label class="setting-row">
+          <span>Sound enabled</span>
+          <input id="sound-enabled" type="checkbox" />
+        </label>
+        <label class="setting-row">
+          <span>Captions enabled</span>
+          <input id="captions-enabled" type="checkbox" />
+        </label>
+        <label class="setting-row">
+          <span>Cloud assist enabled</span>
+          <input id="cloud-enabled" type="checkbox" />
+        </label>
+        <div class="settings-meta">
+          <p id="storage-indicator">Storage persistence: unknown</p>
+        </div>
+        <div class="settings-actions">
+          <button id="request-persistence-button" type="button" class="shell-button">
+            Request persistence
+          </button>
+          <button id="export-button" type="button" class="shell-button secondary">Export backup</button>
+          <button id="import-button" type="button" class="shell-button secondary">Import backup</button>
+        </div>
+        <input id="import-input" type="file" accept="application/json" hidden />
+      </form>
+    </dialog>
     <script type="module" src="./src/app/main.js"></script>
   </body>
 </html>

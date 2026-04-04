@@ -1,0 +1,764 @@
+const env = typeof process === "undefined" ? {} : process.env;
+
+const APP_CONFIG = {
+  appMode: env.PRIMER_APP_MODE ?? "development",
+  cloudMode: env.PRIMER_CLOUD_MODE ?? "off",
+  relayBaseUrl: env.PRIMER_RELAY_BASE_URL ?? "",
+  capabilityMode: env.PRIMER_CAPABILITY_MODE ?? "auto",
+  features: {
+    cloudDirector: env.FEATURE_CLOUD_DIRECTOR === "true",
+    cloudImage: env.FEATURE_CLOUD_IMAGE === "true",
+    cloudVision: env.FEATURE_CLOUD_VISION === "true",
+    exportImport: env.FEATURE_EXPORT_IMPORT === "true",
+    encryptedExport: env.FEATURE_ENCRYPTED_EXPORT === "true",
+    debugTools: env.FEATURE_DEBUG_TOOLS === "true",
+  },
+};
+
+const SCHEMA_VERSION = 1;
+const V1_INTERACTIONS = ["none", "tap-choice", "repeat-sound", "trace-symbol"];
+const V1_SCENE_KINDS = ["assessment", "lesson", "practice", "review", "reward", "fallback"];
+const VALID_TRANSITIONS = new Set(["fade", "slide", "pan"]);
+const VALID_TONES = new Set(["calm", "encouraging", "celebratory", "focused", "curious"]);
+const SAFE_RECIPE_IDS = new Set(["ambient_safe_path", "neutral_choice_board", "symbol_trace_board"]);
+
+const masteryBucket = () => ({
+  phonemes: {},
+  graphemes: {},
+  vocabularyThemes: {},
+  numeracyConcepts: {},
+  mathConcepts: {},
+  scienceConcepts: {},
+});
+
+const createStateShape = (overrides = {}) => ({
+  schemaVersion: SCHEMA_VERSION,
+  learnerProfile: {
+    learnerId: "local-learner",
+    locale: "en-GB",
+    interests: [],
+    avatarSeed: null,
+    preferredModalities: ["audio", "visual", "interactive"],
+    ...overrides.learnerProfile,
+  },
+  pedagogicalState: {
+    literacyStage: 0,
+    assessmentStep: 0,
+    domainStage: {
+      reading: 0,
+      writing: 0,
+      numeracy: 0,
+      mathematics: 0,
+      science: 0,
+      physics: 0,
+    },
+    currentObjectiveId: "baseline.audio-choice.1",
+    assessmentStatus: "not-started",
+    mastery: masteryBucket(),
+    ...overrides.pedagogicalState,
+  },
+  runtimeSession: {
+    activeSceneId: null,
+    lastScene: null,
+    recentTurns: [],
+    runningSummary: null,
+    pendingAssetJobs: [],
+    ...overrides.runtimeSession,
+  },
+  consentAndSettings: {
+    cloudEnabled: false,
+    cloudImageEnabled: false,
+    cloudVisionEnabled: false,
+    adminPinEnabled: false,
+    captionsEnabled: true,
+    soundEnabled: true,
+    storagePersistenceGranted: "unknown",
+    ...overrides.consentAndSettings,
+  },
+  capabilities: {
+    tier: "minimal",
+    webgpu: false,
+    opfs: false,
+    indexedDb: true,
+    localTTS: true,
+    localSTT: false,
+    microphone: false,
+    ...overrides.capabilities,
+  },
+  assetIndex: {
+    byId: {},
+    ...overrides.assetIndex,
+  },
+});
+
+const lessonKinds = ["lesson", "practice", "review", "reward", "fallback"];
+
+const assessmentSequence = [
+  {
+    objectiveId: "baseline.observe-sound.0",
+    activeDomain: "preliteracy",
+    literacyStage: 0,
+    allowedSceneKinds: ["assessment", "fallback"],
+    allowedInteractionTypes: ["tap-choice", "repeat-sound", "none"],
+    cloudEscalationAllowed: false,
+    maxNarrationChars: 90,
+    maxPromptComplexity: 1,
+  },
+  {
+    objectiveId: "baseline.symbol-match.1",
+    activeDomain: "preliteracy",
+    literacyStage: 1,
+    allowedSceneKinds: ["assessment", "fallback"],
+    allowedInteractionTypes: ["tap-choice", "trace-symbol", "none"],
+    cloudEscalationAllowed: false,
+    maxNarrationChars: 96,
+    maxPromptComplexity: 1,
+  },
+  {
+    objectiveId: "baseline.trace-letter.2",
+    activeDomain: "writing",
+    literacyStage: 2,
+    allowedSceneKinds: ["assessment", "fallback"],
+    allowedInteractionTypes: ["trace-symbol", "tap-choice", "none"],
+    cloudEscalationAllowed: false,
+    maxNarrationChars: 104,
+    maxPromptComplexity: 1,
+  },
+  {
+    objectiveId: "baseline.read-short.3",
+    activeDomain: "reading",
+    literacyStage: 3,
+    allowedSceneKinds: ["assessment", "fallback"],
+    allowedInteractionTypes: ["tap-choice", "repeat-sound", "none"],
+    cloudEscalationAllowed: false,
+    maxNarrationChars: 120,
+    maxPromptComplexity: 2,
+  },
+];
+
+const readingDecision = (stage = 1) => ({
+  objectiveId: `reading.symbol-match.${stage}`,
+  activeDomain: "reading",
+  literacyStage: stage,
+  allowedSceneKinds: lessonKinds,
+  allowedInteractionTypes: ["tap-choice", "trace-symbol", "repeat-sound", "none"],
+  cloudEscalationAllowed: APP_CONFIG.features.cloudDirector,
+  maxNarrationChars: 120,
+  maxPromptComplexity: 2,
+});
+
+const writingDecision = (stage = 1) => ({
+  objectiveId: `writing.trace-and-build.${stage}`,
+  activeDomain: "writing",
+  literacyStage: stage,
+  allowedSceneKinds: lessonKinds,
+  allowedInteractionTypes: ["trace-symbol", "tap-choice", "none"],
+  cloudEscalationAllowed: APP_CONFIG.features.cloudDirector,
+  maxNarrationChars: 110,
+  maxPromptComplexity: 2,
+});
+
+const numeracyDecision = (stage = 1) => ({
+  objectiveId: `numeracy.more-less.${stage}`,
+  activeDomain: "numeracy",
+  literacyStage: stage,
+  allowedSceneKinds: lessonKinds,
+  allowedInteractionTypes: ["tap-choice", "none"],
+  cloudEscalationAllowed: APP_CONFIG.features.cloudDirector,
+  maxNarrationChars: 120,
+  maxPromptComplexity: 2,
+});
+
+const getMasteryScore = (state, domain) => state.pedagogicalState.domainStage[domain] ?? 0;
+
+const nextCurriculumDecision = (state) => {
+  if (state.pedagogicalState.assessmentStatus !== "complete") {
+    const step = Math.max(
+      0,
+      Math.min(state.pedagogicalState.assessmentStep ?? 0, assessmentSequence.length - 1),
+    );
+    return assessmentSequence[step];
+  }
+
+  const readingScore = getMasteryScore(state, "reading");
+  const writingScore = getMasteryScore(state, "writing");
+  const numeracyScore = getMasteryScore(state, "numeracy");
+  const currentObjectiveId = state.pedagogicalState.currentObjectiveId ?? "";
+
+  if (currentObjectiveId.startsWith("reading.") && readingScore <= Math.max(writingScore, numeracyScore)) {
+    return readingDecision(Math.max(1, readingScore));
+  }
+
+  if (readingScore <= writingScore && readingScore <= numeracyScore) {
+    return readingDecision(Math.max(1, readingScore));
+  }
+
+  if (writingScore <= numeracyScore) {
+    return writingDecision(Math.max(1, writingScore));
+  }
+
+  return numeracyDecision(Math.max(1, numeracyScore));
+};
+
+const createDefaultState = (overrides = {}) => createStateShape(overrides);
+
+const migrateState = (rawState) => {
+  if (!rawState || typeof rawState !== "object") {
+    return createDefaultState();
+  }
+
+  return createDefaultState(rawState);
+};
+
+const appendRecentTurn = (state, turn) => {
+  const recentTurns = [...state.runtimeSession.recentTurns, turn].slice(-8);
+  return createDefaultState({
+    ...state,
+    runtimeSession: {
+      ...state.runtimeSession,
+      recentTurns,
+    },
+  });
+};
+
+const setActiveScene = (state, scene) =>
+  createDefaultState({
+    ...state,
+    runtimeSession: {
+      ...state.runtimeSession,
+      activeSceneId: scene?.scene?.id ?? null,
+      lastScene: scene ?? null,
+    },
+  });
+
+const updateConsentSettings = (state, updates) =>
+  createDefaultState({
+    ...state,
+    consentAndSettings: {
+      ...state.consentAndSettings,
+      ...updates,
+    },
+  });
+
+const recordAssessmentCompletion = (state, literacyStage = 1) => ({
+  ...state,
+  pedagogicalState: {
+    ...state.pedagogicalState,
+    assessmentStep: assessmentSequence.length,
+    assessmentStatus: "complete",
+    literacyStage,
+    currentObjectiveId: readingDecision(Math.max(1, literacyStage)).objectiveId,
+    domainStage: {
+      ...state.pedagogicalState.domainStage,
+      reading: Math.max(state.pedagogicalState.domainStage.reading, literacyStage),
+      writing: Math.max(state.pedagogicalState.domainStage.writing, literacyStage - 1),
+      numeracy: Math.max(state.pedagogicalState.domainStage.numeracy, Math.min(2, literacyStage)),
+    },
+  },
+});
+
+const advanceAssessment = (state, demonstratedStage = null) => {
+  const currentStep = state.pedagogicalState.assessmentStep ?? 0;
+  const inferredStage = demonstratedStage ?? currentStep;
+  const nextStep = currentStep + 1;
+
+  if (nextStep >= assessmentSequence.length) {
+    return recordAssessmentCompletion(state, Math.max(0, Math.min(3, inferredStage)));
+  }
+
+  return {
+    ...state,
+    pedagogicalState: {
+      ...state.pedagogicalState,
+      assessmentStatus: "in-progress",
+      assessmentStep: nextStep,
+      literacyStage: Math.max(state.pedagogicalState.literacyStage, inferredStage),
+      currentObjectiveId: assessmentSequence[nextStep].objectiveId,
+    },
+  };
+};
+
+const applyMasteryEvidence = (state, domain, delta = 1) => ({
+  ...state,
+  pedagogicalState: {
+    ...state.pedagogicalState,
+    domainStage: {
+      ...state.pedagogicalState.domainStage,
+      [domain]: Math.max(0, (state.pedagogicalState.domainStage[domain] ?? 0) + delta),
+    },
+  },
+});
+
+const createFallbackScene = (reason = "unknown") => ({
+  version: 1,
+  scene: {
+    id: `fallback.${reason}`,
+    kind: "fallback",
+    objectiveId: "fallback.safe-path",
+    transition: "fade",
+    tone: "calm",
+  },
+  narration: {
+    text: "Let’s continue another way.",
+    maxChars: 64,
+    estDurationMs: 1800,
+    bargeInAllowed: true,
+  },
+  visualIntent: {
+    type: "recipe",
+    recipeId: "ambient_safe_path",
+    vars: {
+      palette: "sand-and-sky",
+    },
+  },
+  interaction: {
+    type: "none",
+  },
+  evidence: {
+    observedSkill: "fallback-recovery",
+    confidenceHint: 1,
+  },
+});
+
+const createStableError = (code, message, details = null) => ({
+  error: {
+    code,
+    message,
+    ...(details ? { details } : {}),
+  },
+});
+
+const toConstraintDecision = (hardConstraints) => ({
+  activeDomain: hardConstraints.activeDomain,
+  literacyStage: hardConstraints.literacyStage,
+  objectiveId: hardConstraints.objectiveId,
+  allowedSceneKinds: hardConstraints.allowedSceneKinds,
+  allowedInteractionTypes: hardConstraints.allowedInteractionTypes,
+  maxNarrationChars: hardConstraints.maxNarrationChars,
+});
+
+const validateSceneBlueprint = (blueprint, decision = null) => {
+  const errors = [];
+
+  if (!blueprint || blueprint.version !== 1) {
+    errors.push("Scene version must be 1.");
+  }
+
+  if (!blueprint?.scene?.id) {
+    errors.push("Scene id is required.");
+  }
+
+  if (!V1_SCENE_KINDS.includes(blueprint?.scene?.kind)) {
+    errors.push("Unsupported scene kind.");
+  }
+
+  if (!VALID_TRANSITIONS.has(blueprint?.scene?.transition)) {
+    errors.push("Unsupported transition.");
+  }
+
+  if (!VALID_TONES.has(blueprint?.scene?.tone)) {
+    errors.push("Unsupported tone.");
+  }
+
+  if (typeof blueprint?.narration?.text !== "string" || blueprint.narration.text.length === 0) {
+    errors.push("Narration text is required.");
+  }
+
+  if (typeof blueprint?.narration?.maxChars !== "number") {
+    errors.push("Narration budget is required.");
+  }
+
+  if (blueprint?.narration?.text?.length > blueprint?.narration?.maxChars) {
+    errors.push("Narration exceeds scene budget.");
+  }
+
+  const interactionType = blueprint?.interaction?.type;
+  if (!V1_INTERACTIONS.includes(interactionType)) {
+    errors.push("Unsupported interaction type.");
+  }
+
+  if (interactionType === "tap-choice") {
+    const options = blueprint?.interaction?.options;
+    if (!Array.isArray(options) || options.length === 0 || options.length > 4) {
+      errors.push("Tap choice must contain one to four options.");
+    }
+  }
+
+  if (interactionType === "trace-symbol" && !blueprint?.interaction?.target) {
+    errors.push("Trace symbol scenes require a target.");
+  }
+
+  if (interactionType === "repeat-sound" && !blueprint?.interaction?.phoneme) {
+    errors.push("Repeat sound scenes require a phoneme.");
+  }
+
+  const narrationText = blueprint?.narration?.text ?? "";
+  if (/[<>]/.test(narrationText)) {
+    errors.push("Raw HTML is not allowed.");
+  }
+
+  if (decision) {
+    if (!decision.allowedSceneKinds.includes(blueprint?.scene?.kind)) {
+      errors.push("Scene kind is outside curriculum constraints.");
+    }
+
+    if (!decision.allowedInteractionTypes.includes(interactionType)) {
+      errors.push("Interaction type is outside curriculum constraints.");
+    }
+
+    if (narrationText.length > decision.maxNarrationChars) {
+      errors.push("Narration exceeds curriculum budget.");
+    }
+  }
+
+  if (blueprint?.visualIntent?.recipeId && !SAFE_RECIPE_IDS.has(blueprint.visualIntent.recipeId)) {
+    errors.push("Visual recipe is not allowed.");
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+  };
+};
+
+const interpretScene = (blueprint, decision) => {
+  const validation = validateSceneBlueprint(blueprint, decision);
+  if (!validation.ok) {
+    return {
+      ok: false,
+      errors: validation.errors,
+      blueprint: createFallbackScene("validation-failure"),
+    };
+  }
+
+  return {
+    ok: true,
+    errors: [],
+    blueprint,
+  };
+};
+
+const hasIndexedDb = (runtime) => Boolean(runtime?.indexedDB);
+const hasOpfs = (runtime) => Boolean(runtime?.navigator?.storage?.getDirectory);
+const hasSpeechSynthesis = (runtime) => Boolean(runtime?.speechSynthesis);
+const hasSpeechRecognition = (runtime) =>
+  Boolean(runtime?.SpeechRecognition || runtime?.webkitSpeechRecognition);
+const hasMicrophone = (runtime) => Boolean(runtime?.navigator?.mediaDevices?.getUserMedia);
+const hasWebGpu = (runtime) => Boolean(runtime?.navigator?.gpu);
+
+const detectCapabilities = (runtime) => {
+  const indexedDb = hasIndexedDb(runtime);
+  const opfs = hasOpfs(runtime);
+  const localTTS = hasSpeechSynthesis(runtime);
+  const localSTT = hasSpeechRecognition(runtime);
+  const microphone = hasMicrophone(runtime);
+  const webgpu = hasWebGpu(runtime);
+
+  let tier = "minimal";
+  if (indexedDb && localTTS && (localSTT || microphone)) {
+    tier = "standard-local";
+  }
+  if (tier === "standard-local" && webgpu && opfs) {
+    tier = "accelerated-local";
+  }
+
+  return {
+    tier,
+    webgpu,
+    opfs,
+    indexedDb,
+    localTTS,
+    localSTT,
+    microphone,
+  };
+};
+
+const buildLearnerSummary = (state) =>
+  `Locale ${state.learnerProfile.locale}. Literacy stage ${state.pedagogicalState.literacyStage}. ` +
+  `Reading ${state.pedagogicalState.domainStage.reading}, writing ${state.pedagogicalState.domainStage.writing}, ` +
+  `numeracy ${state.pedagogicalState.domainStage.numeracy}.`;
+
+const buildRuntimeSummary = (state) =>
+  state.runtimeSession.recentTurns.length > 0
+    ? state.runtimeSession.recentTurns.map((turn) => turn.content).join(" | ")
+    : null;
+
+const createRequestId = (prefix) =>
+  `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+const buildDirectorRequest = (state, decision, latestInput) => ({
+  requestId: createRequestId("director"),
+  learnerSummary: buildLearnerSummary(state),
+  runtimeSummary: buildRuntimeSummary(state),
+  latestInput,
+  hardConstraints: {
+    activeDomain: decision.activeDomain,
+    literacyStage: decision.literacyStage,
+    objectiveId: decision.objectiveId,
+    allowedSceneKinds: decision.allowedSceneKinds,
+    allowedInteractionTypes: decision.allowedInteractionTypes,
+    maxNarrationChars: decision.maxNarrationChars,
+    imageGenerationAllowed: APP_CONFIG.features.cloudImage && state.consentAndSettings.cloudImageEnabled,
+    locale: state.learnerProfile.locale,
+  },
+});
+
+const validateDirectorRequest = (request) => {
+  const errors = [];
+  if (!request?.requestId) {
+    errors.push("requestId is required.");
+  }
+  if (typeof request?.learnerSummary !== "string" || request.learnerSummary.length === 0) {
+    errors.push("learnerSummary is required.");
+  }
+  if (!request?.latestInput?.type || typeof request?.latestInput?.content !== "string") {
+    errors.push("latestInput is required.");
+  }
+  if (!request?.hardConstraints?.activeDomain || !request?.hardConstraints?.objectiveId) {
+    errors.push("hardConstraints are required.");
+  }
+  if (!Array.isArray(request?.hardConstraints?.allowedSceneKinds)) {
+    errors.push("allowedSceneKinds are required.");
+  }
+  if (!Array.isArray(request?.hardConstraints?.allowedInteractionTypes)) {
+    errors.push("allowedInteractionTypes are required.");
+  }
+  return {
+    ok: errors.length === 0,
+    errors,
+  };
+};
+
+const validateDirectorResponse = (response, hardConstraints) => {
+  if (!response || typeof response !== "object" || !response.blueprint) {
+    return {
+      ok: false,
+      errors: ["Response must include blueprint."],
+    };
+  }
+
+  return validateSceneBlueprint(response.blueprint, toConstraintDecision(hardConstraints));
+};
+
+const createMockDirectorResponse = (request, localScene) => {
+  const contentType = request.latestInput.type;
+  const mood = contentType === "transcript" ? "encouraging" : "curious";
+  const blueprint = {
+    ...localScene,
+    scene: {
+      ...localScene.scene,
+      tone: mood,
+    },
+    narration: {
+      ...localScene.narration,
+      text:
+        contentType === "transcript"
+          ? "I heard you. Let’s keep going with one clear step."
+          : localScene.narration.text,
+    },
+    visualIntent: {
+      ...(localScene.visualIntent ?? { type: "recipe", recipeId: "neutral_choice_board", vars: {} }),
+      recipeId:
+        localScene.interaction?.type === "trace-symbol" ? "symbol_trace_board" : "neutral_choice_board",
+    },
+  };
+
+  return { blueprint };
+};
+
+const requestDirectorScene = async ({ state, decision, latestInput, localScene, fetchImpl = fetch }) => {
+  const request = buildDirectorRequest(state, decision, latestInput);
+  const requestValidation = validateDirectorRequest(request);
+  if (!requestValidation.ok) {
+    return {
+      ok: false,
+      error: createStableError("director_request_invalid", "Director request validation failed.", requestValidation.errors),
+    };
+  }
+
+  const relayBaseUrl = APP_CONFIG.relayBaseUrl?.trim();
+  if (!relayBaseUrl) {
+    return {
+      ok: false,
+      error: createStableError("relay_unavailable", "Relay is not configured."),
+    };
+  }
+
+  try {
+    const response =
+      relayBaseUrl === "mock"
+        ? createMockDirectorResponse(request, localScene)
+        : await fetchImpl(`${relayBaseUrl}/director`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(request),
+          }).then(async (res) => {
+            if (!res.ok) {
+              throw new Error(`relay-${res.status}`);
+            }
+            return res.json();
+          });
+
+    const validation = validateDirectorResponse(response, request.hardConstraints);
+    if (!validation.ok) {
+      return {
+        ok: false,
+        error: createStableError("director_response_invalid", "Director response validation failed.", validation.errors),
+      };
+    }
+
+    return {
+      ok: true,
+      blueprint: response.blueprint,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: createStableError("relay_request_failed", "Relay request failed.", String(error)),
+    };
+  }
+};
+
+const buildImageRequest = (scene) => ({
+  requestId: createRequestId("image"),
+  recipeId: scene?.visualIntent?.recipeId ?? "ambient_safe_path",
+  vars: scene?.visualIntent?.vars ?? {},
+  cacheKey: `${scene?.scene?.objectiveId ?? "scene"}:${scene?.visualIntent?.recipeId ?? "ambient_safe_path"}`,
+});
+
+const queueImageGeneration = async ({ scene, fetchImpl = fetch }) => {
+  const relayBaseUrl = APP_CONFIG.relayBaseUrl?.trim();
+  if (!relayBaseUrl) {
+    return {
+      ok: false,
+      error: createStableError("relay_unavailable", "Relay is not configured."),
+    };
+  }
+
+  const request = buildImageRequest(scene);
+  try {
+    const response =
+      relayBaseUrl === "mock"
+        ? { status: "queued", cacheKey: request.cacheKey, jobId: createRequestId("image-job") }
+        : await fetchImpl(`${relayBaseUrl}/image`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(request),
+          }).then(async (res) => {
+            if (!res.ok) {
+              throw new Error(`image-${res.status}`);
+            }
+            return res.json();
+          });
+
+    return {
+      ok: true,
+      response,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: createStableError("image_request_failed", "Image request failed.", String(error)),
+    };
+  }
+};
+
+const scoreTrace = (points, bounds) => {
+  if (!Array.isArray(points) || points.length < 6 || !bounds) {
+    return {
+      success: false,
+      confidence: 0.2,
+      ambiguous: false,
+    };
+  }
+
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const width = Math.max(...xs) - Math.min(...xs);
+  const height = Math.max(...ys) - Math.min(...ys);
+  const widthScore = Math.min(1, width / Math.max(1, bounds.width * 0.18));
+  const heightScore = Math.min(1, height / Math.max(1, bounds.height * 0.28));
+  const densityScore = Math.min(1, points.length / 28);
+  const confidence = Number(((widthScore + heightScore + densityScore) / 3).toFixed(2));
+
+  return {
+    success: confidence >= 0.72,
+    confidence,
+    ambiguous: confidence >= 0.45 && confidence < 0.72,
+  };
+};
+
+const requestVisionInterpretation = async ({ traceDataUrl, decision, target, fetchImpl = fetch }) => {
+  const relayBaseUrl = APP_CONFIG.relayBaseUrl?.trim();
+  if (!relayBaseUrl) {
+    return {
+      ok: false,
+      error: createStableError("relay_unavailable", "Relay is not configured."),
+    };
+  }
+
+  const request = {
+    requestId: createRequestId("vision"),
+    imageBase64: traceDataUrl.split(",")[1] ?? "",
+    task: "complex-symbol-check",
+    context: {
+      target,
+      learnerStage: decision.literacyStage,
+      domain: decision.activeDomain,
+    },
+  };
+
+  try {
+    const response =
+      relayBaseUrl === "mock"
+        ? {
+            success: true,
+            confidence: 0.78,
+            feedbackAudio: `That ${target} looks steady.`,
+            evidence: { observedSkill: "symbol-trace", confidenceHint: 0.78 },
+          }
+        : await fetchImpl(`${relayBaseUrl}/vision`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(request),
+          }).then(async (res) => {
+            if (!res.ok) {
+              throw new Error(`vision-${res.status}`);
+            }
+            return res.json();
+          });
+
+    return {
+      ok: true,
+      response,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: createStableError("vision_request_failed", "Vision request failed.", String(error)),
+    };
+  }
+};
+
+export {
+  APP_CONFIG,
+  advanceAssessment,
+  appendRecentTurn,
+  buildDirectorRequest,
+  createStableError,
+  applyMasteryEvidence,
+  createDefaultState,
+  createFallbackScene,
+  detectCapabilities,
+  interpretScene,
+  migrateState,
+  nextCurriculumDecision,
+  queueImageGeneration,
+  requestDirectorScene,
+  requestVisionInterpretation,
+  scoreTrace,
+  setActiveScene,
+  updateConsentSettings,
+  validateDirectorRequest,
+  validateDirectorResponse,
+};
