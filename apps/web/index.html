@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#16324f" />
+    <link rel="manifest" href="./public/manifest.webmanifest" />
+    <link rel="stylesheet" href="./src/styles/app.css" />
+    <title>Primer</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="shell-header">
+        <div>
+          <p class="eyebrow">Local-first adaptive learning</p>
+          <h1>Primer</h1>
+        </div>
+        <button id="replay-button" type="button" class="shell-button">Replay</button>
+      </header>
+      <section id="scene-root" class="scene-card" aria-live="polite"></section>
+      <footer class="shell-footer">
+        <button id="fallback-button" type="button" class="shell-button secondary">
+          Safe fallback
+        </button>
+      </footer>
+    </main>
+    <script type="module" src="./src/app/main.js"></script>
+  </body>
+</html>

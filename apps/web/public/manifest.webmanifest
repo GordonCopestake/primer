@@ -1,0 +1,10 @@
+{
+  "name": "Primer",
+  "short_name": "Primer",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f3efe6",
+  "theme_color": "#16324f",
+  "description": "A local-first adaptive learning app with optional cloud augmentation.",
+  "icons": []
+}

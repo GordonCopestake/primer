@@ -1,0 +1,93 @@
+:root {
+  --ink: #16324f;
+  --sand: #f3efe6;
+  --card: rgba(255, 255, 255, 0.8);
+  --accent: #d98f3d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Georgia, "Times New Roman", serif;
+  background:
+    radial-gradient(circle at top, rgba(217, 143, 61, 0.18), transparent 28%),
+    linear-gradient(160deg, #f6f1e8, #dce7ec 60%, #b7cad7);
+  color: var(--ink);
+}
+
+.app-shell {
+  width: min(760px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 32px 0 48px;
+}
+
+.shell-header,
+.shell-footer,
+.scene-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.eyebrow {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+.scene-card {
+  margin: 24px 0;
+  min-height: 220px;
+  padding: 24px;
+  border: 1px solid rgba(22, 50, 79, 0.15);
+  border-radius: 24px;
+  background: var(--card);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 18px 36px rgba(22, 50, 79, 0.12);
+}
+
+.scene-card h2 {
+  margin-top: 28px;
+  max-width: 18ch;
+  font-size: clamp(1.8rem, 5vw, 3.2rem);
+  line-height: 1.05;
+}
+
+.helper {
+  margin-top: 20px;
+  opacity: 0.75;
+}
+
+.shell-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 18px;
+  background: var(--ink);
+  color: white;
+  cursor: pointer;
+}
+
+.shell-button.secondary {
+  background: var(--accent);
+  color: #1f1202;
+}
+
+@media (max-width: 640px) {
+  .shell-header,
+  .shell-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
