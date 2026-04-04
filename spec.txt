@@ -1,127 +1,117 @@
+Below is a full revised spec you can copy into the project for Codex to follow.
+
+---
+
 # PROJECT SPECIFICATION: PRIMER
 
 ## 1. Document Control
 
 **Project:** Primer
-**Version:** 2.2
+**Version:** 3.0
 **Status:** Revised Draft for Implementation
-**Primary Platform:** Installable web app (desktop, tablet, modern mobile browser)
-**Architecture Style:** Static local-first PWA with optional cloud relay
-**Product Goal:** Universal adaptive learning from zero literacy to advanced subjects over time
+**Primary Platform:** Web app (desktop, tablet, modern mobile browser)
+**Architecture Style:** Cloud-AI, local-data, bounded-runtime adaptive learning app
+**Primary UX Model:** Full-screen working canvas with hidden chrome
+**Primary AI Provider Strategy:** OpenRouter from day one via server-side relay
 
 ---
 
 ## 2. Product Summary
 
-**Primer** is a local-first, installable adaptive learning web app for any human learner.
+**Primer** is an adaptive learning web app for any human learner.
 
-Its long-term purpose is to allow a learner to begin at their actual level, including zero literacy, and progress through structured learning toward reading, writing, numeracy, mathematics, science, physics, and other advanced subjects.
+Its long-term purpose is to allow a learner to begin at their actual level, including zero literacy, and progress through structured learning toward reading, writing, mathematics, science, physics, and other advanced subjects.
 
-Primer is **not** designed specifically for children or specifically for adults. It is designed for **capability-adaptive learning** across a wide learner range.
+Primer is **not** a child-only product and **not** an adult-only product. It is designed for universal, capability-adaptive learning.
 
-The core runtime, learner state, progression logic, and fallback learning loop live on-device. Optional cloud services may enrich narration, dialogue, imagery, explanation depth, and ambiguous interpretation, but cloud inference is never required for the core learning loop.
+Primer is also **not** a local-inference-first product. Learner data can remain local and the app can avoid logins, but the learning intelligence, scene planning, and rich content generation should assume **cloud AI models are available from the start**.
 
-Primer is intentionally **not** a model-controlled application. It is a deterministic application with bounded AI augmentation.
+That means the product must be described honestly as:
 
-### Core Product Positioning
+> A **cloud-AI adaptive learning app** with **local learner storage** and **no required login**.
 
-Primer should be described as:
+The core design goals are:
 
-> A **local-first adaptive learning app** with **optional cloud augmentation**.
-
-Primer should not be described as:
-
-* a child-only product
-* an adult-only product
-* a fully model-controlled tutor
-* “100% local” unless all inference is local
-* “anonymous” unless that is actually true end-to-end
+1. **Full-screen, immersive learning canvas**
+2. **Minimal visible UI chrome in normal use**
+3. **Bounded scene runtime controlled by the app**
+4. **Cloud AI accessed through a secure relay**
+5. **Local learner storage with no required account**
+6. **Mixed-age-safe default content**
 
 ---
 
 ## 3. Product Principles
 
-### 3.1 Learner-universal, not age-targeted
+### 3.1 Capability-first, not age-first
 
-Primer is for any human learner. The system must adapt to literacy level, subject mastery, communication mode, pace, and reasoning ability rather than assume a particular age group.
-
-### 3.2 Capability-first adaptation
-
-The app adapts primarily to:
+Primer adapts primarily to:
 
 * literacy level
-* subject mastery
-* communication modality
-* confidence and pacing
-* sensory or motor constraints where configured or detected
-* learner preference for explanation style where configured
+* domain mastery
+* reasoning ability
+* communication style
+* pacing
+* sensory or motor constraints where configured
 
-### 3.3 Deterministic progression
+Age may matter for content safety or tone selection, but it is not the primary organising principle.
 
-The local runtime, not the model, owns:
+### 3.2 Full-screen working canvas
 
-* objective selection
-* prerequisite enforcement
-* mastery scoring
-* assessment completion
-* state persistence
+In normal use, the learner should see the task, scene, or explanation itself, not a traditional app UI.
+
+The application should feel like a responsive learning space, not a dashboard.
+
+### 3.3 Hidden chrome by default
+
+Most UI chrome should remain hidden during normal use and be accessible through a single entry point such as a hamburger menu in the top-left corner.
+
+The working canvas should dominate the screen.
+
+### 3.4 Orb-first interaction metaphor
+
+The AI presence should be represented by a central or near-central **glowing orb**.
+
+The orb is the primary conversational affordance:
+
+* when the AI is speaking, the orb visually indicates speech state
+* when idle, the orb remains present but calm
+* pressing the orb lets the user talk to the AI
+* the orb is a primary interaction element, not decorative fluff
+
+### 3.5 Cloud AI from day one
+
+The product should assume cloud AI models are available from the start. Local device inference may be added later as an enhancement, but it is not a foundational assumption.
+
+### 3.6 Deterministic application control
+
+The model may propose scenes, narration, examples, and state suggestions, but the application owns:
+
+* persistent storage
+* scene validation
 * permissions
 * safety rules
+* navigation shell
+* content policy
 * irreversible actions
-* lesson unlocking
 * fallback behaviour
 
-### 3.4 Bounded AI control
+### 3.7 Honest privacy posture
 
-AI may shape:
+The app may store learner data locally and require no login, but it must not claim:
 
-* narration
-* examples
-* analogies
-* presentation tone
-* optional narrative continuity
-* optional visual suggestions
+* “fully local”
+* “100% private”
+* “anonymous”
+* “no data leaves the device”
 
-AI may not own:
+if cloud AI is being used.
 
-* progression state
-* mastery state
-* security
-* local storage
-* navigation shell
-* irreversible actions
-* policy decisions
+### 3.8 Mixed-age-safe content floor
 
-### 3.5 Neutral-safe content floor
+Default content must be safe for mixed-age access.
 
-Default content must be safe for mixed-age exposure.
-
-Baseline content must avoid:
-
-* sexual themes
-* graphic violence
-* offensive stereotypes
-* humiliating or degrading framing
-* partisan political persuasion
-* age-coded exclusionary assumptions
-* storylines likely to be inappropriate for children
-
-This is **not** because the product is child-specific. It is because mixed-age-safe content is the safest universal default.
-
-### 3.6 Progressive abstraction
-
-Primer must support progression from:
-
-* pre-literacy and concrete recognition
-* phoneme and symbol mapping
-* reading and writing
-* arithmetic and structured reasoning
-* symbolic manipulation
-* abstract mathematical and scientific concepts
-
-### 3.7 Graceful degradation
-
-If local inference, cloud services, storage, or asset generation fail, the app must fall back to a known-safe local path and remain usable.
+The product may later introduce age-adaptive content filters, but the default baseline must avoid offensive, sexual, graphic, or clearly adult-coded content.
 
 ---
 
@@ -129,384 +119,421 @@ If local inference, cloud services, storage, or asset generation fail, the app m
 
 ## 4.1 Long-Term Product Vision
 
-Primer is intended to support a full learning ladder from zero literacy to advanced domains, including:
+Primer should eventually support learning across a wide ladder, including:
 
+* zero literacy
 * reading
 * writing
 * numeracy
 * mathematics
 * science
 * physics
-* additional structured subjects later
+* later structured domains
 
-The architecture must support learners entering at any point on that ladder.
+The learner should be able to enter at any level.
 
 ## 4.2 v1 Delivery Scope
 
-Primer v1 focuses on proving the adaptive runtime and deterministic learning architecture in a narrower but meaningful band.
+Primer v1 focuses on proving the architecture and learner experience in a narrower but real band.
 
-### v1 Scope
+### v1 includes
 
-* installable PWA shell
-* local persistence of learner state
-* deterministic curriculum and mastery engine
+* full-screen immersive canvas UI
+* hidden chrome behind menu
+* glowing orb interaction model
+* local learner storage with no login
+* cloud AI access through OpenRouter relay
+* deterministic bounded scene runtime
 * embedded baseline assessment
-* literacy stages 0–3
+* early literacy stages 0–3
 * early writing mechanics
 * early numeracy foundations
-* bounded scene interpreter
-* local TTS where supported
-* local STT where supported
-* tap-first and replay-based fallback interactions
-* optional cloud Director for scene wording and presentation
-* optional non-blocking cloud image generation
-* local admin/settings controls
-* export/import of learner data
+* tap-choice, repeat-sound, trace-symbol, observe scenes
+* optional simple read/respond scenes if stable
+* persistent learner progress stored locally
+* local export/import backup
+* admin/settings accessible via hidden chrome
 
 ## 4.3 Explicit Non-Goals for v1
 
 The following are not part of v1:
 
 * full advanced STEM tutoring
-* full algebra-to-physics progression
-* unrestricted open-ended agent autonomy
+* full mathematics-to-physics curriculum
+* multiplayer or social learning
 * teacher dashboards
-* multiplayer/social learning
-* multi-user cloud sync
-* cloud-dependent core interaction
-* arbitrary model-generated HTML
-* uncontrolled free-form browsing
-* broad exam-prep curriculum
-* behavioural growth/engagement mechanics
+* cloud sync accounts
+* arbitrary model-generated UI
+* broad offline tutoring without cloud AI
+* unrestricted agent autonomy
+* plugin marketplace
+* user-authenticated profiles
 
-## 4.4 Planned Later Scope
+## 4.4 Later Scope
 
 Later phases may add:
 
-* reading comprehension
+* deeper reading comprehension
 * structured writing
 * arithmetic fluency
-* pre-algebra
-* formal mathematics scenes
-* diagram-based reasoning
-* science concept scaffolding
+* algebra and symbolic mathematics
+* diagram-based science content
 * physics problem-solving
-* broader subject packs
+* local inference acceleration
+* multi-device sync
+* optional accounts
 
 ---
 
-## 5. Learner Experience Model
+## 5. Core UX Model
 
-## 5.1 Interaction Model
+## 5.1 Experience Summary
 
-Primer presents a **scene**, not a conventional app page.
+Primer should feel like:
 
-Each scene has:
+* a living canvas
+* a guided space
+* an AI-mediated educational environment
 
-* one pedagogical objective
-* one primary interaction mode
-* concise narration or explanation
-* one primary visual or symbolic focus
-* a predictable completion or fallback path
+Primer should **not** feel like:
 
-## 5.2 Tone Requirements
+* a form-based app
+* a dashboard with visible controls everywhere
+* a learning management system
+* a chatbot transcript with a little decoration
 
-The system tone must be:
+## 5.2 Visual Hierarchy
+
+Normal view should contain:
+
+1. **The working canvas**
+2. **The orb**
+3. **Minimal contextual affordances**
+4. **Hidden chrome entry point**
+
+The working canvas always has priority over menus, settings, or scaffolding UI.
+
+## 5.3 Hidden Chrome Rules
+
+Most controls should be hidden unless summoned.
+
+Visible-by-default controls should be minimal:
+
+* hamburger menu, top-left
+* orb
+* possibly a subtle replay/interrupt affordance near orb
+* emergency back/fallback affordance if needed
+
+The hamburger menu opens a chrome layer or side sheet exposing:
+
+* settings
+* progress
+* export/import
+* help
+* model/network status
+* admin controls
+* reset options
+
+## 5.4 Orb Behaviour
+
+The orb is the emotional and interaction anchor of the app.
+
+### Orb states
+
+* `idle`
+* `listening`
+* `thinking`
+* `speaking`
+* `error`
+* `muted`
+
+### Orb rules
+
+* the orb must be visible during normal learning flow
+* pressing or holding the orb initiates voice interaction where available
+* tapping the orb during speech may interrupt playback
+* the orb must visually animate to reflect current state
+* the orb must not obstruct core learning content
+* the orb must feel responsive and alive, but not kitschy or childish by default
+
+### Orb meaning
+
+* speaking state = AI currently narrating or explaining
+* listening state = app actively capturing learner speech
+* thinking state = app is awaiting model output
+* idle state = ready
+* error state = relay or audio failure
+* muted state = sound disabled or unavailable
+
+---
+
+## 6. Content Tone and Safety Floor
+
+## 6.1 Tone
+
+Content should be:
 
 * respectful
 * clear
-* encouraging without flattery spam
-* non-patronising
-* non-age-coded
-* emotionally safe
-* neutral enough for mixed-age access
+* encouraging
+* neutral-safe
+* not patronising
+* not infantilising
+* not adult-coded by default
 
-The app must not assume that simple learning must feel childish, and must not assume that advanced learning must feel adult-coded.
+## 6.2 Default Framing
 
-## 5.3 Content Framing Requirements
+Acceptable default framing:
 
-Acceptable default content framing includes:
-
-* nature
-* shapes
 * patterns
-* journeys
+* shapes
+* numbers
+* sound
+* motion
+* light
+* maps
+* stars
+* tools
+* nature
+* machines
 * building
 * puzzles
-* motion
-* sound
-* stars
-* maps
-* tools
-* machines
 * exploration
-* neutral storybook scenarios
-* abstract symbolic scenes
+* neutral story scenes
 
-Unacceptable default content framing includes:
+Unacceptable default framing:
 
 * romance
-* sexual themes
+* sex/sexuality themes
 * alcohol/drug culture
 * graphic conflict
+* cruelty
 * humiliation comedy
-* partisan politics
-* frightening horror
-* age-shaming
-* intelligence-shaming
-* “adult reward” framing
+* overt politics
+* horror designed to frighten children
+* mature relationship drama
+* “adult joke” content
 
-## 5.4 Fixed Shell vs Flexible Scene
+## 6.3 Relationship Safety
 
-The application always owns a minimal fixed shell. This shell is never model-generated.
+Primer must not:
 
-The fixed shell includes:
-
-* microphone/listen affordance where available
-* stop/interruption control
-* replay control
-* loading/thinking indicator
-* settings/admin entry point
-* error recovery state
-* safe fallback scene entry
-
-The model controls only bounded scene content within the approved DSL.
+* imply exclusive friendship
+* emotionally manipulate dependence
+* shame the learner
+* flirt
+* sexualise interaction
+* moralise failure
+* mock mistakes
 
 ---
 
-## 6. Deployment Model
+## 7. Architecture Decision
 
-## 6.1 Primary Deployment Decision
+## 7.1 Honest Architecture Position
 
-Primer v1 is architected as a **static local-first PWA**.
+Primer is **not** a local-first inference app.
 
-The app must be deployable as:
+Primer is:
 
-* a static web app
-* an installable PWA
-* a local-first app with no required backend for the core learning loop
+* **cloud-AI for content and guidance**
+* **local storage for learner data**
+* **no-login by default**
+* **deterministic client runtime**
 
-## 6.2 Optional Cloud Relay
+That distinction matters.
 
-Cloud-enabled features must not be structurally fused into the client runtime.
+## 7.2 Trust Boundaries
 
-Optional remote features must be routed through a separate **relay service**.
+The trust boundaries are:
 
-The relay may be:
+### The client app owns
 
-* self-hosted
-* vendor-hosted
-* disabled entirely
+* learner data storage
+* scene rendering
+* scene validation
+* UI shell
+* menu system
+* orb state machine
+* local progress persistence
+* safety enforcement
+* fallback behaviour
 
-The relay is responsible for:
+### The server relay owns
 
-* provider authentication
-* prompt minimisation
+* OpenRouter authentication
+* model routing
 * request redaction
+* provider abstraction
 * schema enforcement
 * moderation
-* model pinning
+* logging policy
 * rate limiting
-* error normalisation
-* disabling request-body logging by default
 
-## 6.3 Operating Modes
+### The model does not own
 
-Primer supports:
-
-* **local-only**
-
-  * no remote calls
-  * core learning loop only
-
-* **local-first assisted**
-
-  * core loop local
-  * optional Director and/or image generation enabled
-
-* **development**
-
-  * additional diagnostics
-  * fixture content
-  * mock relay permitted
+* UI layout
+* storage
+* direct persistence
+* permissions
+* navigation shell
+* admin controls
+* irreversible actions
 
 ---
 
-## 7. High-Level Architecture
+## 8. High-Level Architecture
 
-```text
+```text id="u2slr2"
 ┌─────────────────────────────────────────────────────────────┐
-│                    STATIC / PWA CLIENT APP                  │
+│                        CLIENT WEB APP                       │
 │                                                             │
-│  App Shell                                                  │
+│  Full-Screen Canvas UI                                      │
+│  Orb Interaction Layer                                      │
+│  Hidden Chrome / Menu Layer                                 │
 │  Scene Interpreter                                          │
 │  Curriculum & Mastery Engine                                │
-│  Local State Stores                                         │
-│  Service Worker + Offline Cache                             │
-│  Asset Store (IndexedDB + OPFS where available)             │
-│  Capability Detector                                        │
-│  Local Audio Runtime                                        │
-│  Safety / Runtime Guards / Fallback Manager                 │
+│  Local State Store (IndexedDB/localforage)                 │
+│  Asset Cache                                                │
+│  Audio Capture / Playback Layer                             │
+│  Runtime Guards / Safety / Fallbacks                        │
 └─────────────────────────────────────────────────────────────┘
                     │
-                    │ optional cloud enrichment only
+                    │ secure server calls only
                     ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                 OPTIONAL CLOUD RELAY SERVICE                │
+│                     SERVER RELAY LAYER                      │
 │                                                             │
-│  /director                                                  │
-│  /image                                                     │
-│  /vision                                                    │
+│  /api/director                                              │
+│  /api/chat                                                  │
+│  /api/image                                                 │
+│  /api/vision                                                │
 │                                                             │
 │  Responsibilities:                                          │
-│  - provider auth                                            │
-│  - redaction/minimisation                                   │
-│  - schema validation                                        │
-│  - moderation                                               │
-│  - no request-body logging by default                       │
-│  - rate limiting                                            │
-│  - model pinning                                            │
+│  - OpenRouter auth                                           │
+│  - model selection / pinning                                 │
+│  - schema validation                                         │
+│  - request minimisation                                      │
+│  - moderation                                                │
+│  - rate limiting                                             │
+│  - stable error shapes                                       │
 └─────────────────────────────────────────────────────────────┘
                     │
                     ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  OPTIONAL MODEL PROVIDERS                   │
+│                    OPENROUTER / MODEL APIs                  │
+│                                                             │
+│  Director / planning model                                  │
+│  Conversational model                                       │
+│  Optional vision model                                      │
+│  Optional image model                                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 8. Capability Tiers
+## 9. Primary Technical Stack
 
-The app must classify the current device into a capability tier at startup.
+## 9.1 Frontend
 
-## 8.1 Tier: `minimal`
-
-Available features:
-
-* local persistence where supported
-* cached or embedded assets
-* observe scenes
-* tap-choice scenes
-* trace-symbol scenes
-* browser-native TTS or prerecorded fallback audio
-* no local STT requirement
-
-## 8.2 Tier: `standard-local`
-
-Available features:
-
-* all `minimal` features
-* local TTS
-* local STT on CPU/WASM where supported
-* repeat-sound interactions
-* basic local audio processing
-
-## 8.3 Tier: `accelerated-local`
-
-Available features:
-
-* all `standard-local` features
-* accelerated local inference where available
-* lower-latency audio
-* richer local model options
-* more aggressive prefetch and caching
-
-## 8.4 Tier Selection Inputs
-
-Capability detection should consider:
-
-* secure context
-* worker support
-* service worker support
-* IndexedDB support
-* OPFS support
-* microphone availability
-* local storage quota where estimable
-* hardware acceleration where detectable
-
----
-
-## 9. Technical Stack
-
-## 9.1 Client App
-
-* **Language:** TypeScript
-* **Recommended shell:** Next.js static export or equivalent static-capable framework
+* **Framework:** Next.js (App Router) with TypeScript
 * **Styling:** Tailwind CSS
 * **Animation:** Framer Motion
-* **PWA:** service worker + manifest
-* **State layer:** local store with explicit schema versioning
-* **Storage:** IndexedDB for structured state and metadata
-* **Blob storage:** OPFS where supported
-* **Heavy work isolation:** Web Workers
+* **State layer:** Zustand or equivalent
+* **Local persistence:** localforage over IndexedDB
+* **Canvas layer:** React canvas/SVG/HTML composition as needed
+* **Audio capture:** browser media APIs
+* **Speech playback:** browser-native TTS initially, richer TTS later if needed
 
-## 9.2 Local Audio Runtime
+## 9.2 Backend Relay
 
-* **TTS:** browser-native fallback first, optional higher-quality local runtime-backed TTS where supported
-* **STT:** lightweight browser-compatible local speech stack where supported
-* **No main-thread heavy inference**
+* **Framework:** Next.js route handlers or separate Node service
+* **Model gateway:** OpenRouter from day one
+* **Validation:** Zod
+* **Moderation:** server-side safety checks before or after model response depending on route
+* **Auth:** OpenRouter API key stored server-side only
 
-## 9.3 Relay Service
+## 9.3 Storage
 
-* **Separate deployable service**
-* **Pinned provider models**
-* **Strict request/response validation**
-* **Redaction/minimisation before provider calls**
-* **Stable error contracts**
-
-## 9.4 Validation
-
-* **Schema validation:** Zod
-* **Scene validation:** strict before render
-* **State migration:** explicit versioned migrations
-* **Asset validation:** checksum/version manifest
+* **Learner state:** local browser storage
+* **Cached assets:** local browser storage or IndexedDB blobs
+* **No required login**
+* **No required user account**
+* **No cloud learner profile in v1**
 
 ---
 
-## 10. Environment and Configuration
+## 10. Operating Modes
 
-## 10.1 Goals
+## 10.1 Normal Mode
 
-Configuration must support:
+The app uses cloud AI models and local learner storage.
 
-* local-only development
-* assisted development
-* production local-only mode
-* production assisted mode
-* capability overrides for testing
-* optional relay base URL
+This is the default mode.
 
-## 10.2 Example `.env`
+## 10.2 Reduced Mode
 
-```env
+If cloud AI is unavailable:
+
+* the app may still open
+* local learner data remains readable
+* the app may present limited fallback scenes
+* the app must clearly indicate reduced capability
+
+The product should not pretend full tutoring still works without cloud AI.
+
+## 10.3 Developer Mode
+
+Developer mode may expose:
+
+* schema debug
+* scene JSON preview
+* relay latency
+* model IDs
+* moderation results
+* local state inspection
+
+Developer mode must not be visible in normal learner use.
+
+---
+
+## 11. Environment and Configuration
+
+## 11.1 Example `.env.local`
+
+```env id="x5n7e4"
 PRIMER_APP_MODE=development
-PRIMER_CLOUD_MODE=off
-PRIMER_RELAY_BASE_URL=
-PRIMER_CAPABILITY_MODE=auto
+PRIMER_CLOUD_MODE=required
 
-FEATURE_CLOUD_DIRECTOR=false
-FEATURE_CLOUD_IMAGE=false
+OPENROUTER_API_KEY=your_key_here
+
+DIRECTOR_MODEL=openrouter/provider-model-id
+CHAT_MODEL=openrouter/provider-model-id
+VISION_MODEL=openrouter/provider-model-id
+IMAGE_MODEL=openrouter/provider-model-id
+
+FEATURE_IMAGE_GENERATION=true
 FEATURE_CLOUD_VISION=false
 FEATURE_EXPORT_IMPORT=true
-FEATURE_ENCRYPTED_EXPORT=true
 FEATURE_DEBUG_TOOLS=true
 ```
 
-## 10.3 Config Contract
+## 11.2 Config Contract
 
-```ts
+```ts id="c7x4qx"
 export const APP_CONFIG = {
   appMode: process.env.PRIMER_APP_MODE ?? "development",
-  cloudMode: process.env.PRIMER_CLOUD_MODE ?? "off",
-  relayBaseUrl: process.env.PRIMER_RELAY_BASE_URL ?? "",
-  capabilityMode: process.env.PRIMER_CAPABILITY_MODE ?? "auto",
+  cloudMode: process.env.PRIMER_CLOUD_MODE ?? "required",
+  models: {
+    director: process.env.DIRECTOR_MODEL ?? "",
+    chat: process.env.CHAT_MODEL ?? "",
+    vision: process.env.VISION_MODEL ?? "",
+    image: process.env.IMAGE_MODEL ?? "",
+  },
   features: {
-    cloudDirector: process.env.FEATURE_CLOUD_DIRECTOR === "true",
-    cloudImage: process.env.FEATURE_CLOUD_IMAGE === "true",
+    imageGeneration: process.env.FEATURE_IMAGE_GENERATION === "true",
     cloudVision: process.env.FEATURE_CLOUD_VISION === "true",
     exportImport: process.env.FEATURE_EXPORT_IMPORT === "true",
-    encryptedExport: process.env.FEATURE_ENCRYPTED_EXPORT === "true",
     debugTools: process.env.FEATURE_DEBUG_TOOLS === "true",
   },
 } as const;
@@ -514,13 +541,11 @@ export const APP_CONFIG = {
 
 ---
 
-## 11. Domain and Learner Model
+## 12. Learner Data Model
 
-The learner model must be organised primarily by capability, mastery, and preferences rather than age band.
+The learner model should be capability-based, not age-banded.
 
-## 11.1 State Model
-
-```ts
+```ts id="3n1296"
 export interface PrimerState {
   schemaVersion: number;
 
@@ -545,74 +570,60 @@ export interface PrimerState {
     currentObjectiveId: string | null;
     assessmentStatus: "not-started" | "in-progress" | "complete";
     mastery: {
-      phonemes: Record<string, { score: number; seen: number; updatedAt: number }>;
-      graphemes: Record<string, { score: number; seen: number; updatedAt: number }>;
-      vocabularyThemes: Record<string, { score: number; seen: number; updatedAt: number }>;
-      numeracyConcepts: Record<string, { score: number; seen: number; updatedAt: number }>;
-      mathConcepts: Record<string, { score: number; seen: number; updatedAt: number }>;
-      scienceConcepts: Record<string, { score: number; seen: number; updatedAt: number }>;
+      phonemes: Record<string, number>;
+      graphemes: Record<string, number>;
+      vocabularyThemes: Record<string, number>;
+      numeracyConcepts: Record<string, number>;
+      mathConcepts: Record<string, number>;
+      scienceConcepts: Record<string, number>;
     };
   };
 
   runtimeSession: {
     activeSceneId: string | null;
-    recentTurns: { role: "user" | "assistant"; content: string }[];
+    turnCount: number;
     runningSummary: string | null;
+    lastTurns: { role: "user" | "assistant"; content: string }[];
     pendingAssetJobs: string[];
   };
 
-  consentAndSettings: {
-    cloudEnabled: boolean;
-    cloudImageEnabled: boolean;
-    cloudVisionEnabled: boolean;
-    adminPinEnabled: boolean;
-    captionsEnabled: boolean;
+  settings: {
     soundEnabled: boolean;
-    storagePersistenceGranted: boolean | "unknown";
+    captionsEnabled: boolean;
+    imageGenerationEnabled: boolean;
+    adminPinEnabled: boolean;
+    microphoneEnabled: boolean;
   };
 
-  capabilities: {
-    tier: "minimal" | "standard-local" | "accelerated-local";
-    webgpu: boolean;
-    opfs: boolean;
-    indexedDb: boolean;
-    localTTS: boolean;
-    localSTT: boolean;
-    microphone: boolean;
+  uiState: {
+    chromeOpen: boolean;
+    orbState: "idle" | "listening" | "thinking" | "speaking" | "error" | "muted";
+    currentViewMode: "immersive" | "menu" | "admin";
   };
 
-  assetIndex: {
-    byId: Record<
-      string,
-      {
-        kind: "image" | "audio" | "model";
-        storage: "idb" | "opfs";
-        mimeType: string;
-        bytes: number;
-        checksum: string;
-        version: string;
-        lastAccessedAt: number;
-      }
-    >;
+  cache: {
+    imageAssets: Record<string, string>;
+    audioAssets: Record<string, string>;
   };
 }
 ```
 
-## 11.2 State Rules
+## 12.1 State Rules
 
 * `schemaVersion` is mandatory
-* `recentTurns` is bounded and not treated as the durable learner record
-* `pedagogicalState` is authoritative for progression
-* `runningSummary` is context compression only
-* cached assets are disposable and must not be treated as the only durable store
+* learner state persists locally
+* `lastTurns` is bounded
+* `runningSummary` is a compressed context summary for cloud calls
+* no login is required to create or load local learner state
+* local state must survive reloads and normal browser restarts where storage is available
 
 ---
 
-## 12. Learning Domains
+## 13. Learning Domains
 
-Primer must be architected for multiple learning domains, even if v1 enables only a subset.
+Primer must be architected to support multiple domains.
 
-```ts
+```ts id="6mxd2e"
 export type LearningDomain =
   | "preliteracy"
   | "reading"
@@ -623,14 +634,14 @@ export type LearningDomain =
   | "physics";
 ```
 
-## 12.1 v1 Enabled Domains
+## 13.1 v1 Enabled Domains
 
 * `preliteracy`
 * `reading`
 * `writing`
 * `numeracy`
 
-## 12.2 Later Domains
+## 13.2 Later Domains
 
 * `mathematics`
 * `science`
@@ -638,37 +649,36 @@ export type LearningDomain =
 
 ---
 
-## 13. Deterministic Curriculum and Mastery Engine
+## 14. Curriculum and Mastery Engine
 
-This is a required first-class subsystem.
+The curriculum engine is deterministic and local.
 
-## 13.1 Responsibilities
+## 14.1 Responsibilities
 
-The curriculum and mastery engine owns:
+The engine owns:
 
 * embedded baseline assessment
 * objective selection
-* prerequisite enforcement
-* progression/regression rules
-* review spacing rules
+* progression rules
+* regression/review rules
 * mastery updates
-* assessment completion
 * scene eligibility
-* domain unlocking
-* cloud escalation eligibility
+* subject unlocking
+* transition from concrete to abstract content
+* guardrails on what the Director is allowed to propose
 
-## 13.2 Non-Responsibilities
+## 14.2 Non-Responsibilities
 
 The engine does not:
 
-* render scenes
-* directly call providers
-* generate final wording
-* generate final visuals
+* render UI
+* directly call OpenRouter
+* generate final narration text
+* generate final visual assets
 
-## 13.3 Output Contract
+## 14.3 Output Contract
 
-```ts
+```ts id="x5axgr"
 type CurriculumDecision = {
   objectiveId: string | null;
   activeDomain: LearningDomain;
@@ -687,68 +697,151 @@ type CurriculumDecision = {
     | "diagram-label"
     | "explain-back"
   >;
-  cloudEscalationAllowed: boolean;
   maxNarrationChars: number;
-  maxPromptComplexity: number;
+  contentSafetyTier: "mixed-age-safe";
 };
 ```
 
-## 13.4 v1 Restrictions
+## 14.4 v1 Interaction Restrictions
 
-Although the schema is extensible, v1 should enable only:
+v1 should enable only:
 
 * `none`
 * `tap-choice`
 * `repeat-sound`
 * `trace-symbol`
+* optional `read-respond` if stable and useful
 
 ---
 
-## 14. Embedded Baseline Assessment
+## 15. Embedded Baseline Assessment
 
-The product must use **embedded baseline assessment**, not a blunt “rate yourself” flow.
+Primer should use **embedded baseline assessment** rather than blunt self-rating.
 
-## 14.1 Purpose
+## 15.1 Purpose
 
-The goal is to infer where the learner should start without assuming prior literacy or prior schooling.
+The goal is to infer the learner’s starting point through interaction.
 
-## 14.2 Examples
+## 15.2 Examples
 
-Depending on enabled domains, baseline assessment may include:
+Depending on current domain:
 
-* recognising a sound
 * matching sound to picture
-* tracing a basic symbol
-* selecting a larger quantity
-* identifying a simple written token
-* following a one-step instruction
-* responding to a very short prompt
-* demonstrating prerequisite reasoning
+* tracing a symbol
+* identifying a written token
+* choosing the larger quantity
+* responding to a very short written or spoken prompt
+* demonstrating simple prerequisite reasoning
 
-## 14.3 Rules
+## 15.3 Rules
 
-* baseline assessment must feel like interaction, not examination
-* the Director may propose assessment scenes but may not mark assessment complete
-* completion is decided only by the curriculum engine
+* baseline assessment should feel like guided interaction
+* the Director may suggest assessment scenes
+* the curriculum engine decides when assessment is complete
 
 ---
 
-## 15. Scene System
+## 16. Full-Screen UI and Chrome Model
 
-## 15.1 Scene Model
+## 16.1 Default Screen Layout
+
+Normal layout should prioritise:
+
+* working canvas occupying nearly all available space
+* orb visible over the scene
+* subtle hamburger icon in the top-left
+* almost no other persistent chrome
+
+## 16.2 Hidden Menu
+
+The hamburger menu opens a panel or overlay exposing:
+
+* progress
+* settings
+* sound/captions
+* export/import
+* reset options
+* help/about
+* admin controls
+* network/model status
+
+The menu should not be permanently visible in immersive mode.
+
+## 16.3 Canvas Rules
+
+The working canvas should support:
+
+* visual scenes
+* text where appropriate to learner level
+* tracing surfaces
+* symbol interaction
+* image-backed choice scenes
+* explanatory content blocks
+* animated transitions
+
+The canvas is the primary learning surface.
+
+---
+
+## 17. Orb Interaction Specification
+
+## 17.1 Orb Purpose
+
+The orb is:
+
+* the visible embodiment of the AI presence
+* the user’s main speech interaction button
+* the primary state indicator for AI activity
+
+## 17.2 Orb Interaction Rules
+
+* tap orb to start listening
+* tap orb during speech to interrupt
+* tap orb while idle to invite conversation
+* orb must show immediate visual feedback
+* long press may optionally expose advanced voice mode later
+* keyboard and accessibility alternatives must exist
+
+## 17.3 Orb Animation Rules
+
+The orb should animate differently by state:
+
+* `idle`: soft pulse
+* `listening`: brighter reactive pulse
+* `thinking`: slow rotating or breathing animation
+* `speaking`: waveform-like energy pulse
+* `error`: restrained warning state, not alarming
+* `muted`: subdued dim state
+
+## 17.4 Orb Placement
+
+Preferred placement:
+
+* lower centre
+* lower right
+* or another non-obstructive location
+
+It must not obscure core content or frequent touch targets.
+
+---
+
+## 18. Scene System
+
+## 18.1 Scene Model
 
 Primer presents bounded scenes.
 
 Each scene must have:
 
-* one dominant objective
-* one dominant interaction mode
-* concise explanation or narration
-* a predictable state transition
+* one primary pedagogical objective
+* one dominant interaction type
+* concise narration or explanation
+* one dominant visual/symbolic focus
+* predictable completion/fallback path
 
-## 15.2 Scene Kinds
+## 18.2 Scene Kinds
 
-```ts
+```ts id="iutkx5"
 export type SceneKind =
   | "intro"
   | "assessment"
@@ -759,9 +852,9 @@ export type SceneKind =
   | "fallback";
 ```
 
-## 15.3 Interaction Types
+## 18.3 Interaction Types
 
-```ts
+```ts id="bqjz6j"
 export type InteractionType =
   | "none"
   | "tap-choice"
@@ -774,24 +867,17 @@ export type InteractionType =
   | "explain-back";
 ```
 
-## 15.4 v1 Enabled Interaction Types
-
-* `none`
-* `tap-choice`
-* `repeat-sound`
-* `trace-symbol`
-
 ---
 
-## 16. Scene DSL
+## 19. Scene DSL
 
-The model must not output HTML, JSX, CSS, markdown UI, or executable code.
+The model must not output raw HTML, JSX, CSS, or arbitrary UI code.
 
-It may only output bounded JSON matching the approved scene contract.
+The model may only output bounded JSON.
 
-## 16.1 Scene Blueprint
+## 19.1 Scene Blueprint
 
-```ts
+```ts id="lztpxg"
 export type SceneBlueprint = {
   version: 1;
   scene: {
@@ -811,13 +897,17 @@ export type SceneBlueprint = {
 
   visualIntent?:
     | {
-        type: "cached-asset";
+        type: "generated-image";
+        prompt: string;
+        cacheKey: string;
+      }
+    | {
+        type: "cached-image";
         assetId: string;
       }
     | {
-        type: "recipe";
-        recipeId: string;
-        vars: Record<string, string>;
+        type: "ambient-animation";
+        assetId: string;
       };
 
   interaction:
@@ -827,7 +917,7 @@ export type SceneBlueprint = {
         options: {
           id: string;
           audioLabel: string;
-          assetId?: string;
+          imagePrompt?: string;
           symbol?: string;
         }[];
       }
@@ -838,7 +928,7 @@ export type SceneBlueprint = {
     | {
         type: "trace-symbol";
         target: string;
-        guideAssetId?: string;
+        strokeGuide?: string;
       }
     | {
         type: "read-respond";
@@ -847,12 +937,10 @@ export type SceneBlueprint = {
     | {
         type: "compose-text";
         promptText: string;
-        minLength?: number;
       }
     | {
         type: "equation-step";
         expression: string;
-        expectedForm?: string;
       }
     | {
         type: "diagram-label";
@@ -864,397 +952,212 @@ export type SceneBlueprint = {
         promptText: string;
       };
 
-  evidence?: {
-    observedSkill?: string;
-    confidenceHint?: number;
+  proposedStateDelta?: {
+    currentObjectiveId?: string;
+    literacyStage?: number;
+    domainStageUpdates?: Partial<Record<LearningDomain, number>>;
+    masteryUpdates?: {
+      phonemes?: Record<string, number>;
+      graphemes?: Record<string, number>;
+      vocabularyThemes?: Record<string, number>;
+      numeracyConcepts?: Record<string, number>;
+      mathConcepts?: Record<string, number>;
+      scienceConcepts?: Record<string, number>;
+    };
   };
 };
 ```
 
-## 16.2 Interpreter Rules
+## 19.2 Interpreter Rules
 
 The interpreter must:
 
-* reject invalid schema
-* reject unsupported component types
-* reject scenes exceeding narration budget
-* reject text-heavy scenes above learner capability
-* reject overlarge option sets
-* reject arbitrary raw HTML
-* render only known atomic components
-* fall back to a safe local scene on validation failure
+* reject invalid payloads
+* reject unsupported scene or interaction types
+* reject HTML or arbitrary code
+* reject scenes that exceed narration budget
+* reject unsafe content
+* fall back to a safe local scene if validation fails
 
-## 16.3 Scene Budgets
+## 19.3 v1 Scene Budgets
 
-v1 runtime-enforced budgets:
-
-* maximum one primary interaction
-* maximum one visual intent
-* maximum four tap choices
-* narration length bounded by curriculum decision
-* no arbitrary long-form text blocks
-* no dynamic layout generation from model output
+* one primary interaction per scene
+* one dominant visual focus
+* maximum four tap-choice options
+* narration length must be bounded
+* no arbitrary page layouts from model output
 
 ---
 
-## 17. Director Contract
+## 20. Director and Chat Roles
 
-The Director is a **scene proposer**, not the application controller and not the curriculum engine.
+The product should separate **Director** and **Conversational Chat** roles conceptually, even if they may sometimes use the same underlying model.
 
-## 17.1 Director Responsibilities
+## 20.1 Director Role
 
-The Director may:
+The Director proposes the next scene.
 
-* choose a scene shape from allowed options
-* write concise narration
-* maintain emotional continuity
-* choose a visual recipe
-* supply advisory evidence hints
-* choose examples or analogies appropriate to the learner state
+It may:
 
-## 17.2 Director Prohibitions
+* select a scene shape
+* write narration
+* choose examples
+* shape tone
+* suggest visuals
+* suggest state deltas
 
-The Director must not:
+It may not:
 
-* mutate persistent learner state
-* set literacy stage
-* mark assessment complete
-* unlock subjects
-* create unsupported UI
-* output HTML or code
-* claim consciousness
-* imply exclusive friendship
-* shame the learner
-* use sexual, graphic, or mixed-age-inappropriate framing
-* request disallowed cloud operations
+* directly mutate stored state
+* bypass validation
+* bypass content policy
+* create arbitrary UI
 
-## 17.3 Director Prompt Skeleton
+## 20.2 Chat Role
 
-```text
-You are the Primer Director.
+The conversational model supports direct learner conversation when the user activates the orb.
 
-Your role is to propose the next bounded learning scene.
-You do not control state, curriculum progression, safety rules, storage, or permissions.
-You may only emit JSON matching the supplied SceneBlueprint schema.
+It may:
 
-You must stay within the provided hard constraints.
+* answer learner questions
+* explain concepts
+* encourage reflection
+* clarify tasks
+* elaborate on current content
 
-Rules:
-- Keep narration concise and concrete.
-- Stay within the allowed interaction types.
-- Do not introduce written text above learner capability.
-- Do not output HTML, JSX, markdown UI, or code.
-- Do not claim sentience or exclusive relationship.
-- Do not use sexual, graphic, humiliating, or age-inappropriate framing.
-- Use only allowed visual recipes.
-- Provide only advisory evidence hints, not state mutation.
-```
+It must remain bounded by:
+
+* current domain/context
+* safety rules
+* mixed-age-safe tone
+* no inappropriate storyline generation
 
 ---
 
-## 18. Content and Safety Policy
+## 21. API Contracts
 
-## 18.1 Default Content Standard
+All OpenRouter access must go through server-side routes.
 
-Default content must be suitable for mixed-age access.
-
-This means:
-
-* neutral-safe themes
-* non-sexualised examples
-* non-graphic imagery
-* respectful language
-* no humiliating corrective tone
-* no adult-coded storyline assumptions
-
-## 18.2 Relationship Safety
-
-Primer must not:
-
-* imply exclusive friendship
-* emotionally manipulate dependence
-* shame the learner
-* infantilise adult learners
-* sexualise interaction
-* pretend to judge moral worth
-
-## 18.3 Subject Safety
-
-As subject complexity increases:
-
-* tone may become more technical
-* abstraction may increase
-* explanation density may increase
-
-But the app must still avoid:
-
-* humiliation framing
-* ideological persuasion disguised as teaching
-* inappropriate mature themes
-* “you should already know this” language
-
----
-
-## 19. Local Audio Runtime
-
-## 19.1 Requirements
-
-* no heavy audio work on the main thread
-* interruption and replay supported
-* capability-tier-based behaviour
-* no hard dependence on STT in `minimal` tier
-
-## 19.2 TTS Strategy
-
-Priority order:
-
-1. higher-quality local TTS where supported
-2. browser-native speech where acceptable
-3. prerecorded fallback clips for shell phrases
-
-## 19.3 STT Strategy
-
-Priority order:
-
-1. local STT where supported
-2. structured tap-first alternatives
-3. no mandatory voice input in `minimal` mode
-
----
-
-## 20. Local Validation Strategy
-
-Simple tasks must not depend on cloud interpretation.
-
-## 20.1 Local-first Validation
-
-Use local validation for:
-
-* stroke presence
-* approximate shape
-* bounding-box fit
-* occupancy
-* directional guidance where relevant
-* coarse similarity scoring
-
-## 20.2 Cloud Escalation Rules
-
-Escalate to cloud only when:
-
-* local confidence falls into a defined ambiguity band
-* the task is genuinely open-ended
-* remote interpretation is enabled
-* the curriculum engine allows escalation
-
----
-
-## 21. Asset and Model Management
-
-Local-first audio and rich offline behaviour require explicit asset and model handling.
-
-## 21.1 Requirements
-
-The app must support:
-
-* versioned model manifests
-* checksum validation
-* resumable downloads where feasible
-* lazy installation
-* deletion and re-download
-* storage estimation before large downloads
-* storage pressure handling
-* per-tier asset strategies
-
-## 21.2 Asset Types
-
-* built-in shell assets
-* lesson assets
-* generated images
-* local model packs
-* prerecorded fallback audio
-
-## 21.3 Persistence Strategy
-
-* metadata: IndexedDB
-* larger blobs: OPFS where supported
-* asset manifest tracks size, version, checksum, and last access
-
-## 21.4 Eviction Policy
-
-The app may evict:
-
-* oldest generated assets
-* non-essential cached audio
-* non-active model packs
-
-The app must not silently evict:
-
-* core learner state
-* migration-critical metadata
-* only-available fallback assets
-
----
-
-## 22. Storage and Offline Behaviour
-
-The local-first design depends on web storage and offline primitives such as service workers, persistence requests, and OPFS-backed blob storage. ([MDN Web Docs][2])
-
-## 22.1 Offline Requirements
-
-The app must support:
-
-* startup without network
-* persisted learner progress across reloads
-* recovery into a safe scene after interruption
-* offline operation of the core learning loop
-
-## 22.2 Persistence Flow
-
-During onboarding or settings flow, the app should:
-
-* inspect whether storage is already persistent
-* request persistent storage where supported
-* estimate available storage before large downloads
-* warn before optional large model installs
-
-## 22.3 Backup and Restore
-
-v1 must support:
-
-* export of learner data and settings
-* import of local backup
-* optional encrypted export if implemented
-
-Backup/export is part of resilience, not a side feature.
-
----
-
-## 23. Relay API Contracts
-
-All remote APIs are optional and must go through the relay.
-
-## 23.1 `/director`
+## 21.1 `/api/director`
 
 ### Purpose
 
-Generate a bounded scene blueprint inside locally computed hard constraints.
+Generate the next scene blueprint.
 
 ### Request
 
-```ts
+```ts id="ot8js2"
 type DirectorRequest = {
-  requestId: string;
   learnerSummary: string;
-  runtimeSummary: string | null;
-  latestInput: {
+  currentSceneId: string | null;
+  recentTurns: { role: "user" | "assistant"; content: string }[];
+  input: {
     type: "transcript" | "tap-choice" | "trace-result" | "system-start";
     content: string;
   };
-  hardConstraints: {
+  constraints: {
     activeDomain: LearningDomain;
-    literacyStage: 0 | 1 | 2 | 3 | 4 | 5 | 6;
-    objectiveId: string | null;
-    allowedSceneKinds: Array<
-      "assessment" | "lesson" | "practice" | "review" | "reward" | "fallback"
-    >;
-    allowedInteractionTypes: Array<
-      | "none"
-      | "tap-choice"
-      | "repeat-sound"
-      | "trace-symbol"
-      | "read-respond"
-      | "compose-text"
-      | "equation-step"
-      | "diagram-label"
-      | "explain-back"
-    >;
+    literacyStage: number;
+    allowedSceneKinds: SceneKind[];
+    allowedInteractionTypes: InteractionType[];
     maxNarrationChars: number;
-    imageGenerationAllowed: boolean;
-    locale: string;
+    contentSafetyTier: "mixed-age-safe";
   };
 };
 ```
 
 ### Response
 
-```ts
+```ts id="wejlwm"
 type DirectorResponse = {
   blueprint: SceneBlueprint;
 };
 ```
 
-### Relay Rules
-
-* validate request shape
-* redact/minimise input
-* inject system prompt
-* parse strict JSON only
-* validate against schema
-* never pass raw provider output directly to client render
-* return stable error shapes
-
 ---
 
-## 23.2 `/image`
+## 21.2 `/api/chat`
 
 ### Purpose
 
-Generate a non-blocking optional image for a scene.
+Handle conversational explanation or learner questions triggered by orb interaction.
 
 ### Request
 
-```ts
+```ts id="xrtzdm"
+type ChatRequest = {
+  learnerSummary: string;
+  runtimeSummary: string | null;
+  recentTurns: { role: "user" | "assistant"; content: string }[];
+  userMessage: string;
+  constraints: {
+    activeDomain: LearningDomain;
+    literacyStage: number;
+    contentSafetyTier: "mixed-age-safe";
+  };
+};
+```
+
+### Response
+
+```ts id="s5a6ya"
+type ChatResponse = {
+  replyText: string;
+  suggestedFollowupScene?: SceneBlueprint;
+};
+```
+
+---
+
+## 21.3 `/api/image`
+
+### Purpose
+
+Generate an image for a scene when enabled.
+
+### Request
+
+```ts id="le3bwb"
 type ImageRequest = {
-  requestId: string;
-  recipeId: string;
-  vars: Record<string, string>;
+  prompt: string;
   cacheKey: string;
 };
 ```
 
 ### Response
 
-```ts
-type ImageResponse =
-  | {
-      status: "ready";
-      cacheKey: string;
-      mimeType: string;
-      bytes: number;
-      blobUrl?: string;
-    }
-  | {
-      status: "queued";
-      cacheKey: string;
-      jobId: string;
-    };
+```ts id="q6j6du"
+type ImageResponse = {
+  cacheKey: string;
+  mimeType: string;
+  base64Data: string;
+};
 ```
 
 ### Rules
 
-* image generation must never block scene presentation
-* images are enhancement only
-* cache by deterministic hash of recipe + vars
-* the model may not send raw arbitrary provider prompts directly
+* background/non-blocking
+* image generation must never block scene rendering
+* cache by prompt hash
+* must pass through moderation and size controls
 
 ---
 
-## 23.3 `/vision`
+## 21.4 `/api/vision`
 
 ### Purpose
 
-Optional interpretation for genuinely ambiguous tasks.
+Optional visual interpretation for ambiguous tasks.
 
 ### Request
 
-```ts
+```ts id="qmafg6"
 type VisionRequest = {
-  requestId: string;
   imageBase64: string;
   task: "free-draw-interpretation" | "complex-symbol-check";
   context: {
     target?: string;
-    learnerStage: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+    learnerStage: number;
     domain: LearningDomain;
   };
 };
@@ -1262,451 +1165,317 @@ type VisionRequest = {
 
 ### Response
 
-```ts
+```ts id="j0x533"
 type VisionResponse = {
   success: boolean;
   confidence: number;
   feedbackAudio: string;
-  evidence?: {
-    observedSkill?: string;
-    confidenceHint?: number;
-  };
+  suggestedStateDelta?: SceneBlueprint["proposedStateDelta"];
 };
 ```
 
-### Rules
+---
 
-* not the default path for simple tracing
-* callable only when remote interpretation is enabled
-* returns advisory evidence only
-* never mutates progression directly
+## 22. OpenRouter Integration Rules
+
+## 22.1 Required from Start
+
+OpenRouter integration is required from the start of implementation.
+
+Do not design the repo around a hypothetical future cloud layer. Build it in immediately.
+
+## 22.2 Model Selection Rules
+
+* models must be configured centrally
+* exact model IDs must be configurable via env
+* Director, Chat, Vision, and Image routes must be separately configurable
+* model fallback logic may be added later but is not required in the first pass
+
+## 22.3 Security Rules
+
+* OpenRouter API key must never be exposed client-side
+* all calls must go through server routes
+* request logging must be minimal
+* prompt content should be reduced to minimum useful context
 
 ---
 
-## 24. Execution Pipelines
+## 23. Audio Interaction Model
 
-## 24.1 Startup Flow
+## 23.1 Voice Flow
 
-1. Load app shell
-2. Register service worker where supported
-3. Detect capability tier
-4. Load local state
-5. Attempt migrations if needed
-6. Check persistence status
-7. Restore last safe scene or start new session
-8. Run embedded baseline assessment if needed
-9. Enter local-only mode automatically if relay is disabled or unavailable
+1. User presses orb
+2. Orb enters listening state
+3. Browser captures audio
+4. Audio is transcribed or sent for processing depending on implementation choice
+5. Server returns conversational response and/or suggested next scene
+6. Orb enters speaking state
+7. Reply is spoken and/or displayed
+8. Scene updates if needed
 
-## 24.2 Core Scene Flow
+## 23.2 Minimum Viable Audio Support
 
-1. Learner action is captured locally
-2. Curriculum engine computes hard constraints
-3. If Director is enabled, a bounded proposal may be requested
-4. Proposal is validated strictly
-5. If valid, scene is rendered
-6. If invalid, local deterministic fallback scene is used
-7. Evidence is recorded locally
-8. Mastery state is updated locally
+v1 does not need perfect voice stack quality, but it must support a stable basic loop:
 
-## 24.3 Voice Flow
+* press orb
+* speak
+* AI replies
+* learner sees or hears result
 
-1. User activates listen
-2. Local audio runtime captures speech if supported
-3. Transcript is normalised locally
-4. Minimal request is prepared if relay use is allowed
-5. Director may propose a scene
-6. Runtime validates the scene
-7. Scene is rendered
-8. Narration starts
-9. Optional image work is queued in the background
-
-## 24.4 Trace Flow
-
-1. User traces symbol
-2. Local validator scores stroke features
-3. If confidence is high enough, continue locally
-4. If ambiguous and allowed, optionally escalate to `/vision`
-5. Curriculum engine updates evidence locally
-6. Next scene is rendered
+If browser/device constraints make voice unreliable, the app must degrade gracefully to text input or tap interaction.
 
 ---
 
-## 25. Privacy and Data Policy
+## 24. Persistence and No-Login Model
 
-## 25.1 Local Data Policy
+## 24.1 Storage Policy
 
-By default, Primer stores locally:
+Learner data is stored locally by default.
+
+This includes:
 
 * learner profile
-* pedagogical progress
-* runtime summary
-* settings/admin preferences
+* progress
+* current objective
+* recent context summary
+* settings
 * cached assets
-* model pack metadata
 
-## 25.2 Cloud Processing Policy
+## 24.2 No Required Login
 
-If cloud mode is enabled:
+v1 should require no login and no account creation.
 
-* only minimum required context should be sent
-* raw learner state should be summarised rather than dumped wholesale
-* provider access must go through relay
-* request bodies should not be logged by default
-* cloud use must be visible in settings/admin UI
+The app should be able to start immediately for a new learner.
 
-## 25.3 Prohibited Claims
+## 24.3 Export / Import
 
-The product must not claim:
+The app must support:
 
-* “100% local” unless true
-* “anonymous” unless true end-to-end
-* “nothing ever leaves the device” when cloud mode is enabled
-* vague privacy guarantees that the deployment cannot support
+* export of learner state
+* import of learner state
+* reset of local learner state
 
-## 25.4 Analytics
-
-Default mixed-age-safe mode should avoid:
-
-* ad tech
-* behavioural profiling
-* manipulative engagement systems
-
-If analytics exist at all, they must be strictly limited and not part of the learning loop.
+This is required because there is no default cloud account system.
 
 ---
 
-## 26. Performance Requirements
+## 25. Error Handling and Fallback
 
-## 26.1 Responsiveness
+## 25.1 Failure Classes
 
-* UI must remain interactive during local audio work
-* all heavy inference/audio work must stay off the main thread
-* the shell must remain responsive during slow or failed cloud calls
-
-## 26.2 Rendering
-
-* scene transitions should remain smooth on mid-range hardware
-* asset loading must not freeze narration
-* placeholder visuals must be acceptable when generation is slow
-
-## 26.3 Internal Time Budgets
-
-Implementation must define budgets for:
-
-* shell startup
-* safe scene recovery
-* narration start after scene validation
-* trace evaluation
-* cloud timeout thresholds
-
-Budgets may vary by capability tier.
-
----
-
-## 27. Error Handling and Fallback
-
-## 27.1 Failure Classes
-
-* capability insufficient
-* local model unavailable
+* no network
+* OpenRouter unavailable
+* server relay timeout
+* malformed model output
+* image generation timeout
+* local storage unavailable
 * microphone unavailable
-* network unavailable
-* relay rate limit
-* malformed relay response
-* asset generation timeout
-* storage quota exceeded
-* migration failure
-* asset checksum mismatch
+* speech capture failure
+* unsafe content detected
+* schema validation failure
 
-## 27.2 Fallback Strategy
+## 25.2 Fallback Behaviour
 
 For all failures:
 
-* preserve learner progress where possible
+* preserve local learner data where possible
 * avoid blank screens
-* return to a known-safe local scene
-* use calm neutral phrasing
-* keep the app operable
+* keep orb and menu responsive
+* present a safe fallback scene or message
+* be honest when cloud AI is unavailable
 
-## 27.3 Safe Fallback Scene
+## 25.3 Safe Fallback Example
 
-A safe fallback scene must be bundled locally and always available.
+Fallback scene may contain:
 
-It includes:
-
-* simple ambient visual
-* short neutral narration
-* one safe interaction path
-* no dependency on network
-* no dependency on heavy local inference
-
-Example narration:
-
-> “Let’s continue another way.”
+* calm ambient background
+* short message such as: “I can’t reach the learning service right now. You can still review what you’ve done.”
+* menu access
+* reviewable local content if available
 
 ---
 
-## 28. Accessibility Requirements
+## 26. Accessibility
 
-Primer must not assume that all learners are comfortable with speech, hearing, tracing, or dense text.
+Primer must support:
 
-v1 should support:
-
-* tap-first alternatives when voice is unavailable
-* caption option for narration
-* replay for spoken output
-* high-contrast compatible UI
-* motor-tolerant tracing thresholds
-* non-speaking learner path using choices and tracing
-* no dependence on tiny targets
-
-Later phases may add:
-
-* richer keyboard-first flows
-* screen-reader-specific optimisation for advanced content
-* symbolic accessibility layers for maths/science content
+* mouse/touch interaction
+* keyboard navigation
+* captions/subtitles for spoken output
+* large touch targets for orb and key controls
+* high-contrast compatible rendering
+* non-voice alternatives when microphone use is not possible
+* non-speaking learner paths via tap and symbol interaction
 
 ---
 
-## 29. Repository Structure
+## 27. Suggested File Structure
 
-```text
-/apps
-  /web
-    /public
-    /src
-      /app
-      /components
-      /features
-      /lib
-      /store
-      /workers
-      /styles
-  /relay
-    /src
-      /routes
-      /providers
-      /middleware
-      /schemas
-      /moderation
+```text id="u4t2gt"
+/app
+  /api
+    /director/route.ts
+    /chat/route.ts
+    /image/route.ts
+    /vision/route.ts
+  /page.tsx
+  /layout.tsx
 
-/packages
-  /schemas
-    scene.ts
-    api.ts
-    state.ts
-    curriculum.ts
-  /core
-    interpreter.ts
-    curriculumEngine.ts
-    fallback.ts
-    capability.ts
-    privacy.ts
-  /storage
-    indexedDb.ts
-    opfs.ts
-    assetManifest.ts
-  /audio
-    tts.ts
-    stt.ts
-    audioSession.ts
+/components
+  AppShell.tsx
+  Orb.tsx
+  HiddenChrome.tsx
+  CanvasViewport.tsx
+  SceneInterpreter.tsx
+  scenes/
+    ObserveScene.tsx
+    ChoiceScene.tsx
+    RepeatSoundScene.tsx
+    TraceScene.tsx
+    ReadRespondScene.tsx
+
+/lib
+  config.ts
+  openrouter.ts
+  storage.ts
+  assetCache.ts
+  audio.ts
+  moderation.ts
+  safety.ts
+  sceneValidation.ts
+  stateValidation.ts
+  directorPrompt.ts
+  chatPrompt.ts
+
+/store
+  appStore.ts
+
+/types
+  appState.ts
+  scene.ts
+  api.ts
+  learning.ts
 ```
 
 ---
 
-## 30. Implementation Plan
+## 28. Implementation Plan
 
-## Phase 1: PWA and Local Runtime Foundation
+## Phase 1: Immersive Shell
 
-* scaffold static-capable web app
-* add manifest and service worker
-* implement local state stores
-* implement schema versioning and migrations
-* build safe fallback scene
-* build capability detector
+* scaffold Next.js app
+* build full-screen layout
+* implement orb component and state machine
+* implement hamburger menu and hidden chrome
+* build basic canvas viewport
 
-## Phase 2: Curriculum and Mastery Engine
+## Phase 2: Local State and Persistence
 
-* define objective model
-* implement deterministic progression rules
-* implement baseline assessment logic
-* define hard scene constraints
+* implement learner state store
+* add schema versioning
+* add local persistence
+* add export/import/reset
 
-## Phase 3: Scene Interpreter
+## Phase 3: Scene Runtime
 
 * define Zod schemas
-* build bounded scene interpreter
-* enforce scene budgets
-* implement validation failure fallback
+* implement scene interpreter
+* implement safe fallback scene
+* enforce bounded scene rules
 
-## Phase 4: Local Audio Stack
+## Phase 4: OpenRouter Relay
 
-* build worker-based audio runtime
-* integrate TTS + fallback path
-* integrate STT where supported
-* ensure no main-thread blocking
+* implement `/api/director`
+* implement `/api/chat`
+* add server-side OpenRouter integration
+* add model config
+* add moderation/validation/error handling
 
-## Phase 5: v1 Interaction Components
+## Phase 5: Core Learning Components
 
+* tap-choice
+* repeat-sound
+* trace-symbol
 * observe scene
-* tap-choice scene
-* repeat-sound scene
-* trace-symbol scene
-* local trace validation
+* optional read/respond scene
 
-## Phase 6: Optional Relay
+## Phase 6: Audio Interaction
 
-* implement `/director`
-* implement `/image`
-* implement `/vision`
-* add redaction and moderation
-* add provider pinning
-* normalise errors
+* orb-triggered listening flow
+* speech capture
+* reply playback
+* interruption handling
+* degraded fallback for unsupported browsers
 
-## Phase 7: Asset and Model Management
+## Phase 7: Image and Vision
 
-* implement asset manifest
-* implement install/delete/update for local assets
-* add persistence request flow
-* add quota estimation and eviction
+* implement `/api/image`
+* add background generation queue
+* add caching
+* add optional `/api/vision`
 
-## Phase 8: Settings/Admin
+## Phase 8: Hardening
 
-* settings screen
-* local reset
-* export/import backup
-* optional encrypted export
-* cloud/privacy controls
-* admin PIN
-
-## Phase 9: Hardening
-
-* migration tests
-* offline recovery tests
-* quota handling tests
-* failure injection
-* prompt safety audit
+* content policy audits
+* malformed output tests
+* no-network tests
+* storage error tests
 * performance tuning
+* accessibility pass
 
 ---
 
-## 31. Acceptance Criteria for v1
+## 29. Acceptance Criteria for v1
 
 Primer v1 is complete when:
 
-* the app can be installed and run as a PWA
-* learner state persists locally across reloads
-* the app restores into a safe scene after interruption
-* a new learner can enter with no assumed prior literacy
-* embedded baseline assessment infers a sensible starting point
-* progression is computed locally
-* scene blueprints are strictly validated before render
+* the learner sees a full-screen immersive canvas in normal use
+* most chrome is hidden behind a hamburger menu
+* the orb is visible and acts as the primary AI interaction control
+* pressing the orb allows the learner to talk to the AI
+* the app uses OpenRouter via server-side relay from day one
+* learner state persists locally with no login required
+* the Director can propose validated scenes
+* the Chat route can respond to learner questions
 * invalid model output cannot break the UI
-* local TTS works on supported devices, with fallback where not supported
-* local STT works on supported devices, with structured alternatives where not supported
-* early literacy and early numeracy flows exist
-* cloud Director is optional and bounded by hard constraints
+* the app supports early literacy and early numeracy scenes
 * image generation is optional and non-blocking
-* simple tracing works without cloud vision
-* settings/admin controls exist locally
-* export/import backup works
-* the app remains usable during relay failure, storage pressure, and validation failure
-* default content remains safe for mixed-age access
+* the app remains usable during network/model failures
+* default content remains mixed-age-safe
 
 ---
 
-## 32. Example Director Output
+## 30. Final Implementation Notes for Codex
 
-```json
-{
-  "blueprint": {
-    "version": 1,
-    "scene": {
-      "id": "scene_assessment_001",
-      "kind": "assessment",
-      "objectiveId": "baseline_audio_choice_001",
-      "transition": "fade",
-      "tone": "curious"
-    },
-    "narration": {
-      "text": "Let’s begin simply. Choose the picture that matches the sound.",
-      "maxChars": 90,
-      "estDurationMs": 3400,
-      "bargeInAllowed": true
-    },
-    "visualIntent": {
-      "type": "recipe",
-      "recipeId": "neutral_choice_board",
-      "vars": {
-        "theme": "animals"
-      }
-    },
-    "interaction": {
-      "type": "tap-choice",
-      "options": [
-        { "id": "bird", "audioLabel": "Bird" },
-        { "id": "cat", "audioLabel": "Cat" },
-        { "id": "fish", "audioLabel": "Fish" }
-      ]
-    },
-    "evidence": {
-      "observedSkill": "audio_led_choice_response",
-      "confidenceHint": 0.72
-    }
-  }
-}
-```
+Codex should treat the following as non-negotiable:
 
----
+1. **Full-screen immersive canvas is the default UI.**
+2. **Most chrome stays hidden behind a hamburger menu.**
+3. **The glowing orb is a primary interaction control, not decoration.**
+4. **Cloud AI via OpenRouter is required from the start.**
+5. **Learner data is local, with no required login.**
+6. **The app owns the runtime and validation; the model does not own the UI.**
+7. **Default content must be mixed-age-safe.**
+8. **v1 is still narrower than the full long-term vision.**
 
-## 33. Codex Implementation Notes
-
-Codex should treat the following as non-negotiable architectural constraints:
-
-1. **The curriculum engine is deterministic and local.**
-2. **The app is a static local-first PWA.**
-3. **Cloud is optional and relay-mediated.**
-4. **The Director is a bounded scene proposer, not a controller.**
-5. **Default content must be mixed-age-safe.**
-6. **v1 is limited to early literacy and early numeracy despite the broader long-term architecture.**
-
-## 33.1 Refactor Priority Order
-
-Codex should prioritise work in this order:
-
-1. local state + migrations
-2. capability detection
-3. fallback scene
-4. curriculum engine
-5. scene schemas + interpreter
-6. local audio runtime
-7. v1 interaction components
-8. relay endpoints
-9. asset/model management
-10. admin/settings
-11. hardening
-
-## 33.2 Anti-Goals for Codex
+## 30.1 Anti-Goals for Codex
 
 Codex must not:
 
-* build arbitrary model-generated UI
-* store progression state primarily in model summaries
-* rely on server-only Next.js features for the core loop
-* block scene rendering on cloud image generation
-* let cloud responses bypass schema validation
-* assume v1 includes advanced STEM scenes
-* hardcode child-only branding or adult-only framing
+* build a chrome-heavy dashboard UI
+* expose the OpenRouter key in the client
+* rely on arbitrary model-generated HTML
+* make login mandatory
+* pretend the app works fully offline
+* make the orb secondary or purely decorative
+* hardcode childish tone across the app
+* hardcode adult-only framing either
 
 ---
 
-## 34. Final Product Definition
+## 31. Governing Product Definition
 
-Primer is a universal adaptive learning platform whose content must be safe for mixed-age access by default, but whose pedagogy is driven by learner capability and subject mastery rather than age identity.
+Primer is a cloud-AI adaptive learning app with local learner storage, no required login, a full-screen working canvas, hidden chrome, and an orb-centred conversational interface.
 
-That is the governing definition for the implementation.
+That definition should govern implementation.
 
-If you want the next step, I can turn this into a **single Codex prompt that tells it exactly how to refactor the repo toward this spec**.
-
-[1]: https://nextjs.org/docs/app/guides/static-exports?utm_source=chatgpt.com "Guides: Static Exports"
-[2]: https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API?utm_source=chatgpt.com "Service Worker API - MDN Web Docs"
