@@ -22,27 +22,43 @@ body {
 }
 
 .app-shell {
-  width: min(760px, calc(100vw - 32px));
-  margin: 0 auto;
-  padding: 32px 0 48px;
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  margin: 0;
+  padding: 20px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 16px;
 }
 
-.shell-header,
-.shell-footer,
-.scene-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.shell-actions,
-.status-row,
+.canvas-status,
 .settings-actions,
 .settings-header {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.menu-button {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  border: 1px solid rgba(22, 50, 79, 0.2);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  font-size: 1.4rem;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+
+.menu-button:hover,
+.menu-button:focus-visible {
+  box-shadow: 0 8px 20px rgba(22, 50, 79, 0.15);
+  outline: none;
 }
 
 .eyebrow {
@@ -64,7 +80,7 @@ h3 {
 }
 
 .scene-card {
-  margin: 24px 0;
+  margin: 0;
   min-height: 220px;
   padding: 24px;
   border: 1px solid var(--line);
@@ -138,6 +154,16 @@ h3 {
   gap: 12px;
 }
 
+.response-input {
+  width: min(420px, 100%);
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font: inherit;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.95);
+}
+
 .trace-hint {
   margin: 0;
   font-size: 0.95rem;
@@ -169,9 +195,103 @@ h3 {
 }
 
 .helper {
-  margin-top: 20px;
+  margin: 0;
   color: var(--muted-ink);
 }
+
+.orb-dock {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding-bottom: 4px;
+}
+
+.orb-button {
+  width: 96px;
+  height: 96px;
+  border: 0;
+  border-radius: 999px;
+  background: radial-gradient(circle at 35% 30%, #ffd9aa, #d98f3d 45%, #16324f 95%);
+  box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.42), 0 18px 32px rgba(22, 50, 79, 0.22);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: #fff;
+  font-weight: 700;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    filter 160ms ease;
+}
+
+.orb-core {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 22px rgba(255, 255, 255, 0.75);
+}
+
+.orb-label {
+  font-size: 0.8rem;
+  margin-top: 6px;
+}
+
+.orb-button[data-orb-state="idle"] {
+  animation: orb-idle 2.6s ease-in-out infinite;
+}
+
+.orb-button[data-orb-state="listening"] {
+  box-shadow: 0 0 0 7px rgba(147, 238, 255, 0.45), 0 0 34px rgba(91, 209, 255, 0.9);
+  transform: scale(1.05);
+}
+
+.orb-button[data-orb-state="thinking"] {
+  filter: saturate(1.2);
+  animation: orb-thinking 0.9s ease-in-out infinite;
+}
+
+.orb-button[data-orb-state="speaking"] {
+  box-shadow: 0 0 0 8px rgba(255, 221, 150, 0.45), 0 0 44px rgba(255, 188, 97, 0.95);
+  transform: scale(1.06);
+}
+
+.orb-button[data-orb-state="error"] {
+  box-shadow: 0 0 0 7px rgba(255, 155, 155, 0.45), 0 0 34px rgba(255, 91, 91, 0.92);
+}
+
+.orb-button[data-orb-state="muted"] {
+  filter: grayscale(0.45);
+  opacity: 0.8;
+}
+
+.orb-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+@keyframes orb-idle {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+}
+
+@keyframes orb-thinking {
+  0%,
+  100% {
+    transform: scale(1.02);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
 
 .shell-button {
   border: 1px solid transparent;
@@ -213,9 +333,10 @@ h3 {
   transform: none;
 }
 
-.status-row {
-  justify-content: space-between;
-  margin-top: 18px;
+.canvas-status {
+  justify-content: flex-end;
+  margin-left: 56px;
+  flex-wrap: wrap;
 }
 
 .status-pill {
@@ -289,17 +410,15 @@ h3 {
 }
 
 @media (max-width: 640px) {
-  .shell-header,
-  .shell-footer,
-  .status-row,
   .settings-actions,
-  .settings-header {
+  .settings-header,
+  .canvas-status {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .shell-actions {
-    flex-wrap: wrap;
+  .orb-actions {
+    width: 100%;
   }
 
   .trace-board {

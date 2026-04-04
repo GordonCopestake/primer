@@ -13,14 +13,14 @@ The current implementation focuses on the v1 runtime foundation:
 
 ## What The App Does
 
-Primer presents bounded learning scenes inside a fixed local shell. A learner starts in a deterministic baseline assessment, then progresses through simple reading, writing, and numeracy scenes. The app stores learner state locally, restores the last safe scene after reload, exposes local settings and backup controls, and keeps working without any required backend.
+Primer presents bounded learning scenes inside a fixed local shell. A learner starts in a deterministic baseline assessment, then progresses through simple reading, writing, and numeracy scenes. The app stores learner state locally, restores the last safe scene after reload, and exposes local settings and backup controls.
 
-The web app is intentionally local-first:
+Primer follows the spec posture: cloud AI with local learner storage and no required login.
 
-- progression logic runs in the client
+- progression and persistence stay on-device
 - learner state is stored locally
 - the shell can be installed as a PWA
-- cloud features are optional and currently scaffolded behind local controls
+- cloud director/chat/image/vision routes are available through the relay
 
 ## How To Run It
 

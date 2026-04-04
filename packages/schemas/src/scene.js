@@ -59,6 +59,18 @@ export const validateSceneBlueprint = (blueprint, decision = null) => {
     errors.push("Repeat sound scenes require a phoneme.");
   }
 
+  if (interactionType === "read-respond") {
+    if (!blueprint?.interaction?.prompt || typeof blueprint.interaction.prompt !== "string") {
+      errors.push("Read/respond scenes require a prompt.");
+    }
+    if (
+      !Array.isArray(blueprint?.interaction?.expectedKeywords) ||
+      blueprint.interaction.expectedKeywords.length === 0
+    ) {
+      errors.push("Read/respond scenes require expected keywords.");
+    }
+  }
+
   const narrationText = blueprint?.narration?.text ?? "";
   if (/[<>]/.test(narrationText)) {
     errors.push("Raw HTML is not allowed.");

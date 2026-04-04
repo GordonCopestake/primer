@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 import {
   createStableError,
+  validateChatRequest,
+  validateChatResponse,
   validateDirectorRequest,
   validateDirectorResponse,
 } from "../packages/schemas/src/index.js";
@@ -64,6 +66,34 @@ test("director request validator rejects unsupported latest input types", () => 
 
   assert.equal(result.ok, false);
   assert.match(result.errors.join(" "), /latestinput\.type/i);
+});
+
+test("chat request validator accepts bounded chat shape", () => {
+  const result = validateChatRequest({
+    requestId: "chat-1",
+    learnerSummary: "Learner is at stage 1.",
+    latestInput: {
+      type: "transcript",
+      content: "How do I do this?",
+    },
+    maxResponseChars: 120,
+  });
+
+  assert.equal(result.ok, true);
+});
+
+test("chat response validator rejects HTML in text", () => {
+  const result = validateChatResponse(
+    {
+      reply: {
+        text: "<b>Unsafe</b>",
+      },
+    },
+    120,
+  );
+
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join(" "), /html/i);
 });
 
 test("director request summarizes learner state instead of dumping sensitive raw state", () => {
@@ -182,6 +212,49 @@ test("director response validator rejects objective drift and unsafe recipes", (
   assert.equal(result.ok, false);
   assert.match(result.errors.join(" "), /objective/i);
   assert.match(result.errors.join(" "), /visual recipe/i);
+});
+
+test("director response validator accepts read/respond interaction when constrained", () => {
+  const result = validateDirectorResponse(
+    {
+      blueprint: {
+        version: 1,
+        scene: {
+          id: "scene_read_respond",
+          kind: "lesson",
+          objectiveId: "reading.symbol-match.3",
+          transition: "fade",
+          tone: "encouraging",
+        },
+        narration: {
+          text: "Read and reply with one key word.",
+          maxChars: 120,
+          estDurationMs: 1200,
+          bargeInAllowed: true,
+        },
+        interaction: {
+          type: "read-respond",
+          prompt: "Read: The map is on the table.",
+          expectedKeywords: ["map", "table"],
+        },
+        visualIntent: {
+          type: "recipe",
+          recipeId: "neutral_choice_board",
+          vars: {},
+        },
+      },
+    },
+    {
+      activeDomain: "reading",
+      literacyStage: 3,
+      objectiveId: "reading.symbol-match.3",
+      allowedSceneKinds: ["lesson", "fallback"],
+      allowedInteractionTypes: ["read-respond", "none"],
+      maxNarrationChars: 120,
+    },
+  );
+
+  assert.equal(result.ok, true);
 });
 
 test("local trace scoring accepts broad, deliberate strokes", () => {

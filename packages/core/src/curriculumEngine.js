@@ -50,7 +50,7 @@ const readingDecision = (stage = 1) => ({
   activeDomain: "reading",
   literacyStage: stage,
   allowedSceneKinds: lessonKinds,
-  allowedInteractionTypes: ["tap-choice", "trace-symbol", "repeat-sound", "none"],
+  allowedInteractionTypes: ["tap-choice", "trace-symbol", "repeat-sound", "read-respond", "none"],
   cloudEscalationAllowed: APP_CONFIG.features.cloudDirector,
   maxNarrationChars: 120,
   maxPromptComplexity: 2,
