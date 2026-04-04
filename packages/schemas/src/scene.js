@@ -2,6 +2,7 @@ import { V1_INTERACTIONS, V1_SCENE_KINDS } from "./curriculum.js";
 
 const VALID_TRANSITIONS = new Set(["fade", "slide", "pan"]);
 const VALID_TONES = new Set(["calm", "encouraging", "celebratory", "focused", "curious"]);
+const SAFE_RECIPE_IDS = new Set(["ambient_safe_path", "neutral_choice_board", "symbol_trace_board"]);
 
 export const validateSceneBlueprint = (blueprint, decision = null) => {
   const errors = [];
@@ -64,6 +65,10 @@ export const validateSceneBlueprint = (blueprint, decision = null) => {
   }
 
   if (decision) {
+    if (blueprint?.scene?.objectiveId !== decision.objectiveId) {
+      errors.push("Scene objective is outside curriculum constraints.");
+    }
+
     if (!decision.allowedSceneKinds.includes(blueprint?.scene?.kind)) {
       errors.push("Scene kind is outside curriculum constraints.");
     }
@@ -75,6 +80,10 @@ export const validateSceneBlueprint = (blueprint, decision = null) => {
     if (narrationText.length > decision.maxNarrationChars) {
       errors.push("Narration exceeds curriculum budget.");
     }
+  }
+
+  if (blueprint?.visualIntent?.recipeId && !SAFE_RECIPE_IDS.has(blueprint.visualIntent.recipeId)) {
+    errors.push("Visual recipe is not allowed.");
   }
 
   return {

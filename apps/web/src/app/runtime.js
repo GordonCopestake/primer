@@ -1,4 +1,7 @@
 const env = typeof process === "undefined" ? {} : process.env;
+const DIRECTOR_TIMEOUT_MS = 3_500;
+const IMAGE_TIMEOUT_MS = 2_500;
+const VISION_TIMEOUT_MS = 2_500;
 
 const APP_CONFIG = {
   appMode: env.PRIMER_APP_MODE ?? "development",
@@ -53,7 +56,7 @@ const createStateShape = (overrides = {}) => ({
       science: 0,
       physics: 0,
     },
-    currentObjectiveId: "baseline.audio-choice.1",
+    currentObjectiveId: "baseline.observe-sound.0",
     assessmentStatus: "not-started",
     mastery: masteryBucket(),
     ...overrides.pedagogicalState,
@@ -229,6 +232,10 @@ const appendRecentTurn = (state, turn) => {
 const setActiveScene = (state, scene) =>
   createDefaultState({
     ...state,
+    pedagogicalState: {
+      ...state.pedagogicalState,
+      currentObjectiveId: scene?.scene?.objectiveId ?? state.pedagogicalState.currentObjectiveId,
+    },
     runtimeSession: {
       ...state.runtimeSession,
       activeSceneId: scene?.scene?.id ?? null,
@@ -324,6 +331,52 @@ const createFallbackScene = (reason = "unknown") => ({
     confidenceHint: 1,
   },
 });
+
+const createTapChoiceFallbackScene = (scene) => {
+  if (scene?.interaction?.type !== "repeat-sound") {
+    return scene;
+  }
+
+  const phoneme = String(scene.interaction.phoneme || "").trim().toLowerCase();
+  const symbol = phoneme ? phoneme[0].toUpperCase() : "M";
+  const distractors = ["S", "T", "L"].filter((option) => option !== symbol).slice(0, 2);
+
+  return {
+    ...scene,
+    narration: {
+      ...scene.narration,
+      text: `Use the tap path. Choose the letter for the sound ${symbol}.`,
+      maxChars: Math.max(scene.narration?.maxChars ?? 0, 64),
+    },
+    interaction: {
+      type: "tap-choice",
+      options: [
+        { id: symbol, label: symbol, audioLabel: `Letter ${symbol}`, correct: true },
+        ...distractors.map((option) => ({
+          id: option,
+          label: option,
+          audioLabel: `Letter ${option}`,
+          correct: false,
+        })),
+      ],
+    },
+  };
+};
+
+const normalizeSceneForRuntime = (scene, runtimeState) => {
+  if (!scene) {
+    return createFallbackScene("scene-missing");
+  }
+
+  if (
+    scene.interaction?.type === "repeat-sound" &&
+    (!runtimeState?.consentAndSettings?.soundEnabled || !runtimeState?.capabilities?.localTTS)
+  ) {
+    return createTapChoiceFallbackScene(scene);
+  }
+
+  return scene;
+};
 
 const createStableError = (code, message, details = null) => ({
   error: {
@@ -772,6 +825,10 @@ const validateSceneBlueprint = (blueprint, decision = null) => {
   }
 
   if (decision) {
+    if (blueprint?.scene?.objectiveId !== decision.objectiveId) {
+      errors.push("Scene objective is outside curriculum constraints.");
+    }
+
     if (!decision.allowedSceneKinds.includes(blueprint?.scene?.kind)) {
       errors.push("Scene kind is outside curriculum constraints.");
     }
@@ -888,6 +945,7 @@ const buildDirectorRequest = (state, decision, latestInput) => ({
 
 const validateDirectorRequest = (request) => {
   const errors = [];
+  const allowedInputTypes = new Set(["transcript", "tap-choice", "trace-result", "system-start"]);
   if (!request?.requestId) {
     errors.push("requestId is required.");
   }
@@ -896,6 +954,9 @@ const validateDirectorRequest = (request) => {
   }
   if (!request?.latestInput?.type || typeof request?.latestInput?.content !== "string") {
     errors.push("latestInput is required.");
+  }
+  if (request?.latestInput?.type && !allowedInputTypes.has(request.latestInput.type)) {
+    errors.push("latestInput.type must be a supported bounded input type.");
   }
   if (!request?.hardConstraints?.activeDomain || !request?.hardConstraints?.objectiveId) {
     errors.push("hardConstraints are required.");
@@ -949,6 +1010,22 @@ const createMockDirectorResponse = (request, localScene) => {
   return { blueprint };
 };
 
+const withTimeout = async (promiseFactory, timeoutMs, timeoutCode) => {
+  let timeoutId = null;
+  try {
+    return await Promise.race([
+      promiseFactory(),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(timeoutCode)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
 const requestDirectorScene = async ({ state, decision, latestInput, localScene, fetchImpl = fetch }) => {
   const request = buildDirectorRequest(state, decision, latestInput);
   const requestValidation = validateDirectorRequest(request);
@@ -968,19 +1045,23 @@ const requestDirectorScene = async ({ state, decision, latestInput, localScene, 
   }
 
   try {
-    const response =
-      relayBaseUrl === "mock"
-        ? createMockDirectorResponse(request, localScene)
-        : await fetchImpl(`${relayBaseUrl}/director`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(request),
-          }).then(async (res) => {
-            if (!res.ok) {
-              throw new Error(`relay-${res.status}`);
-            }
-            return res.json();
-          });
+    const response = await withTimeout(
+      async () =>
+        relayBaseUrl === "mock"
+          ? createMockDirectorResponse(request, localScene)
+          : fetchImpl(`${relayBaseUrl}/director`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(request),
+            }).then(async (res) => {
+              if (!res.ok) {
+                throw new Error(`relay-${res.status}`);
+              }
+              return res.json();
+            }),
+      DIRECTOR_TIMEOUT_MS,
+      "relay-timeout",
+    );
 
     const validation = validateDirectorResponse(response, request.hardConstraints);
     if (!validation.ok) {
@@ -1020,19 +1101,23 @@ const queueImageGeneration = async ({ scene, fetchImpl = fetch }) => {
 
   const request = buildImageRequest(scene);
   try {
-    const response =
-      relayBaseUrl === "mock"
-        ? { status: "queued", cacheKey: request.cacheKey, jobId: createRequestId("image-job") }
-        : await fetchImpl(`${relayBaseUrl}/image`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(request),
-          }).then(async (res) => {
-            if (!res.ok) {
-              throw new Error(`image-${res.status}`);
-            }
-            return res.json();
-          });
+    const response = await withTimeout(
+      async () =>
+        relayBaseUrl === "mock"
+          ? { status: "queued", cacheKey: request.cacheKey, jobId: createRequestId("image-job") }
+          : fetchImpl(`${relayBaseUrl}/image`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(request),
+            }).then(async (res) => {
+              if (!res.ok) {
+                throw new Error(`image-${res.status}`);
+              }
+              return res.json();
+            }),
+      IMAGE_TIMEOUT_MS,
+      "image-timeout",
+    );
 
     return {
       ok: true,
@@ -1092,24 +1177,28 @@ const requestVisionInterpretation = async ({ traceDataUrl, decision, target, fet
   };
 
   try {
-    const response =
-      relayBaseUrl === "mock"
-        ? {
-            success: true,
-            confidence: 0.78,
-            feedbackAudio: `That ${target} looks steady.`,
-            evidence: { observedSkill: "symbol-trace", confidenceHint: 0.78 },
-          }
-        : await fetchImpl(`${relayBaseUrl}/vision`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(request),
-          }).then(async (res) => {
-            if (!res.ok) {
-              throw new Error(`vision-${res.status}`);
+    const response = await withTimeout(
+      async () =>
+        relayBaseUrl === "mock"
+          ? {
+              success: true,
+              confidence: 0.78,
+              feedbackAudio: `That ${target} looks steady.`,
+              evidence: { observedSkill: "symbol-trace", confidenceHint: 0.78 },
             }
-            return res.json();
-          });
+          : fetchImpl(`${relayBaseUrl}/vision`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(request),
+            }).then(async (res) => {
+              if (!res.ok) {
+                throw new Error(`vision-${res.status}`);
+              }
+              return res.json();
+            }),
+      VISION_TIMEOUT_MS,
+      "vision-timeout",
+    );
 
     return {
       ok: true,
@@ -1121,6 +1210,16 @@ const requestVisionInterpretation = async ({ traceDataUrl, decision, target, fet
       error: createStableError("vision_request_failed", "Vision request failed.", String(error)),
     };
   }
+};
+
+const recoverSceneForRuntime = (scene, runtimeState, decision = null) => {
+  if (!scene) {
+    return null;
+  }
+
+  const normalizedScene = normalizeSceneForRuntime(scene, runtimeState);
+  const validation = validateSceneBlueprint(normalizedScene, decision);
+  return validation.ok ? normalizedScene : createFallbackScene("recovery");
 };
 
 export {
@@ -1141,6 +1240,8 @@ export {
   encryptBackupPayload,
   evictNonEssentialAssets,
   createFallbackScene,
+  createTapChoiceFallbackScene,
+  DIRECTOR_TIMEOUT_MS,
   detectCapabilities,
   getAssetInstallPlan,
   getBuiltInAssetManifest,
@@ -1153,12 +1254,14 @@ export {
   migrateState,
   nextCurriculumDecision,
   queueImageGeneration,
+  recoverSceneForRuntime,
   resetLearnerState,
   requestDirectorScene,
   requestVisionInterpretation,
   scoreTrace,
   setAdminPin,
   setActiveScene,
+  normalizeSceneForRuntime,
   unlockAdmin,
   updateAssetAccess,
   updateQuotaEstimate,

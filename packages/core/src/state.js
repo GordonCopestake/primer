@@ -28,6 +28,10 @@ export const appendRecentTurn = (state, turn) => {
 export const setActiveScene = (state, scene) =>
   createDefaultState({
     ...state,
+    pedagogicalState: {
+      ...state.pedagogicalState,
+      currentObjectiveId: scene?.scene?.objectiveId ?? state.pedagogicalState.currentObjectiveId,
+    },
     runtimeSession: {
       ...state.runtimeSession,
       activeSceneId: scene?.scene?.id ?? null,

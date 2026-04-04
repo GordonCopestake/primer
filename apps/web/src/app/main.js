@@ -20,8 +20,10 @@ import {
   lockAdmin,
   listInstalledAssets,
   migrateState,
+  normalizeSceneForRuntime,
   nextCurriculumDecision,
   queueImageGeneration,
+  recoverSceneForRuntime,
   resetLearnerState,
   requestDirectorScene,
   requestVisionInterpretation,
@@ -80,6 +82,34 @@ let latestInput = {
   content: "startup",
 };
 let activeTracePad = null;
+
+const speakText = (text, statusMessage = null) => {
+  if (!state.consentAndSettings.soundEnabled) {
+    setStatus("Sound is turned off. Tap controls remain available.");
+    return false;
+  }
+
+  if (!capabilitySnapshot.localTTS || !globalThis.speechSynthesis) {
+    setStatus("Text audio is unavailable here. Tap controls remain available.");
+    return false;
+  }
+
+  stopAudioAndInput();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.onstart = () => setLoading("Narrating");
+  utterance.onend = () => {
+    setLoading("Idle");
+    if (statusMessage) {
+      setStatus(statusMessage);
+    }
+  };
+  utterance.onerror = () => {
+    setLoading("Idle");
+    setStatus("Narration could not start. Tap controls are still available.");
+  };
+  globalThis.speechSynthesis.speak(utterance);
+  return true;
+};
 
 const createTracePad = (canvas, onStateChange) => {
   if (!canvas) {
@@ -449,31 +479,15 @@ const stopAudioAndInput = () => {
 };
 
 const speakScene = (scene) => {
-  if (!state.consentAndSettings.soundEnabled) {
-    return;
-  }
-
-  if (!capabilitySnapshot.localTTS || !globalThis.speechSynthesis) {
-    setStatus("Text audio is unavailable here. Tap controls remain available.");
-    return;
-  }
-
-  stopAudioAndInput();
-  const utterance = new SpeechSynthesisUtterance(scene.narration.text);
-  utterance.onstart = () => setLoading("Narrating");
-  utterance.onend = () => setLoading("Idle");
-  utterance.onerror = () => {
-    setLoading("Idle");
-    setStatus("Narration could not start. Tap controls are still available.");
-  };
-  globalThis.speechSynthesis.speak(utterance);
+  speakText(scene.narration.text);
 };
 
 const renderScene = (scene) => {
   activeTracePad?.destroy();
   activeTracePad = null;
   currentDecision = nextCurriculumDecision(state);
-  const result = interpretScene(scene, currentDecision);
+  const runtimeScene = normalizeSceneForRuntime(scene, state);
+  const result = interpretScene(runtimeScene, currentDecision);
   const safeScene = result.ok ? result.blueprint : createFallbackScene("validation-failure");
   const interactionType = safeScene.interaction.type;
 
@@ -532,11 +546,22 @@ const renderScene = (scene) => {
     interactionType === "repeat-sound"
       ? `
         <div class="choice-grid">
-          <button type="button" class="choice-button" data-choice-id="repeat" data-correct="true">
-            Repeat "${safeScene.interaction.phoneme}"
+          <button type="button" class="choice-button" id="repeat-audio-button">
+            Play "${safeScene.interaction.phoneme}" again
           </button>
-          <button type="button" class="choice-button" data-choice-id="tap" data-correct="true">
+          <button type="button" class="choice-button" id="repeat-tap-path-button">
             Use tap path
+          </button>
+        </div>
+      `
+      : "";
+
+  const continueMarkup =
+    interactionType === "none"
+      ? `
+        <div class="trace-actions">
+          <button type="button" class="choice-button" id="continue-scene-button">
+            Continue
           </button>
         </div>
       `
@@ -552,7 +577,7 @@ const renderScene = (scene) => {
       ${
         interactionType === "tap-choice"
           ? `<div class="choice-grid">${choiceMarkup}</div>`
-          : traceMarkup || repeatMarkup
+          : traceMarkup || repeatMarkup || continueMarkup
       }
       ${
         state.consentAndSettings.captionsEnabled
@@ -677,6 +702,43 @@ const renderScene = (scene) => {
         type: "trace-result",
         content: "skipped",
       };
+    });
+  }
+
+  if (interactionType === "repeat-sound") {
+    const repeatAudioButton = sceneRoot.querySelector("#repeat-audio-button");
+    const tapPathButton = sceneRoot.querySelector("#repeat-tap-path-button");
+
+    repeatAudioButton?.addEventListener("click", () => {
+      latestInput = {
+        type: "system-start",
+        content: `repeat:${safeScene.interaction.phoneme}`,
+      };
+      speakText(safeScene.interaction.phoneme, `Repeated "${safeScene.interaction.phoneme}".`);
+    });
+
+    tapPathButton?.addEventListener("click", () => {
+      latestInput = {
+        type: "tap-choice",
+        content: `${safeScene.scene.objectiveId}:tap-path`,
+      };
+      renderScene(normalizeSceneForRuntime(safeScene, updateConsentSettings(state, { soundEnabled: false })));
+      setStatus("Tap path opened for this step.");
+    });
+  }
+
+  if (interactionType === "none") {
+    sceneRoot.querySelector("#continue-scene-button")?.addEventListener("click", async () => {
+      latestInput = {
+        type: "tap-choice",
+        content: `${safeScene.scene.objectiveId}:continue`,
+      };
+      state = appendRecentTurn(state, {
+        role: "user",
+        content: `continue:${safeScene.scene.objectiveId}`,
+      });
+      persistState();
+      await renderCurrentDecisionScene();
     });
   }
 
@@ -819,16 +881,19 @@ const importBackup = async (file) => {
     text = decryptBackupPayload(text, passphrase);
   }
   const parsed = JSON.parse(text);
-  state = createDefaultState({
-    ...migrateState(parsed.state),
-    capabilities: capabilitySnapshot,
-  });
+  state = hydrateAssetIndex(
+    createDefaultState({
+      ...migrateState(parsed.state),
+      capabilities: capabilitySnapshot,
+    }),
+  );
   currentScene = parsed.scene ?? null;
   persistState();
   if (currentScene) {
     persistScene(currentScene);
     renderScene(currentScene);
   } else {
+    removeStorage(SCENE_KEY);
     renderCurrentDecisionScene();
   }
   updateSettingsForm();
@@ -1031,7 +1096,14 @@ installAssetsButton?.addEventListener("click", async () => {
   }
 
   if (plan.totalBytes > 1_000_000) {
-    setStatus("Large local model pack detected. Storage estimate checked before install.");
+    const confirmed = globalThis.confirm(
+      `Install ${plan.assets.length} optional asset${plan.assets.length === 1 ? "" : "s"} ` +
+        `(${Math.round(plan.totalBytes / 1024)} KB) on this device?`,
+    );
+    if (!confirmed) {
+      setStatus("Optional asset install cancelled.");
+      return;
+    }
   }
 
   for (const asset of plan.assets) {
@@ -1100,7 +1172,7 @@ syncStorageStatus().catch((error) => {
 const restoredScene = hydrateScene();
 if (restoredScene) {
   setStatus("Restored the last safe scene.");
-  renderScene(restoredScene);
+  renderScene(recoverSceneForRuntime(restoredScene, state));
 } else {
   setStatus("Starting with the local baseline path.");
   renderCurrentDecisionScene().catch((error) => {

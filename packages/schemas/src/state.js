@@ -30,7 +30,7 @@ export const createStateShape = (overrides = {}) => ({
       science: 0,
       physics: 0,
     },
-    currentObjectiveId: "baseline.audio-choice.1",
+    currentObjectiveId: "baseline.observe-sound.0",
     assessmentStatus: "not-started",
     mastery: masteryBucket(),
     ...overrides.pedagogicalState,
@@ -48,6 +48,8 @@ export const createStateShape = (overrides = {}) => ({
     cloudImageEnabled: false,
     cloudVisionEnabled: false,
     adminPinEnabled: false,
+    adminPinHash: null,
+    adminUnlocked: false,
     captionsEnabled: true,
     soundEnabled: true,
     storagePersistenceGranted: "unknown",
@@ -64,7 +66,9 @@ export const createStateShape = (overrides = {}) => ({
     ...overrides.capabilities,
   },
   assetIndex: {
+    manifestVersion: 1,
     byId: {},
+    quotaEstimate: null,
     ...overrides.assetIndex,
   },
 });

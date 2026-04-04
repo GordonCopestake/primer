@@ -1,0 +1,93 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import { handleDirectorRoute } from "../relay/src/routes/director.js";
+import { handleImageRoute } from "../relay/src/routes/image.js";
+import { handleVisionRoute } from "../relay/src/routes/vision.js";
+
+test("director route validates, redacts, and returns a bounded scene", async () => {
+  const result = await handleDirectorRoute({
+    requestId: "director-1",
+    learnerSummary: "Locale en-GB. Literacy stage 1.",
+    runtimeSummary: "recent turn",
+    latestInput: {
+      type: "tap-choice",
+      content: "reading.symbol-match.1:map",
+    },
+    hardConstraints: {
+      activeDomain: "reading",
+      literacyStage: 1,
+      objectiveId: "reading.symbol-match.1",
+      allowedSceneKinds: ["lesson", "fallback"],
+      allowedInteractionTypes: ["tap-choice", "none"],
+      maxNarrationChars: 120,
+      imageGenerationAllowed: false,
+      locale: "en-GB",
+    },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.blueprint.scene.objectiveId, "reading.symbol-match.1");
+  assert.match(result.headers["x-primer-provider"], /local-mock/);
+});
+
+test("director route blocks mixed-age-unsafe content", async () => {
+  const result = await handleDirectorRoute({
+    requestId: "director-2",
+    learnerSummary: "Locale en-GB.",
+    runtimeSummary: "graphic violence",
+    latestInput: {
+      type: "tap-choice",
+      content: "reading.symbol-match.1:map",
+    },
+    hardConstraints: {
+      activeDomain: "reading",
+      literacyStage: 1,
+      objectiveId: "reading.symbol-match.1",
+      allowedSceneKinds: ["lesson", "fallback"],
+      allowedInteractionTypes: ["tap-choice", "none"],
+      maxNarrationChars: 120,
+      imageGenerationAllowed: false,
+      locale: "en-GB",
+    },
+  });
+
+  assert.equal(result.status, 422);
+  assert.equal(result.body.error.code, "moderation_blocked");
+});
+
+test("image route queues first and serves ready on subsequent request", async () => {
+  const request = {
+    requestId: "image-1",
+    recipeId: "neutral_choice_board",
+    vars: {
+      palette: "sand-and-sky",
+    },
+    cacheKey: "reading:sand-and-sky",
+  };
+
+  const queued = await handleImageRoute(request);
+  const ready = await handleImageRoute(request);
+
+  assert.equal(queued.status, 202);
+  assert.equal(queued.body.status, "queued");
+  assert.equal(ready.status, 200);
+  assert.equal(ready.body.status, "ready");
+});
+
+test("vision route returns advisory evidence only", async () => {
+  const result = await handleVisionRoute({
+    requestId: "vision-1",
+    imageBase64: "ZmFrZQ==",
+    task: "complex-symbol-check",
+    context: {
+      target: "M",
+      learnerStage: 2,
+      domain: "writing",
+    },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.success, true);
+  assert.equal(result.body.evidence.observedSkill, "symbol-trace");
+});

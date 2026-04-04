@@ -13,6 +13,7 @@ import {
   migrateState,
   nextCurriculumDecision,
   recordAssessmentCompletion,
+  setActiveScene,
 } from "../packages/core/src/index.js";
 
 test("migrateState returns a spec-shaped default state", () => {
@@ -45,10 +46,12 @@ test("detectCapabilities classifies accelerated tier only with richer features",
 });
 
 test("new learner starts in embedded baseline assessment", () => {
-  const decision = nextCurriculumDecision(createDefaultState());
+  const state = createDefaultState();
+  const decision = nextCurriculumDecision(state);
   assert.equal(decision.activeDomain, "preliteracy");
   assert.equal(decision.objectiveId, "baseline.observe-sound.0");
   assert.deepEqual(decision.allowedSceneKinds, ["assessment", "fallback"]);
+  assert.equal(state.pedagogicalState.currentObjectiveId, "baseline.observe-sound.0");
 });
 
 test("assessment advances through staged baseline checkpoints", () => {
@@ -141,6 +144,17 @@ test("recent turns are bounded", () => {
 
   assert.equal(state.runtimeSession.recentTurns.length, 8);
   assert.equal(state.runtimeSession.recentTurns[0].content, "turn-2");
+});
+
+test("active scene syncs the pedagogical current objective", () => {
+  const nextState = setActiveScene(createDefaultState(), {
+    scene: {
+      id: "scene_reading_1",
+      objectiveId: "reading.symbol-match.1",
+    },
+  });
+
+  assert.equal(nextState.pedagogicalState.currentObjectiveId, "reading.symbol-match.1");
 });
 
 test("fallback scene is always locally renderable", () => {

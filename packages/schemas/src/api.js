@@ -10,6 +10,7 @@ export const createStableError = (code, message, details = null) => ({
 
 export const validateDirectorRequest = (request) => {
   const errors = [];
+  const allowedInputTypes = new Set(["transcript", "tap-choice", "trace-result", "system-start"]);
   if (!request?.requestId) {
     errors.push("requestId is required.");
   }
@@ -18,6 +19,9 @@ export const validateDirectorRequest = (request) => {
   }
   if (!request?.latestInput?.type || typeof request?.latestInput?.content !== "string") {
     errors.push("latestInput is required.");
+  }
+  if (request?.latestInput?.type && !allowedInputTypes.has(request.latestInput.type)) {
+    errors.push("latestInput.type must be a supported bounded input type.");
   }
   if (!request?.hardConstraints?.activeDomain || !request?.hardConstraints?.objectiveId) {
     errors.push("hardConstraints are required.");

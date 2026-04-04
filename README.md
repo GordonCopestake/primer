@@ -1,6 +1,6 @@
 # Primer
 
-Primer is a static local-first adaptive learning web app scaffold based on `spec.txt`.
+Primer is an adaptive learning web app
 
 The current implementation focuses on the v1 runtime foundation:
 

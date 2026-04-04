@@ -41,6 +41,31 @@ test("director request validator accepts the bounded request shape", () => {
   assert.deepEqual(result.errors, []);
 });
 
+test("director request validator rejects unsupported latest input types", () => {
+  const result = validateDirectorRequest({
+    requestId: "director-1",
+    learnerSummary: "Learner is at stage 1.",
+    runtimeSummary: null,
+    latestInput: {
+      type: "freeform",
+      content: "something",
+    },
+    hardConstraints: {
+      activeDomain: "reading",
+      literacyStage: 1,
+      objectiveId: "reading.symbol-match.1",
+      allowedSceneKinds: ["lesson", "fallback"],
+      allowedInteractionTypes: ["tap-choice", "none"],
+      maxNarrationChars: 120,
+      imageGenerationAllowed: false,
+      locale: "en-GB",
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join(" "), /latestinput\.type/i);
+});
+
 test("director request summarizes learner state instead of dumping sensitive raw state", () => {
   const state = runtimeModule.createDefaultState({
     learnerProfile: {
@@ -115,6 +140,50 @@ test("director response validator rejects HTML in narration", () => {
   assert.match(result.errors.join(" "), /raw html/i);
 });
 
+test("director response validator rejects objective drift and unsafe recipes", () => {
+  const result = validateDirectorResponse(
+    {
+      blueprint: {
+        version: 1,
+        scene: {
+          id: "scene_wrong_objective",
+          kind: "lesson",
+          objectiveId: "reading.symbol-match.99",
+          transition: "fade",
+          tone: "curious",
+        },
+        narration: {
+          text: "Choose the matching symbol.",
+          maxChars: 40,
+          estDurationMs: 1000,
+          bargeInAllowed: true,
+        },
+        interaction: {
+          type: "tap-choice",
+          options: [{ id: "a", audioLabel: "A" }],
+        },
+        visualIntent: {
+          type: "recipe",
+          recipeId: "unbounded_recipe",
+          vars: {},
+        },
+      },
+    },
+    {
+      activeDomain: "reading",
+      literacyStage: 1,
+      objectiveId: "reading.symbol-match.1",
+      allowedSceneKinds: ["lesson", "fallback"],
+      allowedInteractionTypes: ["tap-choice", "none"],
+      maxNarrationChars: 120,
+    },
+  );
+
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join(" "), /objective/i);
+  assert.match(result.errors.join(" "), /visual recipe/i);
+});
+
 test("local trace scoring accepts broad, deliberate strokes", () => {
   const points = [
     { x: 10, y: 10 },
@@ -135,6 +204,50 @@ test("local trace scoring accepts broad, deliberate strokes", () => {
   const score = runtimeModule.scoreTrace(points, { width: 220, height: 220 });
   assert.equal(score.success, true);
   assert.ok(score.confidence >= 0.72);
+});
+
+test("repeat-sound scenes fall back to a tap path when local audio is unavailable", () => {
+  const state = runtimeModule.createDefaultState({
+    capabilities: {
+      localTTS: false,
+    },
+  });
+
+  const normalized = runtimeModule.normalizeSceneForRuntime(
+    {
+      version: 1,
+      scene: {
+        id: "scene_repeat_sound",
+        kind: "lesson",
+        objectiveId: "reading.symbol-match.1",
+        transition: "fade",
+        tone: "curious",
+      },
+      narration: {
+        text: "Repeat the sound m.",
+        maxChars: 90,
+        estDurationMs: 1200,
+        bargeInAllowed: true,
+      },
+      interaction: {
+        type: "repeat-sound",
+        phoneme: "m",
+      },
+      visualIntent: {
+        type: "recipe",
+        recipeId: "neutral_choice_board",
+        vars: {},
+      },
+      evidence: {
+        observedSkill: "repeat-sound",
+        confidenceHint: 0.6,
+      },
+    },
+    state,
+  );
+
+  assert.equal(normalized.interaction.type, "tap-choice");
+  assert.equal(normalized.interaction.options[0].id, "M");
 });
 
 test("mock director can propose a bounded scene when relay is set to mock", async () => {
@@ -243,6 +356,61 @@ test("relay request failure returns a stable error without throwing", async () =
 
   assert.equal(result.ok, false);
   assert.equal(result.error.error.code, "relay_request_failed");
+});
+
+test("relay timeouts return a stable error without blocking indefinitely", async () => {
+  process.env.PRIMER_RELAY_BASE_URL = "https://relay.example";
+  const timeoutRuntime = await import(new URL(`../apps/web/src/app/runtime.js?timeout=${Date.now()}`, import.meta.url));
+  const state = timeoutRuntime.createDefaultState();
+  const decision = timeoutRuntime.nextCurriculumDecision(state);
+  const result = await timeoutRuntime.requestDirectorScene({
+    state,
+    decision,
+    latestInput: {
+      type: "system-start",
+      content: "startup",
+    },
+    localScene: timeoutRuntime.createFallbackScene("timeout"),
+    fetchImpl: () => new Promise(() => {}),
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error.error.code, "relay_request_failed");
+  assert.match(String(result.error.error.details), /relay-timeout/);
+});
+
+test("recovered scenes fall back safely when persisted scene is malformed", () => {
+  const recovered = runtimeModule.recoverSceneForRuntime(
+    {
+      version: 1,
+      scene: {
+        id: "broken",
+        kind: "lesson",
+        objectiveId: "reading.symbol-match.1",
+        transition: "fade",
+        tone: "curious",
+      },
+      narration: {
+        text: "<div>unsafe</div>",
+        maxChars: 20,
+        estDurationMs: 1000,
+        bargeInAllowed: true,
+      },
+      interaction: {
+        type: "tap-choice",
+        options: [{ id: "a", audioLabel: "A" }],
+      },
+      visualIntent: {
+        type: "recipe",
+        recipeId: "neutral_choice_board",
+        vars: {},
+      },
+    },
+    runtimeModule.createDefaultState(),
+  );
+
+  assert.equal(recovered.scene.kind, "fallback");
+  assert.equal(recovered.scene.objectiveId, "fallback.safe-path");
 });
 
 test("asset manifest seeds essential built-in assets", () => {
