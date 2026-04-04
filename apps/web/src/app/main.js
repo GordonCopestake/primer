@@ -414,7 +414,13 @@ const createSceneFromDecision = (decision) => {
       },
       visualIntent: fallbackScene.visualIntent,
       interaction:
-        decision.literacyStage >= 2
+        decision.literacyStage >= 3
+          ? {
+              type: "read-respond",
+              prompt: "Read: The map is on the table. Type one key word you heard.",
+              expectedKeywords: ["map", "table"],
+            }
+          : decision.literacyStage >= 2
           ? {
               type: "tap-choice",
               options: [
@@ -583,6 +589,20 @@ const renderScene = (scene) => {
       `
       : "";
 
+  const readRespondMarkup =
+    interactionType === "read-respond"
+      ? `
+        <div class="trace-stage">
+          <p class="trace-hint">${safeScene.interaction.prompt}</p>
+          <input id="read-respond-input" class="response-input" type="text" maxlength="80" />
+          <div class="trace-actions">
+            <button type="button" class="choice-button" id="read-respond-submit">Submit</button>
+            <button type="button" class="choice-button" id="read-respond-skip">Skip</button>
+          </div>
+        </div>
+      `
+      : "";
+
   sceneRoot.innerHTML = `
     <div class="scene-body">
       <div class="scene-meta">
@@ -593,7 +613,7 @@ const renderScene = (scene) => {
       ${
         interactionType === "tap-choice"
           ? `<div class="choice-grid">${choiceMarkup}</div>`
-          : traceMarkup || repeatMarkup || continueMarkup
+          : traceMarkup || repeatMarkup || readRespondMarkup || continueMarkup
       }
       ${
         state.consentAndSettings.captionsEnabled
@@ -752,6 +772,43 @@ const renderScene = (scene) => {
       state = appendRecentTurn(state, {
         role: "user",
         content: `continue:${safeScene.scene.objectiveId}`,
+      });
+      persistState();
+      await renderCurrentDecisionScene();
+    });
+  }
+
+  if (interactionType === "read-respond") {
+    const input = sceneRoot.querySelector("#read-respond-input");
+    const submitButton = sceneRoot.querySelector("#read-respond-submit");
+    const skipButton = sceneRoot.querySelector("#read-respond-skip");
+
+    submitButton?.addEventListener("click", async () => {
+      const response = String(input?.value ?? "").trim().toLowerCase();
+      const expected = safeScene.interaction.expectedKeywords.map((value) => String(value).toLowerCase());
+      const correct = expected.some((keyword) => response.includes(keyword));
+      latestInput = {
+        type: "transcript",
+        content: response || "empty",
+      };
+      state = appendRecentTurn(state, {
+        role: "user",
+        content: `read-respond:${safeScene.scene.objectiveId}:${response || "empty"}`,
+      });
+      state = applyMasteryEvidence(state, currentDecision.activeDomain, correct ? 1 : 0);
+      persistState();
+      setStatus(correct ? "Great reading response." : "Saved. Try another response on the next step.");
+      await renderCurrentDecisionScene();
+    });
+
+    skipButton?.addEventListener("click", async () => {
+      latestInput = {
+        type: "tap-choice",
+        content: `${safeScene.scene.objectiveId}:skip-read-respond`,
+      };
+      state = appendRecentTurn(state, {
+        role: "user",
+        content: `read-respond-skip:${safeScene.scene.objectiveId}`,
       });
       persistState();
       await renderCurrentDecisionScene();

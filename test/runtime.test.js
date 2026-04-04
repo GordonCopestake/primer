@@ -214,6 +214,49 @@ test("director response validator rejects objective drift and unsafe recipes", (
   assert.match(result.errors.join(" "), /visual recipe/i);
 });
 
+test("director response validator accepts read/respond interaction when constrained", () => {
+  const result = validateDirectorResponse(
+    {
+      blueprint: {
+        version: 1,
+        scene: {
+          id: "scene_read_respond",
+          kind: "lesson",
+          objectiveId: "reading.symbol-match.3",
+          transition: "fade",
+          tone: "encouraging",
+        },
+        narration: {
+          text: "Read and reply with one key word.",
+          maxChars: 120,
+          estDurationMs: 1200,
+          bargeInAllowed: true,
+        },
+        interaction: {
+          type: "read-respond",
+          prompt: "Read: The map is on the table.",
+          expectedKeywords: ["map", "table"],
+        },
+        visualIntent: {
+          type: "recipe",
+          recipeId: "neutral_choice_board",
+          vars: {},
+        },
+      },
+    },
+    {
+      activeDomain: "reading",
+      literacyStage: 3,
+      objectiveId: "reading.symbol-match.3",
+      allowedSceneKinds: ["lesson", "fallback"],
+      allowedInteractionTypes: ["read-respond", "none"],
+      maxNarrationChars: 120,
+    },
+  );
+
+  assert.equal(result.ok, true);
+});
+
 test("local trace scoring accepts broad, deliberate strokes", () => {
   const points = [
     { x: 10, y: 10 },

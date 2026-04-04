@@ -154,6 +154,16 @@ h3 {
   gap: 12px;
 }
 
+.response-input {
+  width: min(420px, 100%);
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font: inherit;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.95);
+}
+
 .trace-hint {
   margin: 0;
   font-size: 0.95rem;

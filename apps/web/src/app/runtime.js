@@ -19,7 +19,7 @@ const APP_CONFIG = {
 };
 
 const SCHEMA_VERSION = 1;
-const V1_INTERACTIONS = ["none", "tap-choice", "repeat-sound", "trace-symbol"];
+const V1_INTERACTIONS = ["none", "tap-choice", "repeat-sound", "trace-symbol", "read-respond"];
 const V1_SCENE_KINDS = ["assessment", "lesson", "practice", "review", "reward", "fallback"];
 const VALID_TRANSITIONS = new Set(["fade", "slide", "pan"]);
 const VALID_TONES = new Set(["calm", "encouraging", "celebratory", "focused", "curious"]);
@@ -149,7 +149,7 @@ const readingDecision = (stage = 1) => ({
   activeDomain: "reading",
   literacyStage: stage,
   allowedSceneKinds: lessonKinds,
-  allowedInteractionTypes: ["tap-choice", "trace-symbol", "repeat-sound", "none"],
+  allowedInteractionTypes: ["tap-choice", "trace-symbol", "repeat-sound", "read-respond", "none"],
   cloudEscalationAllowed: APP_CONFIG.features.cloudDirector,
   maxNarrationChars: 120,
   maxPromptComplexity: 2,
@@ -817,6 +817,18 @@ const validateSceneBlueprint = (blueprint, decision = null) => {
 
   if (interactionType === "repeat-sound" && !blueprint?.interaction?.phoneme) {
     errors.push("Repeat sound scenes require a phoneme.");
+  }
+
+  if (interactionType === "read-respond") {
+    if (!blueprint?.interaction?.prompt || typeof blueprint.interaction.prompt !== "string") {
+      errors.push("Read/respond scenes require a prompt.");
+    }
+    if (
+      !Array.isArray(blueprint?.interaction?.expectedKeywords) ||
+      blueprint.interaction.expectedKeywords.length === 0
+    ) {
+      errors.push("Read/respond scenes require expected keywords.");
+    }
   }
 
   const narrationText = blueprint?.narration?.text ?? "";
