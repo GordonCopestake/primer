@@ -1,6 +1,7 @@
 import http from "node:http";
 
 import { createStableError } from "../../packages/schemas/src/index.js";
+import { handleChatRoute } from "./routes/chat.js";
 import { handleDirectorRoute } from "./routes/director.js";
 import { handleImageRoute } from "./routes/image.js";
 import { handleVisionRoute } from "./routes/vision.js";
@@ -24,6 +25,10 @@ const METHOD_NOT_ALLOWED = {
 const routeRequest = async (urlPath, body) => {
   if (urlPath === "/director") {
     return handleDirectorRoute(body);
+  }
+
+  if (urlPath === "/chat") {
+    return handleChatRoute(body);
   }
 
   if (urlPath === "/image") {

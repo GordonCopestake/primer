@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 import {
   createStableError,
+  validateChatRequest,
+  validateChatResponse,
   validateDirectorRequest,
   validateDirectorResponse,
 } from "../packages/schemas/src/index.js";
@@ -64,6 +66,34 @@ test("director request validator rejects unsupported latest input types", () => 
 
   assert.equal(result.ok, false);
   assert.match(result.errors.join(" "), /latestinput\.type/i);
+});
+
+test("chat request validator accepts bounded chat shape", () => {
+  const result = validateChatRequest({
+    requestId: "chat-1",
+    learnerSummary: "Learner is at stage 1.",
+    latestInput: {
+      type: "transcript",
+      content: "How do I do this?",
+    },
+    maxResponseChars: 120,
+  });
+
+  assert.equal(result.ok, true);
+});
+
+test("chat response validator rejects HTML in text", () => {
+  const result = validateChatResponse(
+    {
+      reply: {
+        text: "<b>Unsafe</b>",
+      },
+    },
+    120,
+  );
+
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join(" "), /html/i);
 });
 
 test("director request summarizes learner state instead of dumping sensitive raw state", () => {
