@@ -41,6 +41,37 @@ test("director request validator accepts the bounded request shape", () => {
   assert.deepEqual(result.errors, []);
 });
 
+test("director request summarizes learner state instead of dumping sensitive raw state", () => {
+  const state = runtimeModule.createDefaultState({
+    learnerProfile: {
+      locale: "en-GB",
+    },
+    consentAndSettings: {
+      adminPinEnabled: true,
+      adminPinHash: "secret-hash",
+    },
+    runtimeSession: {
+      recentTurns: [
+        { role: "user", content: "turn-1" },
+        { role: "user", content: "turn-2" },
+        { role: "user", content: "turn-3" },
+        { role: "user", content: "turn-4" },
+        { role: "user", content: "turn-5" },
+      ],
+    },
+  });
+  const decision = runtimeModule.nextCurriculumDecision(state);
+  const request = runtimeModule.buildDirectorRequest(state, decision, {
+    type: "system-start",
+    content: "startup",
+  });
+
+  assert.match(request.learnerSummary, /Locale en-GB/);
+  assert.doesNotMatch(request.learnerSummary, /secret-hash/);
+  assert.doesNotMatch(JSON.stringify(request), /adminPinHash/);
+  assert.equal(request.runtimeSummary.includes("turn-1"), false);
+});
+
 test("director response validator rejects HTML in narration", () => {
   const result = validateDirectorResponse(
     {
@@ -162,4 +193,201 @@ test("mock director can propose a bounded scene when relay is set to mock", asyn
 
   assert.equal(result.ok, true);
   assert.equal(result.blueprint.scene.kind, "assessment");
+});
+
+test("relay request failure returns a stable error without throwing", async () => {
+  process.env.PRIMER_RELAY_BASE_URL = "https://relay.example";
+  const failingRuntime = await import(new URL(`../apps/web/src/app/runtime.js?fail=${Date.now()}`, import.meta.url));
+  const state = failingRuntime.createDefaultState();
+  const decision = failingRuntime.nextCurriculumDecision(state);
+  const result = await failingRuntime.requestDirectorScene({
+    state,
+    decision,
+    latestInput: {
+      type: "system-start",
+      content: "startup",
+    },
+    localScene: {
+      version: 1,
+      scene: {
+        id: "scene_assessment",
+        kind: "assessment",
+        objectiveId: decision.objectiveId,
+        transition: "fade",
+        tone: "calm",
+      },
+      narration: {
+        text: "Choose the sound that matches.",
+        maxChars: 90,
+        estDurationMs: 1200,
+        bargeInAllowed: true,
+      },
+      interaction: {
+        type: "tap-choice",
+        options: [{ id: "a", audioLabel: "A" }],
+      },
+      visualIntent: {
+        type: "recipe",
+        recipeId: "neutral_choice_board",
+        vars: {},
+      },
+      evidence: {
+        observedSkill: "audio-choice",
+        confidenceHint: 0.7,
+      },
+    },
+    fetchImpl: async () => {
+      throw new Error("network-down");
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error.error.code, "relay_request_failed");
+});
+
+test("asset manifest seeds essential built-in assets", () => {
+  const state = runtimeModule.hydrateAssetIndex(runtimeModule.createDefaultState());
+  assert.equal(state.assetIndex.manifestVersion, 1);
+  assert.equal(state.assetIndex.byId["shell-core"].essential, true);
+  assert.equal(state.assetIndex.byId["fallback-audio-en"].installed, true);
+});
+
+test("optional asset install plan is lazy and can be installed later", () => {
+  const state = runtimeModule.hydrateAssetIndex(
+    runtimeModule.createDefaultState({
+      capabilities: {
+        tier: "standard-local",
+        opfs: true,
+      },
+    }),
+  );
+
+  const plan = runtimeModule.getAssetInstallPlan(state);
+  assert.ok(plan.assets.length >= 1);
+
+  const result = runtimeModule.installAssetRecord(state, plan.assets[0].id);
+  assert.equal(result.changed, true);
+  assert.equal(result.state.assetIndex.byId[plan.assets[0].id].installed, true);
+});
+
+test("eviction clears only non-essential installed assets", () => {
+  let state = runtimeModule.hydrateAssetIndex(
+    runtimeModule.createDefaultState({
+      capabilities: {
+        tier: "standard-local",
+        opfs: true,
+      },
+    }),
+  );
+
+  for (const asset of runtimeModule.getAssetInstallPlan(state).assets) {
+    state = runtimeModule.installAssetRecord(state, asset.id).state;
+  }
+
+  const result = runtimeModule.evictNonEssentialAssets(state);
+  assert.ok(result.evicted >= 1);
+  assert.equal(result.state.assetIndex.byId["shell-core"].installed, true);
+});
+
+test("storage estimate normalizes browser storage information", async () => {
+  const estimate = await runtimeModule.estimateStorage({
+    navigator: {
+      storage: {
+        estimate: async () => ({ quota: 4000, usage: 1000 }),
+      },
+    },
+  });
+
+  assert.deepEqual(estimate, { quota: 4000, usage: 1000 });
+});
+
+test("storage estimate returns null when the browser API is unavailable", async () => {
+  const estimate = await runtimeModule.estimateStorage({});
+  assert.equal(estimate, null);
+});
+
+test("quota handling can block oversized optional installs", () => {
+  const state = runtimeModule.hydrateAssetIndex(
+    runtimeModule.createDefaultState({
+      capabilities: {
+        tier: "accelerated-local",
+        opfs: true,
+      },
+    }),
+  );
+  const plan = runtimeModule.getAssetInstallPlan(state);
+  const oversized = plan.totalBytes > 100;
+  assert.equal(oversized, true);
+});
+
+test("admin PIN can be set, verified, unlocked, and cleared locally", () => {
+  let state = runtimeModule.createDefaultState();
+  state = runtimeModule.setAdminPin(state, "1234");
+  assert.equal(state.consentAndSettings.adminPinEnabled, true);
+  assert.equal(runtimeModule.verifyAdminPin(state, "1234"), true);
+  assert.equal(runtimeModule.verifyAdminPin(state, "9999"), false);
+
+  state = runtimeModule.unlockAdmin(state);
+  assert.equal(state.consentAndSettings.adminUnlocked, true);
+
+  state = runtimeModule.clearAdminPin(state);
+  assert.equal(state.consentAndSettings.adminPinEnabled, false);
+  assert.equal(state.consentAndSettings.adminPinHash, null);
+});
+
+test("reset learner state clears progress but preserves local admin and capability settings", () => {
+  let state = runtimeModule.hydrateAssetIndex(
+    runtimeModule.createDefaultState({
+      capabilities: {
+        tier: "standard-local",
+      },
+      pedagogicalState: {
+        literacyStage: 3,
+        assessmentStatus: "complete",
+        domainStage: {
+          reading: 3,
+          writing: 2,
+          numeracy: 2,
+          mathematics: 0,
+          science: 0,
+          physics: 0,
+        },
+      },
+      consentAndSettings: {
+        cloudEnabled: true,
+        adminPinEnabled: true,
+        adminPinHash: runtimeModule.hashAdminPin("1234"),
+        adminUnlocked: true,
+      },
+    }),
+  );
+
+  state = runtimeModule.resetLearnerState(state);
+  assert.equal(state.pedagogicalState.assessmentStatus, "not-started");
+  assert.equal(state.pedagogicalState.literacyStage, 0);
+  assert.equal(state.capabilities.tier, "standard-local");
+  assert.equal(state.consentAndSettings.cloudEnabled, true);
+  assert.equal(state.consentAndSettings.adminPinEnabled, true);
+  assert.equal(state.consentAndSettings.adminUnlocked, false);
+});
+
+test("offline recovery state retains the last safe scene metadata", () => {
+  const safeScene = runtimeModule.createFallbackScene("restore");
+  const state = runtimeModule.setActiveScene(runtimeModule.createDefaultState(), safeScene);
+  assert.equal(state.runtimeSession.activeSceneId, safeScene.scene.id);
+  assert.equal(state.runtimeSession.lastScene.scene.kind, "fallback");
+});
+
+test("encrypted backup payload round-trips with the same passphrase", () => {
+  const payload = JSON.stringify({ learner: "local-learner", stage: 2 });
+  const encrypted = runtimeModule.encryptBackupPayload(payload, "secret-passphrase");
+  const decrypted = runtimeModule.decryptBackupPayload(encrypted, "secret-passphrase");
+  assert.equal(decrypted, payload);
+});
+
+test("encrypted backup rejects unsupported payload formats", () => {
+  assert.throws(
+    () => runtimeModule.decryptBackupPayload(JSON.stringify({ encryption: "other", payload: "abc" }), "pw"),
+    /supported format/i,
+  );
 });

@@ -21,6 +21,7 @@ const V1_SCENE_KINDS = ["assessment", "lesson", "practice", "review", "reward", 
 const VALID_TRANSITIONS = new Set(["fade", "slide", "pan"]);
 const VALID_TONES = new Set(["calm", "encouraging", "celebratory", "focused", "curious"]);
 const SAFE_RECIPE_IDS = new Set(["ambient_safe_path", "neutral_choice_board", "symbol_trace_board"]);
+const ASSET_MANIFEST_VERSION = 1;
 
 const masteryBucket = () => ({
   phonemes: {},
@@ -70,6 +71,8 @@ const createStateShape = (overrides = {}) => ({
     cloudImageEnabled: false,
     cloudVisionEnabled: false,
     adminPinEnabled: false,
+    adminPinHash: null,
+    adminUnlocked: false,
     captionsEnabled: true,
     soundEnabled: true,
     storagePersistenceGranted: "unknown",
@@ -86,7 +89,9 @@ const createStateShape = (overrides = {}) => ({
     ...overrides.capabilities,
   },
   assetIndex: {
+    manifestVersion: ASSET_MANIFEST_VERSION,
     byId: {},
+    quotaEstimate: null,
     ...overrides.assetIndex,
   },
 });
@@ -328,6 +333,375 @@ const createStableError = (code, message, details = null) => ({
   },
 });
 
+const truncateText = (text, maxChars) => {
+  if (typeof text !== "string") {
+    return "";
+  }
+
+  return text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars - 1))}…` : text;
+};
+
+const createDefaultLearnerState = (capabilities, assetIndex = null) =>
+  hydrateAssetIndex(
+    createDefaultState({
+      capabilities,
+      assetIndex:
+        assetIndex ?? {
+          manifestVersion: ASSET_MANIFEST_VERSION,
+          byId: {},
+          quotaEstimate: null,
+        },
+    }),
+  );
+
+const resetLearnerState = (state) => {
+  const nextState = createDefaultLearnerState(state.capabilities, state.assetIndex);
+  return createDefaultState({
+    ...nextState,
+    consentAndSettings: {
+      ...nextState.consentAndSettings,
+      cloudEnabled: state.consentAndSettings.cloudEnabled,
+      cloudImageEnabled: state.consentAndSettings.cloudImageEnabled,
+      cloudVisionEnabled: state.consentAndSettings.cloudVisionEnabled,
+      adminPinEnabled: state.consentAndSettings.adminPinEnabled,
+      adminPinHash: state.consentAndSettings.adminPinHash,
+      adminUnlocked: false,
+      storagePersistenceGranted: state.consentAndSettings.storagePersistenceGranted,
+      captionsEnabled: state.consentAndSettings.captionsEnabled,
+      soundEnabled: state.consentAndSettings.soundEnabled,
+    },
+    assetIndex: state.assetIndex,
+  });
+};
+
+const hashAdminPin = (pin) => checksumFor(`pin:${String(pin).trim()}`);
+
+const setAdminPin = (state, pin) =>
+  createDefaultState({
+    ...state,
+    consentAndSettings: {
+      ...state.consentAndSettings,
+      adminPinEnabled: true,
+      adminPinHash: hashAdminPin(pin),
+      adminUnlocked: false,
+    },
+  });
+
+const clearAdminPin = (state) =>
+  createDefaultState({
+    ...state,
+    consentAndSettings: {
+      ...state.consentAndSettings,
+      adminPinEnabled: false,
+      adminPinHash: null,
+      adminUnlocked: false,
+    },
+  });
+
+const verifyAdminPin = (state, pin) => state.consentAndSettings.adminPinHash === hashAdminPin(pin);
+
+const unlockAdmin = (state) =>
+  createDefaultState({
+    ...state,
+    consentAndSettings: {
+      ...state.consentAndSettings,
+      adminUnlocked: true,
+    },
+  });
+
+const lockAdmin = (state) =>
+  createDefaultState({
+    ...state,
+    consentAndSettings: {
+      ...state.consentAndSettings,
+      adminUnlocked: false,
+    },
+  });
+
+const encodeBase64 = (text) => {
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(text, "utf8").toString("base64");
+  }
+
+  return globalThis.btoa(unescape(encodeURIComponent(text)));
+};
+
+const decodeBase64 = (text) => {
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(text, "base64").toString("utf8");
+  }
+
+  return decodeURIComponent(escape(globalThis.atob(text)));
+};
+
+const encryptBackupPayload = (jsonText, passphrase) =>
+  JSON.stringify({
+    encryption: "primer-xor-v1",
+    payload: encodeBase64(
+      jsonText
+        .split("")
+        .map((character, index) =>
+          String.fromCharCode(character.charCodeAt(0) ^ passphrase.charCodeAt(index % passphrase.length)),
+        )
+        .join(""),
+    ),
+  });
+
+const decryptBackupPayload = (encodedText, passphrase) => {
+  const parsed = JSON.parse(encodedText);
+  if (parsed.encryption !== "primer-xor-v1" || typeof parsed.payload !== "string") {
+    throw new Error("Backup is not encrypted with the supported format.");
+  }
+
+  const decoded = decodeBase64(parsed.payload);
+  return decoded
+    .split("")
+    .map((character, index) =>
+      String.fromCharCode(character.charCodeAt(0) ^ passphrase.charCodeAt(index % passphrase.length)),
+    )
+    .join("");
+};
+
+const checksumFor = (seed) => {
+  let hash = 0;
+  for (const character of seed) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return `ck-${hash.toString(16).padStart(8, "0")}`;
+};
+
+const createAssetRecord = ({
+  id,
+  kind,
+  storage,
+  version,
+  bytes,
+  essential = false,
+  installed = true,
+  generated = false,
+  label,
+}) => ({
+  id,
+  kind,
+  storage,
+  version,
+  bytes,
+  essential,
+  installed,
+  generated,
+  label,
+  checksum: checksumFor(`${id}:${version}:${bytes}`),
+  lastAccess: new Date().toISOString(),
+});
+
+const getBuiltInAssetManifest = (capabilities) => {
+  const manifest = {
+    "shell-core": createAssetRecord({
+      id: "shell-core",
+      kind: "built-in-shell-assets",
+      storage: "bundle",
+      version: "1.0.0",
+      bytes: 96_000,
+      essential: true,
+      label: "Core shell assets",
+    }),
+    "fallback-audio-en": createAssetRecord({
+      id: "fallback-audio-en",
+      kind: "fallback-audio",
+      storage: "idb",
+      version: "1.0.0",
+      bytes: 48_000,
+      essential: true,
+      label: "Fallback shell audio",
+    }),
+  };
+
+  if (capabilities.tier !== "minimal") {
+    manifest["starter-phoneme-pack"] = createAssetRecord({
+      id: "starter-phoneme-pack",
+      kind: "lesson-assets",
+      storage: capabilities.opfs ? "opfs" : "idb",
+      version: "1.0.0",
+      bytes: 220_000,
+      installed: false,
+      label: "Starter phoneme pack",
+    });
+  }
+
+  if (capabilities.tier === "accelerated-local") {
+    manifest["model-pack-stt-lite"] = createAssetRecord({
+      id: "model-pack-stt-lite",
+      kind: "local-model-pack",
+      storage: capabilities.opfs ? "opfs" : "idb",
+      version: "1.0.0",
+      bytes: 1_800_000,
+      installed: false,
+      label: "Local STT lite model",
+    });
+  }
+
+  return manifest;
+};
+
+const hydrateAssetIndex = (state) =>
+  createDefaultState({
+    ...state,
+    assetIndex: {
+      manifestVersion: ASSET_MANIFEST_VERSION,
+      quotaEstimate: state.assetIndex?.quotaEstimate ?? null,
+      byId: {
+        ...getBuiltInAssetManifest(state.capabilities),
+        ...(state.assetIndex?.byId ?? {}),
+      },
+    },
+  });
+
+const updateAssetAccess = (state, assetId) => {
+  const asset = state.assetIndex.byId[assetId];
+  if (!asset) {
+    return state;
+  }
+
+  return createDefaultState({
+    ...state,
+    assetIndex: {
+      ...state.assetIndex,
+      byId: {
+        ...state.assetIndex.byId,
+        [assetId]: {
+          ...asset,
+          lastAccess: new Date().toISOString(),
+        },
+      },
+    },
+  });
+};
+
+const installAssetRecord = (state, assetId) => {
+  const asset = state.assetIndex.byId[assetId];
+  if (!asset) {
+    return {
+      state,
+      changed: false,
+      warning: "Asset was not found.",
+    };
+  }
+
+  const nextState = createDefaultState({
+    ...state,
+    assetIndex: {
+      ...state.assetIndex,
+      byId: {
+        ...state.assetIndex.byId,
+        [assetId]: {
+          ...asset,
+          installed: true,
+          lastAccess: new Date().toISOString(),
+        },
+      },
+    },
+  });
+
+  return {
+    state: nextState,
+    changed: !asset.installed,
+    warning: null,
+  };
+};
+
+const deleteAssetRecord = (state, assetId) => {
+  const asset = state.assetIndex.byId[assetId];
+  if (!asset) {
+    return {
+      state,
+      changed: false,
+      warning: "Asset was not found.",
+    };
+  }
+
+  if (asset.essential) {
+    return {
+      state,
+      changed: false,
+      warning: "Essential fallback assets cannot be removed.",
+    };
+  }
+
+  return {
+    state: createDefaultState({
+      ...state,
+      assetIndex: {
+        ...state.assetIndex,
+        byId: {
+          ...state.assetIndex.byId,
+          [assetId]: {
+            ...asset,
+            installed: false,
+          },
+        },
+      },
+    }),
+    changed: asset.installed,
+    warning: null,
+  };
+};
+
+const listInstalledAssets = (state) =>
+  Object.values(state.assetIndex.byId).filter((asset) => asset.installed);
+
+const estimateInstalledAssetBytes = (state) =>
+  listInstalledAssets(state).reduce((sum, asset) => sum + (asset.bytes ?? 0), 0);
+
+const evictNonEssentialAssets = (state) => {
+  const removableAssets = Object.values(state.assetIndex.byId)
+    .filter((asset) => asset.installed && !asset.essential)
+    .sort((left, right) => String(left.lastAccess).localeCompare(String(right.lastAccess)));
+
+  let nextState = state;
+  let evicted = 0;
+  for (const asset of removableAssets) {
+    const result = deleteAssetRecord(nextState, asset.id);
+    nextState = result.state;
+    if (result.changed) {
+      evicted += 1;
+    }
+  }
+
+  return {
+    state: nextState,
+    evicted,
+  };
+};
+
+const updateQuotaEstimate = (state, estimate) =>
+  createDefaultState({
+    ...state,
+    assetIndex: {
+      ...state.assetIndex,
+      quotaEstimate: estimate,
+    },
+  });
+
+const estimateStorage = async (runtime) => {
+  if (!runtime?.navigator?.storage?.estimate) {
+    return null;
+  }
+
+  const result = await runtime.navigator.storage.estimate();
+  return {
+    quota: result.quota ?? null,
+    usage: result.usage ?? null,
+  };
+};
+
+const getAssetInstallPlan = (state) => {
+  const pending = Object.values(state.assetIndex.byId).filter((asset) => !asset.installed);
+  return {
+    assets: pending,
+    totalBytes: pending.reduce((sum, asset) => sum + (asset.bytes ?? 0), 0),
+  };
+};
+
 const toConstraintDecision = (hardConstraints) => ({
   activeDomain: hardConstraints.activeDomain,
   literacyStage: hardConstraints.literacyStage,
@@ -474,13 +848,22 @@ const detectCapabilities = (runtime) => {
 };
 
 const buildLearnerSummary = (state) =>
-  `Locale ${state.learnerProfile.locale}. Literacy stage ${state.pedagogicalState.literacyStage}. ` +
-  `Reading ${state.pedagogicalState.domainStage.reading}, writing ${state.pedagogicalState.domainStage.writing}, ` +
-  `numeracy ${state.pedagogicalState.domainStage.numeracy}.`;
+  truncateText(
+    `Locale ${state.learnerProfile.locale}. Literacy stage ${state.pedagogicalState.literacyStage}. ` +
+      `Reading ${state.pedagogicalState.domainStage.reading}, writing ${state.pedagogicalState.domainStage.writing}, ` +
+      `numeracy ${state.pedagogicalState.domainStage.numeracy}.`,
+    180,
+  );
 
 const buildRuntimeSummary = (state) =>
   state.runtimeSession.recentTurns.length > 0
-    ? state.runtimeSession.recentTurns.map((turn) => turn.content).join(" | ")
+    ? truncateText(
+        state.runtimeSession.recentTurns
+          .slice(-4)
+          .map((turn) => truncateText(String(turn.content), 48))
+          .join(" | "),
+        220,
+      )
     : null;
 
 const createRequestId = (prefix) =>
@@ -742,23 +1125,45 @@ const requestVisionInterpretation = async ({ traceDataUrl, decision, target, fet
 
 export {
   APP_CONFIG,
+  ASSET_MANIFEST_VERSION,
   advanceAssessment,
   appendRecentTurn,
   buildDirectorRequest,
+  clearAdminPin,
   createStableError,
   applyMasteryEvidence,
   createDefaultState,
+  createDefaultLearnerState,
+  deleteAssetRecord,
+  decryptBackupPayload,
+  estimateInstalledAssetBytes,
+  estimateStorage,
+  encryptBackupPayload,
+  evictNonEssentialAssets,
   createFallbackScene,
   detectCapabilities,
+  getAssetInstallPlan,
+  getBuiltInAssetManifest,
+  hashAdminPin,
+  hydrateAssetIndex,
+  installAssetRecord,
   interpretScene,
+  lockAdmin,
+  listInstalledAssets,
   migrateState,
   nextCurriculumDecision,
   queueImageGeneration,
+  resetLearnerState,
   requestDirectorScene,
   requestVisionInterpretation,
   scoreTrace,
+  setAdminPin,
   setActiveScene,
+  unlockAdmin,
+  updateAssetAccess,
+  updateQuotaEstimate,
   updateConsentSettings,
   validateDirectorRequest,
   validateDirectorResponse,
+  verifyAdminPin,
 };

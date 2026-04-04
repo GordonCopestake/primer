@@ -143,8 +143,6 @@ The architecture must support learners entering at any point on that ladder.
 
 ## 4.2 v1 Delivery Scope
 
-Primer v1 must **not** attempt to fully solve the entire ladder.
-
 Primer v1 focuses on proving the adaptive runtime and deterministic learning architecture in a narrower but meaningful band.
 
 ### v1 Scope

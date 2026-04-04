@@ -3,18 +3,36 @@ import {
   advanceAssessment,
   appendRecentTurn,
   applyMasteryEvidence,
+  clearAdminPin,
   createDefaultState,
   createFallbackScene,
+  decryptBackupPayload,
+  deleteAssetRecord,
   detectCapabilities,
+  estimateInstalledAssetBytes,
+  estimateStorage,
+  encryptBackupPayload,
+  evictNonEssentialAssets,
+  getAssetInstallPlan,
+  hydrateAssetIndex,
+  installAssetRecord,
   interpretScene,
+  lockAdmin,
+  listInstalledAssets,
   migrateState,
   nextCurriculumDecision,
   queueImageGeneration,
+  resetLearnerState,
   requestDirectorScene,
   requestVisionInterpretation,
   scoreTrace,
+  setAdminPin,
   setActiveScene,
+  unlockAdmin,
+  updateAssetAccess,
+  updateQuotaEstimate,
   updateConsentSettings,
+  verifyAdminPin,
 } from "./runtime.js";
 
 const sceneRoot = document.querySelector("#scene-root");
@@ -30,7 +48,20 @@ const settingsDialog = document.querySelector("#settings-dialog");
 const soundEnabledInput = document.querySelector("#sound-enabled");
 const captionsEnabledInput = document.querySelector("#captions-enabled");
 const cloudEnabledInput = document.querySelector("#cloud-enabled");
+const cloudImageEnabledInput = document.querySelector("#cloud-image-enabled");
+const cloudVisionEnabledInput = document.querySelector("#cloud-vision-enabled");
+const encryptedExportEnabledInput = document.querySelector("#encrypted-export-enabled");
+const adminPinEnabledInput = document.querySelector("#admin-pin-enabled");
+const adminPinInput = document.querySelector("#admin-pin-input");
+const savePinButton = document.querySelector("#save-pin-button");
+const unlockAdminButton = document.querySelector("#unlock-admin-button");
+const resetButton = document.querySelector("#reset-button");
 const storageIndicator = document.querySelector("#storage-indicator");
+const assetIndicator = document.querySelector("#asset-indicator");
+const adminIndicator = document.querySelector("#admin-indicator");
+const installAssetsButton = document.querySelector("#install-assets-button");
+const evictAssetsButton = document.querySelector("#evict-assets-button");
+const refreshStorageButton = document.querySelector("#refresh-storage-button");
 const requestPersistenceButton = document.querySelector("#request-persistence-button");
 const exportButton = document.querySelector("#export-button");
 const importButton = document.querySelector("#import-button");
@@ -48,6 +79,7 @@ let latestInput = {
   type: "system-start",
   content: "startup",
 };
+let activeTracePad = null;
 
 const createTracePad = (canvas, onStateChange) => {
   if (!canvas) {
@@ -135,6 +167,13 @@ const createTracePad = (canvas, onStateChange) => {
       hasDrawn = false;
       onStateChange(false);
     },
+    destroy() {
+      globalThis.removeEventListener("resize", resize);
+      canvas.removeEventListener("pointerdown", start);
+      canvas.removeEventListener("pointermove", move);
+      canvas.removeEventListener("pointerup", stop);
+      canvas.removeEventListener("pointerleave", stop);
+    },
   };
 };
 
@@ -167,6 +206,14 @@ const writeStorage = (key, value) => {
   }
 };
 
+const removeStorage = (key) => {
+  try {
+    globalThis.localStorage?.removeItem(key);
+  } catch {
+    // Ignore storage removal failures and continue locally.
+  }
+};
+
 const hydrateState = () => {
   const raw = readStorage(STORAGE_KEY);
   let parsed = null;
@@ -191,7 +238,7 @@ const hydrateScene = () => {
   }
 };
 
-let state = hydrateState();
+let state = hydrateAssetIndex(hydrateState());
 
 const persistState = () => {
   writeStorage(STORAGE_KEY, JSON.stringify(state));
@@ -423,6 +470,8 @@ const speakScene = (scene) => {
 };
 
 const renderScene = (scene) => {
+  activeTracePad?.destroy();
+  activeTracePad = null;
   currentDecision = nextCurriculumDecision(state);
   const result = interpretScene(scene, currentDecision);
   const safeScene = result.ok ? result.blueprint : createFallbackScene("validation-failure");
@@ -430,6 +479,9 @@ const renderScene = (scene) => {
 
   currentScene = safeScene;
   state = setActiveScene(state, safeScene);
+  if (safeScene.visualIntent?.recipeId) {
+    state = updateAssetAccess(state, "shell-core");
+  }
   persistState();
   persistScene(safeScene);
 
@@ -550,6 +602,7 @@ const renderScene = (scene) => {
         continueButton.disabled = !ready;
       }
     });
+    activeTracePad = pad ?? null;
 
     continueButton?.addEventListener("click", async (event) => {
       event.preventDefault();
@@ -694,9 +747,26 @@ const updateSettingsForm = () => {
   soundEnabledInput.checked = state.consentAndSettings.soundEnabled;
   captionsEnabledInput.checked = state.consentAndSettings.captionsEnabled;
   cloudEnabledInput.checked = state.consentAndSettings.cloudEnabled;
+  cloudImageEnabledInput.checked = state.consentAndSettings.cloudImageEnabled;
+  cloudVisionEnabledInput.checked = state.consentAndSettings.cloudVisionEnabled;
+  encryptedExportEnabledInput.checked = APP_CONFIG.features.encryptedExport;
+  adminPinEnabledInput.checked = state.consentAndSettings.adminPinEnabled;
+  adminPinInput.value = "";
+  const quota = state.assetIndex.quotaEstimate?.quota ?? null;
+  const usage = state.assetIndex.quotaEstimate?.usage ?? null;
+  const installedBytes = estimateInstalledAssetBytes(state);
+  const installedAssets = listInstalledAssets(state);
   storageIndicator.textContent =
     `Storage persistence: ${state.consentAndSettings.storagePersistenceGranted}. ` +
-    `Relay: ${APP_CONFIG.relayBaseUrl || "disabled"}.`;
+    `Relay: ${APP_CONFIG.relayBaseUrl || "disabled"}. ` +
+    (quota ? `Usage ${Math.round((usage ?? 0) / 1024)} KB of ${Math.round(quota / 1024)} KB.` : "Usage estimate unavailable.");
+  assetIndicator.textContent =
+    `Assets: ${installedAssets.length} installed, ${Math.round(installedBytes / 1024)} KB local.`;
+  adminIndicator.textContent =
+    `Admin PIN: ${state.consentAndSettings.adminPinEnabled ? "enabled" : "off"}. ` +
+    `Admin actions: ${state.consentAndSettings.adminUnlocked ? "unlocked" : "locked"}.`;
+  unlockAdminButton.disabled = !state.consentAndSettings.adminPinEnabled;
+  resetButton.disabled = state.consentAndSettings.adminPinEnabled && !state.consentAndSettings.adminUnlocked;
 };
 
 const syncStorageStatus = async () => {
@@ -708,24 +778,46 @@ const syncStorageStatus = async () => {
   state = updateConsentSettings(state, {
     storagePersistenceGranted: persisted ? "granted" : "not-granted",
   });
+  const quotaEstimate = await estimateStorage(globalThis);
+  state = updateQuotaEstimate(state, quotaEstimate);
   persistState();
   updateSettingsForm();
 };
 
 const exportBackup = () => {
   const payload = JSON.stringify({ state, scene: currentScene }, null, 2);
-  const blob = new Blob([payload], { type: "application/json" });
+  let data = payload;
+  let filename = "primer-backup.json";
+
+  if (APP_CONFIG.features.encryptedExport && encryptedExportEnabledInput.checked) {
+    const passphrase = globalThis.prompt("Enter a passphrase for the encrypted backup:");
+    if (!passphrase) {
+      setStatus("Encrypted export cancelled.");
+      return;
+    }
+    data = encryptBackupPayload(payload, passphrase);
+    filename = "primer-backup.encrypted.json";
+  }
+
+  const blob = new Blob([data], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = "primer-backup.json";
+  anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
   setStatus("Backup exported locally.");
 };
 
 const importBackup = async (file) => {
-  const text = await file.text();
+  let text = await file.text();
+  if (file.name.endsWith(".encrypted.json")) {
+    const passphrase = globalThis.prompt("Enter the backup passphrase:");
+    if (!passphrase) {
+      throw new Error("Missing backup passphrase.");
+    }
+    text = decryptBackupPayload(text, passphrase);
+  }
   const parsed = JSON.parse(text);
   state = createDefaultState({
     ...migrateState(parsed.state),
@@ -824,6 +916,84 @@ cloudEnabledInput?.addEventListener("change", () => {
   updateSettingsForm();
 });
 
+cloudImageEnabledInput?.addEventListener("change", () => {
+  state = updateConsentSettings(state, { cloudImageEnabled: cloudImageEnabledInput.checked });
+  persistState();
+  updateSettingsForm();
+});
+
+cloudVisionEnabledInput?.addEventListener("change", () => {
+  state = updateConsentSettings(state, { cloudVisionEnabled: cloudVisionEnabledInput.checked });
+  persistState();
+  updateSettingsForm();
+});
+
+adminPinEnabledInput?.addEventListener("change", () => {
+  if (!adminPinEnabledInput.checked) {
+    state = clearAdminPin(state);
+    persistState();
+    updateSettingsForm();
+    setStatus("Admin PIN removed.");
+    return;
+  }
+
+  setStatus("Enter a PIN and save it to protect admin actions.");
+});
+
+savePinButton?.addEventListener("click", () => {
+  const pin = adminPinInput.value.trim();
+  if (pin.length < 4) {
+    setStatus("Admin PIN must be at least 4 digits or characters.");
+    return;
+  }
+
+  state = setAdminPin(state, pin);
+  persistState();
+  updateSettingsForm();
+  setStatus("Admin PIN saved locally.");
+});
+
+unlockAdminButton?.addEventListener("click", () => {
+  const pin = adminPinInput.value.trim();
+  if (!state.consentAndSettings.adminPinEnabled) {
+    setStatus("Admin PIN is not enabled.");
+    return;
+  }
+
+  if (!verifyAdminPin(state, pin)) {
+    setStatus("Admin PIN did not match.");
+    return;
+  }
+
+  state = unlockAdmin(state);
+  persistState();
+  updateSettingsForm();
+  setStatus("Admin actions unlocked for this session.");
+});
+
+resetButton?.addEventListener("click", () => {
+  if (state.consentAndSettings.adminPinEnabled && !state.consentAndSettings.adminUnlocked) {
+    setStatus("Unlock admin actions before resetting local learner data.");
+    return;
+  }
+
+  const confirmed = globalThis.confirm("Reset local learner progress and restore the baseline path?");
+  if (!confirmed) {
+    return;
+  }
+
+  state = lockAdmin(resetLearnerState(state));
+  currentScene = null;
+  persistState();
+  removeStorage(SCENE_KEY);
+  updateSettingsForm();
+  setStatus("Local learner progress reset.");
+  renderCurrentDecisionScene().catch((error) => {
+    console.error("Reset render failed", error);
+    renderScene(createFallbackScene("reset-failure"));
+  });
+});
+
 requestPersistenceButton?.addEventListener("click", async () => {
   if (!navigator.storage?.persist) {
     setStatus("Persistent storage request is unavailable here.");
@@ -837,6 +1007,61 @@ requestPersistenceButton?.addEventListener("click", async () => {
   persistState();
   updateSettingsForm();
   setStatus(granted ? "Persistent storage granted." : "Persistent storage not granted.");
+});
+
+installAssetsButton?.addEventListener("click", async () => {
+  const plan = getAssetInstallPlan(state);
+  if (plan.assets.length === 0) {
+    setStatus("Starter assets are already installed for this device tier.");
+    return;
+  }
+
+  const quotaEstimate = (await estimateStorage(globalThis)) ?? state.assetIndex.quotaEstimate;
+  if (quotaEstimate) {
+    state = updateQuotaEstimate(state, quotaEstimate);
+  }
+  const availableBytes =
+    quotaEstimate?.quota && quotaEstimate?.usage ? quotaEstimate.quota - quotaEstimate.usage : null;
+
+  if (availableBytes !== null && plan.totalBytes > availableBytes) {
+    setStatus("Not enough local storage for the optional asset pack. Clear cache or request more space.");
+    persistState();
+    updateSettingsForm();
+    return;
+  }
+
+  if (plan.totalBytes > 1_000_000) {
+    setStatus("Large local model pack detected. Storage estimate checked before install.");
+  }
+
+  for (const asset of plan.assets) {
+    const result = installAssetRecord(state, asset.id);
+    state = result.state;
+  }
+
+  persistState();
+  updateSettingsForm();
+  setStatus(`Installed ${plan.assets.length} optional local asset${plan.assets.length === 1 ? "" : "s"}.`);
+});
+
+evictAssetsButton?.addEventListener("click", () => {
+  const result = evictNonEssentialAssets(state);
+  state = result.state;
+  persistState();
+  updateSettingsForm();
+  setStatus(
+    result.evicted > 0
+      ? `Cleared ${result.evicted} non-essential cached asset${result.evicted === 1 ? "" : "s"}.`
+      : "No non-essential cached assets were installed.",
+  );
+});
+
+refreshStorageButton?.addEventListener("click", async () => {
+  const quotaEstimate = await estimateStorage(globalThis);
+  state = updateQuotaEstimate(state, quotaEstimate);
+  persistState();
+  updateSettingsForm();
+  setStatus(quotaEstimate ? "Storage estimate refreshed." : "Storage estimate is unavailable on this device.");
 });
 
 exportButton?.addEventListener("click", () => {
@@ -854,6 +1079,8 @@ importInput?.addEventListener("change", async () => {
   }
   try {
     await importBackup(file);
+    state = hydrateAssetIndex(state);
+    updateSettingsForm();
   } catch (error) {
     console.error("Import failed", error);
     setStatus("Import failed. The existing learner data was kept.");
