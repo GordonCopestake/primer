@@ -44,8 +44,8 @@ export const createStateShape = (overrides = {}) => ({
     ...overrides.runtimeSession,
   },
   consentAndSettings: {
-    cloudEnabled: false,
-    cloudImageEnabled: false,
+    cloudEnabled: true,
+    cloudImageEnabled: true,
     cloudVisionEnabled: false,
     adminPinEnabled: false,
     adminPinHash: null,

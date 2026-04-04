@@ -82,28 +82,43 @@ let latestInput = {
   content: "startup",
 };
 let activeTracePad = null;
+let orbState = "idle";
+
+const setOrbState = (nextState) => {
+  orbState = nextState;
+  if (listenButton) {
+    listenButton.dataset.orbState = nextState;
+  }
+};
 
 const speakText = (text, statusMessage = null) => {
   if (!state.consentAndSettings.soundEnabled) {
+    setOrbState("muted");
     setStatus("Sound is turned off. Tap controls remain available.");
     return false;
   }
 
   if (!capabilitySnapshot.localTTS || !globalThis.speechSynthesis) {
+    setOrbState("error");
     setStatus("Text audio is unavailable here. Tap controls remain available.");
     return false;
   }
 
   stopAudioAndInput();
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.onstart = () => setLoading("Narrating");
+  utterance.onstart = () => {
+    setOrbState("speaking");
+    setLoading("Narrating");
+  };
   utterance.onend = () => {
+    setOrbState("idle");
     setLoading("Idle");
     if (statusMessage) {
       setStatus(statusMessage);
     }
   };
   utterance.onerror = () => {
+    setOrbState("error");
     setLoading("Idle");
     setStatus("Narration could not start. Tap controls are still available.");
   };
@@ -475,6 +490,7 @@ const createSceneFromDecision = (decision) => {
 const stopAudioAndInput = () => {
   globalThis.speechSynthesis?.cancel();
   recognition?.stop();
+  setOrbState(state.consentAndSettings.soundEnabled ? "idle" : "muted");
   setLoading("Interrupted");
 };
 
@@ -744,6 +760,7 @@ const renderScene = (scene) => {
 
   capabilityIndicator.textContent = `Capability tier: ${state.capabilities.tier}`;
   listenButton.disabled = !(capabilitySnapshot.localSTT && capabilitySnapshot.microphone);
+  listenButton.dataset.orbState = orbState;
   speakScene(safeScene);
 };
 
@@ -919,6 +936,7 @@ stopButton?.addEventListener("click", () => {
 
 listenButton?.addEventListener("click", () => {
   if (!recognitionCtor || !(capabilitySnapshot.localSTT && capabilitySnapshot.microphone)) {
+    setOrbState("error");
     setStatus("Listening is unavailable. Tap controls remain available.");
     return;
   }
@@ -929,10 +947,12 @@ listenButton?.addEventListener("click", () => {
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
   recognition.onstart = () => {
+    setOrbState("listening");
     setLoading("Listening");
     setStatus("Listening locally where supported.");
   };
   recognition.onresult = (event) => {
+    setOrbState("thinking");
     const transcript = event.results?.[0]?.[0]?.transcript ?? "";
     state = appendRecentTurn(state, { role: "user", content: `speech:${transcript}` });
     persistState();
@@ -946,10 +966,14 @@ listenButton?.addEventListener("click", () => {
     });
   };
   recognition.onerror = () => {
+    setOrbState("error");
     setStatus("Listening failed. Tap controls remain available.");
     setLoading("Idle");
   };
   recognition.onend = () => {
+    if (orbState === "listening" || orbState === "thinking") {
+      setOrbState(state.consentAndSettings.soundEnabled ? "idle" : "muted");
+    }
     setLoading("Idle");
   };
   recognition.start();
@@ -963,6 +987,7 @@ settingsButton?.addEventListener("click", () => {
 soundEnabledInput?.addEventListener("change", () => {
   state = updateConsentSettings(state, { soundEnabled: soundEnabledInput.checked });
   persistState();
+  setOrbState(soundEnabledInput.checked ? "idle" : "muted");
 });
 
 captionsEnabledInput?.addEventListener("change", () => {
@@ -1168,6 +1193,8 @@ if (APP_CONFIG.appMode !== "test") {
 syncStorageStatus().catch((error) => {
   console.error("Storage check failed", error);
 });
+
+setOrbState(state.consentAndSettings.soundEnabled ? "idle" : "muted");
 
 const restoredScene = hydrateScene();
 if (restoredScene) {
