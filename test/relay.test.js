@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { handleChatRoute } from "../relay/src/routes/chat.js";
 import { handleDirectorRoute } from "../relay/src/routes/director.js";
 import { handleImageRoute } from "../relay/src/routes/image.js";
 import { handleVisionRoute } from "../relay/src/routes/vision.js";
@@ -90,4 +91,23 @@ test("vision route returns advisory evidence only", async () => {
   assert.equal(result.status, 200);
   assert.equal(result.body.success, true);
   assert.equal(result.body.evidence.observedSkill, "symbol-trace");
+});
+
+test("chat route returns bounded mixed-age-safe guidance", async () => {
+  const result = await handleChatRoute({
+    requestId: "chat-1",
+    learnerSummary: "Locale en-GB. Literacy stage 1.",
+    runtimeSummary: "Learner asked for an example.",
+    latestInput: {
+      type: "transcript",
+      content: "How do I match this sound?",
+    },
+    objectiveId: "reading.symbol-match.1",
+    maxResponseChars: 140,
+  });
+
+  assert.equal(result.status, 200);
+  assert.match(result.body.reply.text, /great question/i);
+  assert.ok(result.body.reply.text.length <= 140);
+  assert.equal(result.body.suggestedNextScene.objectiveId, "reading.symbol-match.1");
 });

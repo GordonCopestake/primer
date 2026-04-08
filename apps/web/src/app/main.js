@@ -30,6 +30,7 @@ import {
   scoreTrace,
   setAdminPin,
   setActiveScene,
+  validateMathInputResponse,
   unlockAdmin,
   updateAssetAccess,
   updateQuotaEstimate,
@@ -43,6 +44,7 @@ const statusIndicator = document.querySelector("#status-indicator");
 const loadingIndicator = document.querySelector("#loading-indicator");
 const listenButton = document.querySelector("#listen-button");
 const replayButton = document.querySelector("#replay-button");
+const conceptMapButton = document.querySelector("#concept-map-button");
 const settingsButton = document.querySelector("#settings-button");
 const stopButton = document.querySelector("#stop-button");
 const fallbackButton = document.querySelector("#fallback-button");
@@ -50,6 +52,11 @@ const settingsDialog = document.querySelector("#settings-dialog");
 const soundEnabledInput = document.querySelector("#sound-enabled");
 const captionsEnabledInput = document.querySelector("#captions-enabled");
 const cloudEnabledInput = document.querySelector("#cloud-enabled");
+const providerNameInput = document.querySelector("#provider-name-input");
+const providerModelInput = document.querySelector("#provider-model-input");
+const providerEndpointInput = document.querySelector("#provider-endpoint-input");
+const providerApiKeyInput = document.querySelector("#provider-api-key-input");
+const saveProviderButton = document.querySelector("#save-provider-button");
 const cloudImageEnabledInput = document.querySelector("#cloud-image-enabled");
 const cloudVisionEnabledInput = document.querySelector("#cloud-vision-enabled");
 const encryptedExportEnabledInput = document.querySelector("#encrypted-export-enabled");
@@ -82,28 +89,60 @@ let latestInput = {
   content: "startup",
 };
 let activeTracePad = null;
+let orbState = "idle";
+let lastLessonScene = null;
+
+const algebraConceptGraph = [
+  { id: "arith.recap", label: "Arithmetic recap", prerequisites: [] },
+  { id: "arith.negative", label: "Negative numbers", prerequisites: ["arith.recap"] },
+  { id: "arith.order", label: "Order of operations", prerequisites: ["arith.recap"] },
+  { id: "alg.variables", label: "Variables and symbols", prerequisites: ["arith.order"] },
+  { id: "alg.expressions", label: "Algebraic expressions", prerequisites: ["alg.variables"] },
+  { id: "alg.simplify", label: "Simplifying expressions", prerequisites: ["alg.expressions"] },
+  { id: "alg.inverse", label: "Inverse operations", prerequisites: ["alg.simplify"] },
+  { id: "alg.balance", label: "Balancing equations", prerequisites: ["alg.inverse"] },
+  { id: "alg.onestep", label: "One-step equations", prerequisites: ["alg.balance"] },
+  { id: "alg.twostep", label: "Two-step equations", prerequisites: ["alg.onestep"] },
+  { id: "alg.bothsides", label: "Variables on both sides", prerequisites: ["alg.twostep"] },
+  { id: "alg.check", label: "Checking solutions", prerequisites: ["alg.bothsides"] },
+  { id: "alg.word", label: "Word problems", prerequisites: ["alg.check"] },
+];
+
+const setOrbState = (nextState) => {
+  orbState = nextState;
+  if (listenButton) {
+    listenButton.dataset.orbState = nextState;
+  }
+};
 
 const speakText = (text, statusMessage = null) => {
   if (!state.consentAndSettings.soundEnabled) {
+    setOrbState("muted");
     setStatus("Sound is turned off. Tap controls remain available.");
     return false;
   }
 
   if (!capabilitySnapshot.localTTS || !globalThis.speechSynthesis) {
+    setOrbState("error");
     setStatus("Text audio is unavailable here. Tap controls remain available.");
     return false;
   }
 
   stopAudioAndInput();
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.onstart = () => setLoading("Narrating");
+  utterance.onstart = () => {
+    setOrbState("speaking");
+    setLoading("Narrating");
+  };
   utterance.onend = () => {
+    setOrbState("idle");
     setLoading("Idle");
     if (statusMessage) {
       setStatus(statusMessage);
     }
   };
   utterance.onerror = () => {
+    setOrbState("error");
     setLoading("Idle");
     setStatus("Narration could not start. Tap controls are still available.");
   };
@@ -217,6 +256,16 @@ const setLoading = (message) => {
   if (loadingIndicator) {
     loadingIndicator.textContent = message;
   }
+};
+
+const updateProviderConfig = (updates) => {
+  state = createDefaultState({
+    ...state,
+    providerConfig: {
+      ...state.providerConfig,
+      ...updates,
+    },
+  });
 };
 
 const readStorage = (key) => {
@@ -399,7 +448,13 @@ const createSceneFromDecision = (decision) => {
       },
       visualIntent: fallbackScene.visualIntent,
       interaction:
-        decision.literacyStage >= 2
+        decision.literacyStage >= 3
+          ? {
+              type: "read-respond",
+              prompt: "Read: The map is on the table. Type one key word you heard.",
+              expectedKeywords: ["map", "table"],
+            }
+          : decision.literacyStage >= 2
           ? {
               type: "tap-choice",
               options: [
@@ -459,11 +514,21 @@ const createSceneFromDecision = (decision) => {
       },
       visualIntent: fallbackScene.visualIntent,
       interaction: {
-        type: "tap-choice",
-        options: [
-          { id: "two", label: "••", audioLabel: "Two dots", correct: false },
-          { id: "four", label: "••••", audioLabel: "Four dots", correct: true },
-        ],
+        type:
+          decision.literacyStage >= 2
+            ? "math-input"
+            : "tap-choice",
+        ...(decision.literacyStage >= 2
+          ? {
+              expressionPrompt: "Solve for x: 2x + 3 = 11",
+              expectedExpression: "4",
+            }
+          : {
+              options: [
+                { id: "two", label: "••", audioLabel: "Two dots", correct: false },
+                { id: "four", label: "••••", audioLabel: "Four dots", correct: true },
+              ],
+            }),
       },
       evidence: fallbackScene.evidence,
     };
@@ -472,9 +537,80 @@ const createSceneFromDecision = (decision) => {
   return createFallbackScene("decision-miss");
 };
 
+const deriveConceptStatuses = () => {
+  const solvedApproximation = Math.max(
+    0,
+    (state.pedagogicalState.domainStage.reading ?? 0) +
+      (state.pedagogicalState.domainStage.writing ?? 0) +
+      (state.pedagogicalState.domainStage.numeracy ?? 0),
+  );
+  const progressIndex = Math.min(algebraConceptGraph.length, solvedApproximation + 1);
+
+  return algebraConceptGraph.map((concept, index) => {
+    if (index < progressIndex - 1) {
+      return { ...concept, state: "mastered" };
+    }
+
+    if (index === progressIndex - 1) {
+      return { ...concept, state: "recommended next" };
+    }
+
+    const prereqsMet = concept.prerequisites.every((prereq) => {
+      const prereqIndex = algebraConceptGraph.findIndex((node) => node.id === prereq);
+      return prereqIndex >= 0 && prereqIndex < progressIndex;
+    });
+
+    return {
+      ...concept,
+      state: prereqsMet ? "available" : "locked",
+    };
+  });
+};
+
+const renderConceptMapView = () => {
+  const nodes = deriveConceptStatuses();
+  const rows = nodes
+    .map(
+      (node) => `
+        <li class="concept-node" data-node-state="${node.state.replaceAll(" ", "-")}">
+          <div>
+            <strong>${node.label}</strong>
+            <p class="helper">Prerequisites: ${node.prerequisites.length ? node.prerequisites.join(", ") : "None"}</p>
+          </div>
+          <span class="status-pill subtle">${node.state}</span>
+        </li>
+      `,
+    )
+    .join("");
+
+  sceneRoot.innerHTML = `
+    <div class="scene-body">
+      <h2>Algebra foundations concept map</h2>
+      <p class="helper">Tech-tree style progress view for the bounded MVP module.</p>
+      <ul class="concept-map-list">${rows}</ul>
+      <div class="trace-actions">
+        <button id="resume-lesson-button" type="button" class="choice-button">Resume lesson</button>
+      </div>
+    </div>
+  `;
+
+  sceneRoot.querySelector("#resume-lesson-button")?.addEventListener("click", () => {
+    if (lastLessonScene) {
+      renderScene(lastLessonScene);
+      return;
+    }
+    renderCurrentDecisionScene().catch((error) => {
+      console.error("Resume lesson failed", error);
+      renderScene(createFallbackScene("resume-failure"));
+    });
+  });
+  setStatus("Concept map loaded.");
+};
+
 const stopAudioAndInput = () => {
   globalThis.speechSynthesis?.cancel();
   recognition?.stop();
+  setOrbState(state.consentAndSettings.soundEnabled ? "idle" : "muted");
   setLoading("Interrupted");
 };
 
@@ -492,6 +628,7 @@ const renderScene = (scene) => {
   const interactionType = safeScene.interaction.type;
 
   currentScene = safeScene;
+  lastLessonScene = safeScene;
   state = setActiveScene(state, safeScene);
   if (safeScene.visualIntent?.recipeId) {
     state = updateAssetAccess(state, "shell-core");
@@ -567,6 +704,33 @@ const renderScene = (scene) => {
       `
       : "";
 
+  const readRespondMarkup =
+    interactionType === "read-respond"
+      ? `
+        <div class="trace-stage">
+          <p class="trace-hint">${safeScene.interaction.prompt}</p>
+          <input id="read-respond-input" class="response-input" type="text" maxlength="80" />
+          <div class="trace-actions">
+            <button type="button" class="choice-button" id="read-respond-submit">Submit</button>
+            <button type="button" class="choice-button" id="read-respond-skip">Skip</button>
+          </div>
+        </div>
+      `
+      : "";
+
+  const mathInputMarkup =
+    interactionType === "math-input"
+      ? `
+        <div class="trace-stage">
+          <p class="trace-hint">${safeScene.interaction.expressionPrompt}</p>
+          <input id="math-input-field" class="response-input" type="text" inputmode="text" />
+          <div class="trace-actions">
+            <button type="button" class="choice-button" id="math-submit-button">Check answer</button>
+          </div>
+        </div>
+      `
+      : "";
+
   sceneRoot.innerHTML = `
     <div class="scene-body">
       <div class="scene-meta">
@@ -577,7 +741,7 @@ const renderScene = (scene) => {
       ${
         interactionType === "tap-choice"
           ? `<div class="choice-grid">${choiceMarkup}</div>`
-          : traceMarkup || repeatMarkup || continueMarkup
+          : traceMarkup || repeatMarkup || readRespondMarkup || mathInputMarkup || continueMarkup
       }
       ${
         state.consentAndSettings.captionsEnabled
@@ -742,8 +906,73 @@ const renderScene = (scene) => {
     });
   }
 
+  if (interactionType === "read-respond") {
+    const input = sceneRoot.querySelector("#read-respond-input");
+    const submitButton = sceneRoot.querySelector("#read-respond-submit");
+    const skipButton = sceneRoot.querySelector("#read-respond-skip");
+
+    submitButton?.addEventListener("click", async () => {
+      const response = String(input?.value ?? "").trim().toLowerCase();
+      const expected = safeScene.interaction.expectedKeywords.map((value) => String(value).toLowerCase());
+      const correct = expected.some((keyword) => response.includes(keyword));
+      latestInput = {
+        type: "transcript",
+        content: response || "empty",
+      };
+      state = appendRecentTurn(state, {
+        role: "user",
+        content: `read-respond:${safeScene.scene.objectiveId}:${response || "empty"}`,
+      });
+      state = applyMasteryEvidence(state, currentDecision.activeDomain, correct ? 1 : 0);
+      persistState();
+      setStatus(correct ? "Great reading response." : "Saved. Try another response on the next step.");
+      await renderCurrentDecisionScene();
+    });
+
+    skipButton?.addEventListener("click", async () => {
+      latestInput = {
+        type: "tap-choice",
+        content: `${safeScene.scene.objectiveId}:skip-read-respond`,
+      };
+      state = appendRecentTurn(state, {
+        role: "user",
+        content: `read-respond-skip:${safeScene.scene.objectiveId}`,
+      });
+      persistState();
+      await renderCurrentDecisionScene();
+    });
+  }
+
+  if (interactionType === "math-input") {
+    const input = sceneRoot.querySelector("#math-input-field");
+    const submit = sceneRoot.querySelector("#math-submit-button");
+    submit?.addEventListener("click", async () => {
+      const learnerInput = String(input?.value ?? "").trim();
+      const validation = validateMathInputResponse(learnerInput, safeScene.interaction.expectedExpression);
+      latestInput = {
+        type: "transcript",
+        content: `math:${learnerInput || "empty"}`,
+      };
+      state = appendRecentTurn(state, {
+        role: "user",
+        content: `math-input:${safeScene.scene.objectiveId}:${learnerInput || "empty"}`,
+      });
+      state = applyMasteryEvidence(state, currentDecision.activeDomain, validation.correct ? 1 : 0);
+      persistState();
+      setStatus(
+        validation.correct
+          ? "Correct. Nice algebra step."
+          : validation.reason === "syntax"
+            ? "That input could not be parsed. Try a simpler expression or number."
+            : "Not quite yet. Try the inverse-operation hint and check again.",
+      );
+      await renderCurrentDecisionScene();
+    });
+  }
+
   capabilityIndicator.textContent = `Capability tier: ${state.capabilities.tier}`;
   listenButton.disabled = !(capabilitySnapshot.localSTT && capabilitySnapshot.microphone);
+  listenButton.dataset.orbState = orbState;
   speakScene(safeScene);
 };
 
@@ -777,8 +1006,9 @@ const maybeQueueSceneImage = async (scene) => {
 const renderCurrentDecisionScene = async () => {
   const decision = nextCurriculumDecision(state);
   const localScene = createSceneFromDecision(decision);
+  const hasProviderKey = typeof state.providerConfig?.apiKey === "string" && state.providerConfig.apiKey.length > 0;
 
-  if (state.consentAndSettings.cloudEnabled && decision.cloudEscalationAllowed) {
+  if (state.consentAndSettings.cloudEnabled && decision.cloudEscalationAllowed && hasProviderKey) {
     setLoading("Checking scene");
     const relayResult = await requestDirectorScene({
       state,
@@ -796,7 +1026,9 @@ const renderCurrentDecisionScene = async () => {
       return;
     }
 
-    setStatus("Relay unavailable. Continuing in local-only mode.");
+    setStatus("Relay unavailable. Continuing in local deterministic mode.");
+  } else if (state.consentAndSettings.cloudEnabled && !hasProviderKey) {
+    setStatus("Cloud assist is enabled, but no API key is configured. Using local deterministic mode.");
   }
 
   renderScene(localScene);
@@ -809,6 +1041,10 @@ const updateSettingsForm = () => {
   soundEnabledInput.checked = state.consentAndSettings.soundEnabled;
   captionsEnabledInput.checked = state.consentAndSettings.captionsEnabled;
   cloudEnabledInput.checked = state.consentAndSettings.cloudEnabled;
+  if (providerNameInput) providerNameInput.value = state.providerConfig?.providerName ?? "";
+  if (providerModelInput) providerModelInput.value = state.providerConfig?.modelName ?? "";
+  if (providerEndpointInput) providerEndpointInput.value = state.providerConfig?.endpointUrl ?? "";
+  if (providerApiKeyInput) providerApiKeyInput.value = state.providerConfig?.apiKey ?? "";
   cloudImageEnabledInput.checked = state.consentAndSettings.cloudImageEnabled;
   cloudVisionEnabledInput.checked = state.consentAndSettings.cloudVisionEnabled;
   encryptedExportEnabledInput.checked = APP_CONFIG.features.encryptedExport;
@@ -820,7 +1056,7 @@ const updateSettingsForm = () => {
   const installedAssets = listInstalledAssets(state);
   storageIndicator.textContent =
     `Storage persistence: ${state.consentAndSettings.storagePersistenceGranted}. ` +
-    `Relay: ${APP_CONFIG.relayBaseUrl || "disabled"}. ` +
+    `Relay: ${APP_CONFIG.relayBaseUrl || "disabled"}. Provider: ${state.providerConfig?.providerName || "unset"}. ` +
     (quota ? `Usage ${Math.round((usage ?? 0) / 1024)} KB of ${Math.round(quota / 1024)} KB.` : "Usage estimate unavailable.");
   assetIndicator.textContent =
     `Assets: ${installedAssets.length} installed, ${Math.round(installedBytes / 1024)} KB local.`;
@@ -905,6 +1141,11 @@ fallbackButton?.addEventListener("click", () => {
   renderScene(createFallbackScene("manual"));
 });
 
+conceptMapButton?.addEventListener("click", () => {
+  stopAudioAndInput();
+  renderConceptMapView();
+});
+
 replayButton?.addEventListener("click", () => {
   if (currentScene) {
     speakScene(currentScene);
@@ -919,6 +1160,7 @@ stopButton?.addEventListener("click", () => {
 
 listenButton?.addEventListener("click", () => {
   if (!recognitionCtor || !(capabilitySnapshot.localSTT && capabilitySnapshot.microphone)) {
+    setOrbState("error");
     setStatus("Listening is unavailable. Tap controls remain available.");
     return;
   }
@@ -929,10 +1171,12 @@ listenButton?.addEventListener("click", () => {
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
   recognition.onstart = () => {
+    setOrbState("listening");
     setLoading("Listening");
     setStatus("Listening locally where supported.");
   };
   recognition.onresult = (event) => {
+    setOrbState("thinking");
     const transcript = event.results?.[0]?.[0]?.transcript ?? "";
     state = appendRecentTurn(state, { role: "user", content: `speech:${transcript}` });
     persistState();
@@ -946,10 +1190,14 @@ listenButton?.addEventListener("click", () => {
     });
   };
   recognition.onerror = () => {
+    setOrbState("error");
     setStatus("Listening failed. Tap controls remain available.");
     setLoading("Idle");
   };
   recognition.onend = () => {
+    if (orbState === "listening" || orbState === "thinking") {
+      setOrbState(state.consentAndSettings.soundEnabled ? "idle" : "muted");
+    }
     setLoading("Idle");
   };
   recognition.start();
@@ -963,12 +1211,26 @@ settingsButton?.addEventListener("click", () => {
 soundEnabledInput?.addEventListener("change", () => {
   state = updateConsentSettings(state, { soundEnabled: soundEnabledInput.checked });
   persistState();
+  setOrbState(soundEnabledInput.checked ? "idle" : "muted");
 });
 
 captionsEnabledInput?.addEventListener("change", () => {
   state = updateConsentSettings(state, { captionsEnabled: captionsEnabledInput.checked });
   persistState();
   renderScene(currentScene ?? createFallbackScene("captions"));
+});
+
+saveProviderButton?.addEventListener("click", () => {
+  updateProviderConfig({
+    providerName: providerNameInput?.value.trim() || "openrouter",
+    modelName: providerModelInput?.value.trim() || "",
+    endpointUrl: providerEndpointInput?.value.trim() || "",
+    apiKey: providerApiKeyInput?.value.trim() || "",
+    configuredAt: new Date().toISOString(),
+  });
+  persistState();
+  updateSettingsForm();
+  setStatus("Provider settings saved locally.");
 });
 
 cloudEnabledInput?.addEventListener("change", () => {
@@ -1168,6 +1430,8 @@ if (APP_CONFIG.appMode !== "test") {
 syncStorageStatus().catch((error) => {
   console.error("Storage check failed", error);
 });
+
+setOrbState(state.consentAndSettings.soundEnabled ? "idle" : "muted");
 
 const restoredScene = hydrateScene();
 if (restoredScene) {

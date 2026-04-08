@@ -1,26 +1,37 @@
-# Primer
+# Open-Source Modular AI Tutor
 
-Primer is an adaptive learning web app
+This project is an open-source, web-first, local-first AI tutoring app prototype.
 
-The current implementation focuses on the v1 runtime foundation:
+The current implementation focuses on runtime foundations:
 
 - static web shell with installable PWA assets and offline shell caching
 - local learner-state persistence with safe scene restore
-- deterministic baseline assessment, reading, writing, and numeracy progression helpers
+- deterministic baseline assessment and bounded progression helpers
 - capability detection plus browser-native TTS/STT hooks where supported
 - local settings/admin entry point with export/import backup
 - safe fallback scene and strict scene validation/interpreter guards
 
-## What The App Does
+## Current Progress vs New PM Spec
 
-Primer presents bounded learning scenes inside a fixed local shell. A learner starts in a deterministic baseline assessment, then progresses through simple reading, writing, and numeracy scenes. The app stores learner state locally, restores the last safe scene after reload, exposes local settings and backup controls, and keeps working without any required backend.
+The PM handover spec (`spec.md`) pivots the product toward a bounded BYO-key maths tutor with a concept graph. The current codebase has partial alignment and known gaps.
 
-The web app is intentionally local-first:
+### Implemented alignment
 
-- progression logic runs in the client
-- learner state is stored locally
-- the shell can be installed as a PWA
-- cloud features are optional and currently scaffolded behind local controls
+- no-login local usage with local persistence
+- local export/import support
+- bounded scene/runtime validation and moderation
+- relay stubs for director/chat/image/vision
+- basic adaptive flow scaffolding
+
+### Not yet implemented (major gaps)
+
+- dedicated provider onboarding flow with robust BYO-key UX
+- bounded algebra concept graph (20-30 concepts) and tech-tree dashboard
+- dedicated maths expression input + symbolic equivalence validation
+- structured misconception taxonomy + review scheduler model
+- opt-in telemetry preferences surface and pipeline
+
+The next milestones should prioritize the dedicated maths input + symbolic validator, richer concept-detail interactions, and explicit telemetry consent flows.
 
 ## How To Run It
 

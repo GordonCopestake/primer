@@ -11,35 +11,37 @@
   </head>
   <body>
     <main class="app-shell">
-      <header class="shell-header">
-        <div>
-          <p class="eyebrow">Local-first adaptive learning</p>
-          <h1>Primer</h1>
-        </div>
-        <div class="shell-actions">
-          <button id="listen-button" type="button" class="shell-button">Listen</button>
-          <button id="stop-button" type="button" class="shell-button tertiary">Stop</button>
-          <button id="replay-button" type="button" class="shell-button">Replay</button>
-          <button id="settings-button" type="button" class="shell-button secondary">Settings</button>
-        </div>
-      </header>
-      <div class="status-row">
-        <span id="status-indicator" class="status-pill" aria-live="polite">Ready offline.</span>
+      <button id="settings-button" type="button" class="menu-button" aria-label="Open settings and controls">
+        ☰
+      </button>
+
+      <div class="canvas-status">
+        <span id="status-indicator" class="status-pill" aria-live="polite">Ready. Cloud assist available.</span>
         <span id="capability-indicator" class="status-pill subtle"></span>
       </div>
+
       <section id="scene-root" class="scene-card" aria-live="polite"></section>
-      <footer class="shell-footer">
-        <button id="fallback-button" type="button" class="shell-button secondary">
-          Safe fallback
+
+      <div class="orb-dock" aria-label="AI interaction controls">
+        <button id="listen-button" type="button" class="orb-button" aria-label="Talk to Primer">
+          <span class="orb-core"></span>
+          <span class="orb-label">Talk</span>
         </button>
+        <div class="orb-actions">
+          <button id="concept-map-button" type="button" class="shell-button tertiary">Concept map</button>
+          <button id="stop-button" type="button" class="shell-button tertiary">Stop</button>
+          <button id="replay-button" type="button" class="shell-button">Replay</button>
+          <button id="fallback-button" type="button" class="shell-button secondary">Safe fallback</button>
+        </div>
         <span id="loading-indicator" class="helper" aria-live="polite">Idle</span>
-      </footer>
+      </div>
     </main>
+
     <dialog id="settings-dialog" class="settings-dialog">
       <form method="dialog" class="settings-panel">
         <div class="settings-header">
           <div>
-            <p class="eyebrow">Local settings</p>
+            <p class="eyebrow">Hidden chrome</p>
             <h2>Runtime controls</h2>
           </div>
           <button id="close-settings-button" class="shell-button tertiary" value="cancel">Close</button>
@@ -56,6 +58,31 @@
           <span>Cloud assist enabled</span>
           <input id="cloud-enabled" type="checkbox" />
         </label>
+        <section class="settings-block" aria-labelledby="provider-heading">
+          <div>
+            <p class="eyebrow">Provider</p>
+            <h3 id="provider-heading">BYO API configuration</h3>
+          </div>
+          <label class="setting-row">
+            <span>Provider</span>
+            <input id="provider-name-input" type="text" placeholder="openrouter" />
+          </label>
+          <label class="setting-row">
+            <span>Model</span>
+            <input id="provider-model-input" type="text" placeholder="provider/model" />
+          </label>
+          <label class="setting-row">
+            <span>Endpoint URL</span>
+            <input id="provider-endpoint-input" type="url" placeholder="https://..." />
+          </label>
+          <label class="setting-row">
+            <span>API Key</span>
+            <input id="provider-api-key-input" type="password" />
+          </label>
+          <div class="settings-actions">
+            <button id="save-provider-button" type="button" class="shell-button">Save provider settings</button>
+          </div>
+        </section>
         <section class="settings-block" aria-labelledby="privacy-heading">
           <div>
             <p class="eyebrow">Privacy</p>
@@ -109,21 +136,13 @@
             Install optional starter assets when storage allows. Core fallback assets stay local and protected.
           </p>
           <div class="settings-actions">
-            <button id="install-assets-button" type="button" class="shell-button">
-              Install starter assets
-            </button>
-            <button id="evict-assets-button" type="button" class="shell-button tertiary">
-              Clear non-essential cache
-            </button>
-            <button id="refresh-storage-button" type="button" class="shell-button tertiary">
-              Refresh storage
-            </button>
+            <button id="install-assets-button" type="button" class="shell-button">Install starter assets</button>
+            <button id="evict-assets-button" type="button" class="shell-button tertiary">Clear non-essential cache</button>
+            <button id="refresh-storage-button" type="button" class="shell-button tertiary">Refresh storage</button>
           </div>
         </section>
         <div class="settings-actions">
-          <button id="request-persistence-button" type="button" class="shell-button">
-            Request persistence
-          </button>
+          <button id="request-persistence-button" type="button" class="shell-button">Request persistence</button>
           <button id="export-button" type="button" class="shell-button secondary">Export backup</button>
           <button id="import-button" type="button" class="shell-button secondary">Import backup</button>
         </div>

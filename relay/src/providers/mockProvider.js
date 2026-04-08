@@ -93,3 +93,24 @@ export const proposeSceneBlueprint = (request) => {
     },
   };
 };
+
+export const proposeChatReply = (request) => {
+  const boundedInput = request.latestInput.content.trim();
+  const baseReply =
+    boundedInput.length > 0
+      ? `Great question. ${boundedInput} is a good step. Let's try one short example together.`
+      : "Great question. Let's try one short example together.";
+
+  const text = baseReply.slice(0, request.maxResponseChars);
+  return {
+    reply: {
+      text,
+      maxChars: request.maxResponseChars,
+      estDurationMs: 1800,
+      bargeInAllowed: true,
+    },
+    suggestedNextScene: {
+      objectiveId: request.objectiveId ?? "baseline.observe-sound.0",
+    },
+  };
+};

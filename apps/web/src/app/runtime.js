@@ -5,21 +5,21 @@ const VISION_TIMEOUT_MS = 2_500;
 
 const APP_CONFIG = {
   appMode: env.PRIMER_APP_MODE ?? "development",
-  cloudMode: env.PRIMER_CLOUD_MODE ?? "off",
+  cloudMode: env.PRIMER_CLOUD_MODE ?? "byok",
   relayBaseUrl: env.PRIMER_RELAY_BASE_URL ?? "",
   capabilityMode: env.PRIMER_CAPABILITY_MODE ?? "auto",
   features: {
     cloudDirector: env.FEATURE_CLOUD_DIRECTOR === "true",
     cloudImage: env.FEATURE_CLOUD_IMAGE === "true",
     cloudVision: env.FEATURE_CLOUD_VISION === "true",
-    exportImport: env.FEATURE_EXPORT_IMPORT === "true",
+    exportImport: env.FEATURE_EXPORT_IMPORT !== "false",
     encryptedExport: env.FEATURE_ENCRYPTED_EXPORT === "true",
     debugTools: env.FEATURE_DEBUG_TOOLS === "true",
   },
 };
 
 const SCHEMA_VERSION = 1;
-const V1_INTERACTIONS = ["none", "tap-choice", "repeat-sound", "trace-symbol"];
+const V1_INTERACTIONS = ["none", "tap-choice", "repeat-sound", "trace-symbol", "read-respond", "math-input"];
 const V1_SCENE_KINDS = ["assessment", "lesson", "practice", "review", "reward", "fallback"];
 const VALID_TRANSITIONS = new Set(["fade", "slide", "pan"]);
 const VALID_TONES = new Set(["calm", "encouraging", "celebratory", "focused", "curious"]);
@@ -80,6 +80,14 @@ const createStateShape = (overrides = {}) => ({
     soundEnabled: true,
     storagePersistenceGranted: "unknown",
     ...overrides.consentAndSettings,
+  },
+  providerConfig: {
+    providerName: "openrouter",
+    modelName: "",
+    endpointUrl: "",
+    apiKey: "",
+    configuredAt: null,
+    ...overrides.providerConfig,
   },
   capabilities: {
     tier: "minimal",
@@ -149,7 +157,7 @@ const readingDecision = (stage = 1) => ({
   activeDomain: "reading",
   literacyStage: stage,
   allowedSceneKinds: lessonKinds,
-  allowedInteractionTypes: ["tap-choice", "trace-symbol", "repeat-sound", "none"],
+  allowedInteractionTypes: ["tap-choice", "trace-symbol", "repeat-sound", "read-respond", "none"],
   cloudEscalationAllowed: APP_CONFIG.features.cloudDirector,
   maxNarrationChars: 120,
   maxPromptComplexity: 2,
@@ -171,7 +179,7 @@ const numeracyDecision = (stage = 1) => ({
   activeDomain: "numeracy",
   literacyStage: stage,
   allowedSceneKinds: lessonKinds,
-  allowedInteractionTypes: ["tap-choice", "none"],
+  allowedInteractionTypes: ["tap-choice", "math-input", "none"],
   cloudEscalationAllowed: APP_CONFIG.features.cloudDirector,
   maxNarrationChars: 120,
   maxPromptComplexity: 2,
@@ -423,6 +431,7 @@ const resetLearnerState = (state) => {
       captionsEnabled: state.consentAndSettings.captionsEnabled,
       soundEnabled: state.consentAndSettings.soundEnabled,
     },
+    providerConfig: state.providerConfig,
     assetIndex: state.assetIndex,
   });
 };
@@ -819,6 +828,27 @@ const validateSceneBlueprint = (blueprint, decision = null) => {
     errors.push("Repeat sound scenes require a phoneme.");
   }
 
+  if (interactionType === "read-respond") {
+    if (!blueprint?.interaction?.prompt || typeof blueprint.interaction.prompt !== "string") {
+      errors.push("Read/respond scenes require a prompt.");
+    }
+    if (
+      !Array.isArray(blueprint?.interaction?.expectedKeywords) ||
+      blueprint.interaction.expectedKeywords.length === 0
+    ) {
+      errors.push("Read/respond scenes require expected keywords.");
+    }
+  }
+
+  if (interactionType === "math-input") {
+    if (!blueprint?.interaction?.expressionPrompt || typeof blueprint.interaction.expressionPrompt !== "string") {
+      errors.push("Math input scenes require an expressionPrompt.");
+    }
+    if (!blueprint?.interaction?.expectedExpression || typeof blueprint.interaction.expectedExpression !== "string") {
+      errors.push("Math input scenes require an expectedExpression.");
+    }
+  }
+
   const narrationText = blueprint?.narration?.text ?? "";
   if (/[<>]/.test(narrationText)) {
     errors.push("Raw HTML is not allowed.");
@@ -1156,6 +1186,42 @@ const scoreTrace = (points, bounds) => {
   };
 };
 
+const validateMathInputResponse = (input, expectedExpression) => {
+  const normalizedInput = String(input ?? "").trim();
+  const normalizedExpected = String(expectedExpression ?? "").trim();
+  const safePattern = /^[0-9xX+\-*/().\s=]+$/;
+
+  if (!normalizedInput || !safePattern.test(normalizedInput)) {
+    return { correct: false, reason: "syntax" };
+  }
+
+  const inputRhs = normalizedInput.includes("=") ? normalizedInput.split("=").pop().trim() : normalizedInput;
+  const expectedRhs = normalizedExpected.includes("=")
+    ? normalizedExpected.split("=").pop().trim()
+    : normalizedExpected;
+
+  const asNumber = Number(inputRhs);
+  const expectedNumber = Number(expectedRhs);
+  if (Number.isFinite(asNumber) && Number.isFinite(expectedNumber)) {
+    return { correct: Math.abs(asNumber - expectedNumber) <= 1e-6, reason: "numeric" };
+  }
+
+  try {
+    const toEvaluator = (expr) => Function("x", `"use strict"; return (${expr});`);
+    const leftEval = toEvaluator(inputRhs);
+    const rightEval = toEvaluator(expectedRhs);
+    const checkpoints = [-3, -1, 0, 1, 2, 4];
+    const equivalent = checkpoints.every((x) => {
+      const left = leftEval(x);
+      const right = rightEval(x);
+      return Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) <= 1e-6;
+    });
+    return { correct: equivalent, reason: "expression" };
+  } catch {
+    return { correct: false, reason: "syntax" };
+  }
+};
+
 const requestVisionInterpretation = async ({ traceDataUrl, decision, target, fetchImpl = fetch }) => {
   const relayBaseUrl = APP_CONFIG.relayBaseUrl?.trim();
   if (!relayBaseUrl) {
@@ -1259,6 +1325,7 @@ export {
   requestDirectorScene,
   requestVisionInterpretation,
   scoreTrace,
+  validateMathInputResponse,
   setAdminPin,
   setActiveScene,
   normalizeSceneForRuntime,

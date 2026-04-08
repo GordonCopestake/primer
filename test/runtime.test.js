@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 import {
   createStableError,
+  validateChatRequest,
+  validateChatResponse,
   validateDirectorRequest,
   validateDirectorResponse,
 } from "../packages/schemas/src/index.js";
@@ -64,6 +66,34 @@ test("director request validator rejects unsupported latest input types", () => 
 
   assert.equal(result.ok, false);
   assert.match(result.errors.join(" "), /latestinput\.type/i);
+});
+
+test("chat request validator accepts bounded chat shape", () => {
+  const result = validateChatRequest({
+    requestId: "chat-1",
+    learnerSummary: "Learner is at stage 1.",
+    latestInput: {
+      type: "transcript",
+      content: "How do I do this?",
+    },
+    maxResponseChars: 120,
+  });
+
+  assert.equal(result.ok, true);
+});
+
+test("chat response validator rejects HTML in text", () => {
+  const result = validateChatResponse(
+    {
+      reply: {
+        text: "<b>Unsafe</b>",
+      },
+    },
+    120,
+  );
+
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join(" "), /html/i);
 });
 
 test("director request summarizes learner state instead of dumping sensitive raw state", () => {
@@ -184,6 +214,92 @@ test("director response validator rejects objective drift and unsafe recipes", (
   assert.match(result.errors.join(" "), /visual recipe/i);
 });
 
+test("director response validator accepts read/respond interaction when constrained", () => {
+  const result = validateDirectorResponse(
+    {
+      blueprint: {
+        version: 1,
+        scene: {
+          id: "scene_read_respond",
+          kind: "lesson",
+          objectiveId: "reading.symbol-match.3",
+          transition: "fade",
+          tone: "encouraging",
+        },
+        narration: {
+          text: "Read and reply with one key word.",
+          maxChars: 120,
+          estDurationMs: 1200,
+          bargeInAllowed: true,
+        },
+        interaction: {
+          type: "read-respond",
+          prompt: "Read: The map is on the table.",
+          expectedKeywords: ["map", "table"],
+        },
+        visualIntent: {
+          type: "recipe",
+          recipeId: "neutral_choice_board",
+          vars: {},
+        },
+      },
+    },
+    {
+      activeDomain: "reading",
+      literacyStage: 3,
+      objectiveId: "reading.symbol-match.3",
+      allowedSceneKinds: ["lesson", "fallback"],
+      allowedInteractionTypes: ["read-respond", "none"],
+      maxNarrationChars: 120,
+    },
+  );
+
+  assert.equal(result.ok, true);
+});
+
+test("director response validator accepts math-input interaction when constrained", () => {
+  const result = validateDirectorResponse(
+    {
+      blueprint: {
+        version: 1,
+        scene: {
+          id: "scene_math_input",
+          kind: "practice",
+          objectiveId: "numeracy.more-less.2",
+          transition: "fade",
+          tone: "focused",
+        },
+        narration: {
+          text: "Solve for x and enter your answer.",
+          maxChars: 120,
+          estDurationMs: 1200,
+          bargeInAllowed: true,
+        },
+        interaction: {
+          type: "math-input",
+          expressionPrompt: "2x + 3 = 11",
+          expectedExpression: "4",
+        },
+        visualIntent: {
+          type: "recipe",
+          recipeId: "neutral_choice_board",
+          vars: {},
+        },
+      },
+    },
+    {
+      activeDomain: "numeracy",
+      literacyStage: 2,
+      objectiveId: "numeracy.more-less.2",
+      allowedSceneKinds: ["practice", "fallback"],
+      allowedInteractionTypes: ["math-input", "tap-choice", "none"],
+      maxNarrationChars: 120,
+    },
+  );
+
+  assert.equal(result.ok, true);
+});
+
 test("local trace scoring accepts broad, deliberate strokes", () => {
   const points = [
     { x: 10, y: 10 },
@@ -204,6 +320,17 @@ test("local trace scoring accepts broad, deliberate strokes", () => {
   const score = runtimeModule.scoreTrace(points, { width: 220, height: 220 });
   assert.equal(score.success, true);
   assert.ok(score.confidence >= 0.72);
+});
+
+test("math input validator accepts equivalent numeric answers", () => {
+  const result = runtimeModule.validateMathInputResponse("x = 4", "4");
+  assert.equal(result.correct, true);
+});
+
+test("math input validator rejects malformed expressions", () => {
+  const result = runtimeModule.validateMathInputResponse("alert(1)", "4");
+  assert.equal(result.correct, false);
+  assert.equal(result.reason, "syntax");
 });
 
 test("repeat-sound scenes fall back to a tap path when local audio is unavailable", () => {
@@ -527,6 +654,12 @@ test("reset learner state clears progress but preserves local admin and capabili
         adminPinHash: runtimeModule.hashAdminPin("1234"),
         adminUnlocked: true,
       },
+      providerConfig: {
+        providerName: "openrouter",
+        modelName: "provider/model",
+        endpointUrl: "https://openrouter.ai/api/v1",
+        apiKey: "test-key",
+      },
     }),
   );
 
@@ -537,6 +670,7 @@ test("reset learner state clears progress but preserves local admin and capabili
   assert.equal(state.consentAndSettings.cloudEnabled, true);
   assert.equal(state.consentAndSettings.adminPinEnabled, true);
   assert.equal(state.consentAndSettings.adminUnlocked, false);
+  assert.equal(state.providerConfig.apiKey, "test-key");
 });
 
 test("offline recovery state retains the last safe scene metadata", () => {
