@@ -1,331 +1,309 @@
-# Implementation Plan
+# Remaining Spec Gap Plan
 
-## Current State Review
+`spec.md` is the source of truth. This plan replaces the original migration plan and reflects the current repository state after the algebra-first MVP rebuild work that is already complete.
 
-The repository is a working prototype, but it does not yet match `spec.md`.
+## Audit Summary
 
-What already exists and can be reused:
-- local-first browser app shell with restore/autosave behavior
-- local provider configuration UI and relay endpoints
-- scene/schema validation and safe fallback handling
-- import/export flow and basic persistence helpers
-- basic concept-map style UI surface
-- passing automated test suite for the current prototype
+The codebase is now much closer to the spec than the original prototype:
 
-Main gaps against the spec:
-- current curriculum is still a literacy/numeracy prototype, not one bounded algebra module
-- no real module/subject-pack system yet
-- no curated algebra concept graph with 20-30 concepts, prerequisites, or misconception taxonomy
-- no proper diagnostic flow for algebra readiness
-- no mastery engine for concept states like `locked`, `available`, `in progress`, `mastered`, `review due`, `recommended next`
-- no serious tutoring workspace built around explain -> worked example -> learner attempt -> feedback -> next action
-- maths support is only a very small string-based validator, not a reliable symbolic/numeric validation layer
-- storage is local, but not yet modeled around the learner entities in the spec
-- encrypted export is currently weak placeholder XOR logic and should not count as the required encrypted backup feature
-- telemetry consent, import/export manifesting, and pluggable adapters are not implemented to spec depth
-- browser runtime duplicates core logic from `packages/core`, which will make further implementation harder if left in place
+- one bounded algebra module exists as shared subject-pack data
+- learner state is structured, versioned, and migrated
+- a mixed-input diagnostic exists and feeds tutoring placement
+- the tutoring loop is explicit and evidence-driven
+- deterministic math validation exists for numeric and symbolic checks
+- the web app has the required MVP screens in broad form
+- telemetry, safety, local persistence, and encrypted backup/import exist
+- core contracts and schemas are documented
+- automated coverage is strong and regression-oriented
 
-Spec guardrails that must remain true while implementing:
-- `spec.md` is the source of truth whenever current code or this plan disagrees
-- MVP remains web-first, no-login, local-first, BYO API key only
-- scope stays at one bounded maths module until the full core loop is coherent
-- AI remains constrained by authored graph, schemas, validator rules, and fixed UI components
-- non-functional requirements are not yet reflected in the architecture plan: accessibility, keyboard support, reduced motion, secure API key handling, maintainability, versioned schemas, and extensibility
-- open-source architecture requirements are only partially present: AI provider/model/storage/validation/telemetry/UI registry interfaces are not formally defined
+The remaining work is no longer “foundational rewrite” work. The biggest remaining gaps are product-journey and spec-posture mismatches.
 
-## Recommended Delivery Order
+## Confirmed Gaps Against `spec.md`
 
-Build the MVP in vertical chunks, but first fix the foundation so later work does not land on the wrong model.
+### Gap 1: BYO provider flow is not truly implemented end to end
 
-### Chunk 1: Re-baseline the domain and architecture
-Goal: replace the current child-literacy assumptions with the algebra-first MVP shape from the spec.
+Spec references:
+- FR-002
+- FR-003
+- FR-004
+- Section 6.1
+- Section 16
+- Acceptance criterion 2
 
-Steps:
-1. Define the MVP target module explicitly as `algebra foundations / linear equations`.
-2. Remove literacy-specific terminology from state, curriculum, relay prompts, and tests.
-3. Decide the canonical domain model location:
-   - `packages/schemas` for shared shapes
-   - `packages/core` for engine logic
-   - `apps/web` for rendering only
-4. Lock in MVP delivery constraints from the spec:
-   - web-first
-   - no mandatory login
-   - BYO API key only
-   - online AI required in MVP
-   - local learner state by default
-5. Define the top-level pluggable interfaces up front:
-   - AI provider adapter
-   - model adapter
-   - storage adapter
-   - subject pack
-   - validation plugin
-   - telemetry sink
-   - fixed UI component registry metadata
-6. Delete runtime duplication by making `apps/web/src/app/runtime.js` consume shared `packages/core` and `packages/schemas` logic instead of re-declaring it.
-7. Update README and tests so they describe the new algebra MVP, not the old literacy prototype.
+Current state:
+- the app stores provider name/model/endpoint/key locally
+- the browser relay path is wired and bounded
+- the relay still uses `MOCK_PROVIDER_ADAPTER` for tutoring/chat
+- provider settings do not actually drive a real external provider request
+- the saved model and endpoint are not meaningfully used to execute tutoring
 
-Exit criteria:
-- one shared source of truth for state/curriculum/schema logic
-- no literacy/preliteracy baseline flow left in active MVP code
-- core extension points are named and located before feature work expands
+Impact:
+- the product appears to support BYO providers, but the live tutoring path is still mock-backed
+- the spec’s “configure supported AI provider with BYO key” acceptance criterion is not fully met
 
-### Chunk 2: Define the algebra subject pack
-Goal: create the bounded content model the app will actually teach.
+### Gap 2: MVP delivery posture still conflicts with the spec
 
-Steps:
-1. Create a subject-pack structure for the MVP module.
-2. Author the algebra concept graph with around 20-30 concepts.
-3. Add explicit prerequisite edges.
-4. Add concept metadata:
-   - label
-   - description
-   - prerequisite list
-   - dependents
-   - mastery rule
-   - misconception tags
-5. Define first-class authored content entities for:
-   - `Lesson`
-   - `AssessmentItem`
-   - `Attempt`
-6. Add authored lesson/exercise templates that stay within validator capabilities.
-7. Add deterministic starter content for explanations, worked examples, and assessment items.
-8. Ensure the subject pack is the source of truth for graph, prerequisites, mastery rules, and misconceptions, with model-generated content limited to phrasing-level help.
+Spec references:
+- Section 6.1
+- Section 9 first-use journey
 
-Exit criteria:
-- one bounded algebra module exists as data, not hardcoded UI fragments
-- the app can derive progression from the concept graph
+Current state:
+- the app can proceed through setup, diagnostic, and tutoring without a configured provider key
+- local deterministic fallback remains a normal operating path, not just a bounded recovery path
+- onboarding does not enforce the spec’s intended order of module selection -> provider setup -> diagnostic
 
-### Chunk 3: Redesign the learner state model
-Goal: align persistence with the entities described in the spec.
+Impact:
+- the repo still behaves like “cloud optional, local fallback normal”
+- the spec says online AI is required in MVP, with fallback as a safety/recovery behavior rather than the main path
 
-Steps:
-1. Replace the current stage/domain counters with concept-level mastery records.
-2. Add state for:
-   - selected module
-   - module metadata
-   - diagnostic completion
-   - mastery per concept
-   - lesson records
-   - assessment items and attempts
-   - evidence records
-   - misconception tags
-   - review schedule
-   - recent activity
-   - goals/milestones
-   - provider settings
-   - telemetry consent
-   - export metadata
-3. Add bounded recent interaction memory plus concept-linked evidence, matching the hybrid memory direction in the spec.
-4. Add schema versioning and a real migration path from the current prototype state.
-5. Keep local-first defaults and resume behavior.
+### Gap 3: Return-user journey is not yet dashboard-first
 
-Exit criteria:
-- state shape matches MVP product concepts
-- old state can be migrated or intentionally reset with a documented rule
+Spec references:
+- Section 9 return-user journey
+- FR-015
+- Acceptance criterion 9
 
-### Chunk 4: Build the diagnostic flow
-Goal: support first-use module entry per the spec.
+Current state:
+- local reopen/resume now works and is covered by tests
+- startup can restore a safe scene or resume from learner state
+- the default return flow still restores into the tutoring path rather than the concept-map dashboard
 
-Steps:
-1. Add a first-run module selection step.
-2. Build a lightweight algebra diagnostic with mixed input types:
-   - numeric
-   - expression
-   - multiple choice
-   - short explanation
-3. Score diagnostic results into:
-   - readiness
-   - prerequisite gaps
-   - likely misconceptions
-   - recommended starting concept
-4. Persist the diagnostic outcome into learner state.
-5. Keep the diagnostic free of any age-based assumptions or age-input requirements.
+Impact:
+- the spec’s intended return journey is “load local state -> dashboard concept graph -> recommended next -> resume”
+- the code still centers direct scene recovery more than dashboard-first re-entry
 
-Exit criteria:
-- a first-time learner gets a starting concept from a real diagnostic
+### Gap 4: Concept map is not yet a real tech-tree style graph
 
-### Chunk 5: Implement the tutoring loop engine
-Goal: move from scene switching to the real adaptive learning loop.
+Spec references:
+- FR-015
+- FR-016
+- FR-018
+- Section 15
 
-Steps:
-1. Introduce a concept session model:
-   - explain
-   - worked example
-   - learner attempt
-   - feedback
-   - hint/remediation
-   - advance/review recommendation
-2. Make lesson selection driven by the subject pack and learner state.
-3. Update state only on meaningful evidence-producing actions.
-4. Record why the learner advanced, stayed, or was redirected.
-5. Keep model output bounded to phrasing/hints/feedback only; do not allow runtime graph invention.
-6. Add explicit support for review scheduling and remediation loops, not just forward progression.
+Current state:
+- concept statuses exist and are backed by learner state
+- concept detail exists
+- prerequisites and dependents are shown as text
+- the map itself is still rendered as a list of concept cards, not a graph with visible prerequisite edges
 
-Exit criteria:
-- concept progression is explainable and stateful
-- next-step recommendations come from learner evidence, not simple rotation
+Impact:
+- the product meets the data side of the concept map requirement more than the visual/interaction side
+- the primary progress surface still undershoots the “tech-tree style concept mastery map” expectation
 
-### Chunk 6: Replace the maths validation layer
-Goal: meet the spec requirement for deterministic maths validation.
+### Gap 5: Math input is functional but still below spec-quality UX
 
-Steps:
-1. Introduce a proper maths parser/equivalence library.
-2. Support numeric and symbolic equivalence checks.
-3. Distinguish syntax errors from likely conceptual mistakes where possible.
-4. Align all authored exercises to validator capabilities.
-5. Add validator-focused tests for equivalent expressions, malformed input, and common algebra mistakes.
-6. Keep maths input and validation contracts pluggable so future validation plugins can slot in cleanly.
+Spec references:
+- FR-020
+- FR-024
+- Section 19
 
-Exit criteria:
-- validation is no longer string-based
-- authored algebra tasks are reliably checkable
+Current state:
+- dedicated math-input scenes exist
+- deterministic validation exists
+- learner feedback distinguishes syntax and conceptual issues
+- input is still a plain text field rather than a more intentional math-expression entry surface
 
-### Chunk 7: Rebuild the web UI around the MVP journeys
-Goal: match the specified screens and user flows.
+Impact:
+- the minimum functional requirement is largely present
+- the experience still feels closer to “validated text box” than “serious math input workspace”
 
-Steps:
-1. Replace the current single-scene shell with clear screens for:
-   - landing/setup
-   - provider configuration
-   - module selection
-   - tutoring workspace
-   - concept mastery map
-   - concept detail
-   - settings
-   - import/export
-   - telemetry preferences
-2. Keep the concept map as the primary progress surface.
-3. Show concept node states from real mastery data.
-4. Add recent activity and learner goals.
-5. Add keyboard-friendly maths input in the tutoring workspace.
-6. Keep the UI bounded to a fixed component registry; do not allow arbitrary model-authored UI.
-7. Cover accessibility and interaction requirements:
-   - keyboard access
-   - reduced-motion support
-   - readable fallback states
+### Gap 6: Provider/storage extensibility is documented better than it is exercised
 
-Exit criteria:
-- all primary MVP screens exist
-- UI state matches the learner engine and subject pack
+Spec references:
+- Section 7
+- Section 12
+- Section 20
 
-### Chunk 8: Make provider and relay integration spec-compliant
-Goal: preserve BYO-provider support while narrowing the contract to the tutoring MVP.
+Current state:
+- contracts exist for provider/model/storage/validation/telemetry/UI registry
+- subject-pack boundaries are explicit
+- only the mock provider path is implemented in practice
+- storage is local-first and adapter-shaped, but there is no second concrete storage/backend implementation proving swappability
 
-Steps:
-1. Define a provider adapter interface for chat/tutoring responses.
-2. Pass only the bounded tutoring context needed by the current concept/session.
-3. Validate structured outputs before rendering.
-4. Keep local deterministic fallback paths for key user actions.
-5. Update the relay mock provider so it speaks the algebra tutoring contract instead of the old scene contract.
-6. Keep the MVP provider contract consistent with BYO API key usage and no hosted credentials.
+Impact:
+- architecture is in the right shape
+- extensibility is proven on paper more than in real interchangeable implementations
 
-Exit criteria:
-- provider integration is modular and bounded
-- failure paths remain usable locally
+### Gap 7: Final acceptance walkthrough is still distributed across code and tests rather than captured as one explicit release gate
 
-### Chunk 9: Fix persistence, backup, and security posture
-Goal: bring storage and recovery closer to spec quality.
+Spec references:
+- Section 22
+- Section 21
+- Section 11
 
-Steps:
-1. Move from placeholder encryption to real encrypted export/import.
-2. Add export manifest/version metadata.
-3. Define a pluggable backup adapter interface even if only local export ships in MVP.
-4. Review API key local storage behavior and isolate sensitive settings from general learner state where practical.
-5. Add migration/import validation tests.
-6. Prefer IndexedDB-backed storage for durable structured learner data, with clear storage adapter boundaries.
+Current state:
+- tests are strong and broad
+- many acceptance behaviors are individually covered
+- there is no single maintained acceptance checklist in the repo that clearly says which acceptance criteria are fully met, partially met, or intentionally deferred
 
-Exit criteria:
-- backup/import/export is credible for MVP
-- security posture is improved from prototype level
+Impact:
+- the project is easy to overestimate
+- the remaining work can drift unless the last acceptance-stage gaps are tracked explicitly
 
-### Chunk 10: Add telemetry consent and safety completion work
-Goal: finish required product controls without blocking core tutoring.
+## Delivery Strategy
 
-Steps:
-1. Add explicit opt-in telemetry preferences with default off.
-2. Model what telemetry can be collected and what requires extra review.
-3. Keep safety interruption and redirect flows, but retune them for the new general learner audience.
-4. Ensure copy avoids companion framing and dependency cues.
-5. Add support for validator mismatch loops, crashes, and user-reviewed richer trace donation as separate telemetry classes.
+Finish the remaining work in four passes:
 
-Exit criteria:
-- telemetry is transparent, revocable, and off by default
-- safety behavior matches the product posture
+1. make the provider path real
+2. align first-use and return-user journeys to the spec
+3. upgrade the progress surface and math-input UX
+4. close the release/acceptance loop with explicit proof
 
-### Chunk 11: Replace and expand the test suite
-Goal: make tests protect the real MVP.
+## Workstream 1: Real BYO Provider Execution
 
-Steps:
-1. Remove tests that lock in the literacy prototype behavior.
-2. Add tests for:
-   - subject pack integrity
-   - prerequisite graph logic
-   - diagnostic scoring
-   - tutoring loop transitions
-   - maths validation
-   - state migration
-   - import/export
-   - provider contract validation
-3. Keep relay tests focused on bounded schemas and safety.
-4. Add tests for extension-point contracts so adapters stay swappable.
-5. Add basic accessibility checks for keyboard interaction and reduced-motion-safe behavior where feasible.
+Goal: make provider setup actually power tutoring and chat, not just save config.
 
-### Chunk 12: Non-functional and documentation completion
-Goal: close the remaining spec requirements that are easy to miss during feature work.
+### Tasks
 
-Steps:
-1. Verify keyboard access and reduced-motion support in the MVP UI.
-2. Review local-first defaults, provider key handling, schema versioning, and import/export security posture.
-3. Check performance-sensitive paths explicitly:
-   - initial app load
-   - concept map rendering
-   - local persistence and restore
-   - maths validation feedback loop
-4. Review maintainability and extensibility by removing dead prototype code and confirming adapters and subject packs can be added without editing core orchestration logic.
-5. Document:
-   - subject-pack schema
-   - learner-state schema
-   - validator contract
-   - provider/adapter interfaces
-   - telemetry schema
-6. Update README with the real MVP setup, constraints, and current implementation boundaries.
-7. Run full regression tests and a final spec-to-code checklist.
+1. Introduce a real provider adapter for the supported MVP provider path.
+2. Route relay tutoring/chat through the selected adapter instead of always calling `MOCK_PROVIDER_ADAPTER`.
+3. Pass provider name, endpoint, model, and local API key to the relay in a controlled way.
+4. Keep request minimization and schema validation intact around the real provider path.
+5. Preserve the mock adapter for tests and local development, but stop presenting it as the normal MVP cloud path.
+6. Add contract tests for:
+   - successful provider-backed tutoring
+   - invalid provider config
+   - upstream provider failure
+   - moderation/safety behavior during provider-backed requests
 
-Exit criteria:
-- required schemas and interfaces are documented
-- accessibility/privacy/performance/maintainability/extensibility requirements are explicitly checked
+### Exit Criteria
 
-## Acceptance Mapping
+- configuring a supported provider with a BYO key actually changes the tutoring backend
+- the relay no longer hardcodes the mock adapter for normal tutoring/chat execution
+- acceptance criterion 2 is materially satisfied
 
-The implementation is only complete when the codebase satisfies the MVP acceptance criteria in `spec.md`:
+## Workstream 2: Spec-Aligned Onboarding And Return Flows
 
-1. Open app without account.
-2. Configure supported AI provider with BYO key.
-3. Select the supported maths module.
-4. Complete a short diagnostic.
-5. Receive adaptive tutoring.
-6. Enter maths answers with a dedicated input.
-7. Get validated feedback.
-8. View the concept mastery map.
-9. Resume from local state on reopen.
-10. Export and re-import state.
+Goal: make the first-use and return-user journeys match Section 9 of the spec.
 
-## Practical First Sprint
+### Tasks
 
-If implementation starts now, the best first slice is:
+1. Make the onboarding flow explicit and ordered:
+   - choose module
+   - configure provider
+   - begin diagnostic
+2. Decide and implement the exact MVP policy for cloud-required behavior:
+   - if the spec remains authoritative as written, block tutoring start until provider + relay are ready
+   - keep bounded local fallback for interruption, recovery, and testing only
+3. Rework the setup screen copy and button states so “Open tutor” cannot skip required setup.
+4. Change return-user startup so the primary re-entry surface is the concept map/dashboard with recommended next visible.
+5. Preserve last-safe-scene recovery as a deliberate resume action from the dashboard instead of always auto-dropping into a scene.
+6. Add regression tests for:
+   - first-run setup gating
+   - return-user dashboard-first flow
+   - explicit resume action after reopen
 
-1. Do Chunk 1 first.
-2. Start Chunk 2 and Chunk 3 immediately after.
-3. Only then build Chunk 4 through Chunk 7.
-4. Leave Chunk 10 until the tutoring loop and state model are stable.
-5. Use Chunk 12 as the final acceptance gate before calling the MVP aligned with the spec.
+### Exit Criteria
 
-## Immediate Next Actions
+- the first-use flow matches the spec order
+- return users land on the concept map/dashboard first
+- local recovery remains available without becoming the main product posture
 
-The next concrete coding steps should be:
+## Workstream 3: Concept Map And Progress Surface Upgrade
 
-1. Create shared algebra module data structures in `packages/schemas` and `packages/core`.
-2. Replace the current curriculum/state naming with concept-based algebra naming.
-3. Remove duplicated runtime logic from `apps/web/src/app/runtime.js`.
-4. Rewrite the current tests to target the new algebra module foundation.
-5. After the foundation is stable, build the diagnostic and concept-map workflow on top of it.
+Goal: turn the current progress list into the spec’s primary tech-tree style mastery map.
+
+### Tasks
+
+1. Replace the simple list rendering with a graph-like layout that shows prerequisite edges.
+2. Make node styling clearly communicate all required states:
+   - locked
+   - available
+   - in progress
+   - mastered
+   - review due
+   - recommended next
+3. Show the current recommended path through the graph, not just isolated node labels.
+4. Improve concept detail to act as a true inspect-and-launch surface with clear prerequisite/dependent navigation.
+5. Ensure recent activity and learner goals stay visible from the progress surface.
+6. Add UI tests or source-level guards for graph-state rendering and launch interactions.
+
+### Exit Criteria
+
+- the concept map reads as a tech-tree, not just a card list
+- prerequisite relationships are visible, not only described in text
+- the progress surface fully satisfies FR-015 through FR-019
+
+## Workstream 4: Math Input UX Upgrade
+
+Goal: keep the current deterministic validation engine, but give the learner a more intentional math-entry experience.
+
+### Tasks
+
+1. Replace the plain text math input with a more math-oriented entry surface.
+2. Add lightweight expression affordances:
+   - clearer placeholder/examples
+   - syntax-aware inline guidance
+   - better handling for equations vs expressions
+3. Keep keyboard-first interaction and reduced-motion compatibility.
+4. Make validation feedback more obviously tied to the learner’s entered expression.
+5. Ensure the upgraded input stays compatible with the current bounded validator contract.
+
+### Exit Criteria
+
+- math entry feels like a dedicated tutoring input, not a generic text field
+- syntax guidance and conceptual feedback are easier to interpret during practice
+
+## Workstream 5: Extensibility Proof Rather Than Just Extensibility Shape
+
+Goal: prove at least one more adapter boundary in practice so the architecture is not only theoretical.
+
+### Tasks
+
+1. Add one real non-mock provider adapter implementation behind the shared provider contract.
+2. If feasible within MVP scope, add one secondary storage adapter path or a test-only adapter package that exercises the storage contract end to end.
+3. Remove or isolate any remaining code paths that are effectively singleton implementations hiding behind “adapter” names.
+4. Expand contract validation tests to cover real implementations, not just shape checks.
+
+### Exit Criteria
+
+- at least one major adapter boundary is proven by multiple implementations
+- swappability is demonstrated, not just documented
+
+## Workstream 6: Final Acceptance And Release Gate
+
+Goal: convert the remaining spec mismatch into an explicit release checklist and close it.
+
+### Tasks
+
+1. Add a maintained acceptance checklist section to the repo documentation.
+2. Map each acceptance criterion from Section 22 to:
+   - code location
+   - test coverage
+   - current status: complete / partial / blocked
+3. Add one end-to-end smoke test or scripted manual checklist for:
+   - first use
+   - return use
+   - export/import recovery
+   - provider-backed tutoring
+4. Update `README.md` to distinguish:
+   - fully implemented MVP behaviors
+   - bounded development/test fallbacks
+   - known remaining limitations
+
+### Exit Criteria
+
+- the repo has one explicit acceptance gate instead of scattered progress notes
+- the remaining mismatch count against `spec.md` is small, explicit, and intentional
+
+## Recommended Order
+
+Implement the remaining work in this order:
+
+1. Workstream 1: real provider execution
+2. Workstream 2: onboarding and return-flow alignment
+3. Workstream 3: concept map upgrade
+4. Workstream 4: math input UX upgrade
+5. Workstream 5: extensibility proof
+6. Workstream 6: final acceptance gate
+
+## Definition Of Done
+
+This repo should only be called spec-aligned when all of the following are true:
+
+1. A learner can configure a real supported provider with a BYO key and actually receive provider-backed tutoring.
+2. The first-use flow enforces the intended setup order before tutoring starts.
+3. A returning learner lands on the concept-map dashboard first and can deliberately resume.
+4. The progress surface is a visible concept graph with real edges and status states.
+5. Math input remains deterministic but feels like a dedicated algebra workspace.
+6. The acceptance criteria in `spec.md` are tracked explicitly and pass as a coherent MVP journey.
