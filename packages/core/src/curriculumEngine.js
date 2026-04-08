@@ -1,6 +1,8 @@
 import {
   ALGEBRA_DIAGNOSTIC_ITEMS,
   ALGEBRA_FOUNDATIONS_MODULE,
+  getDiagnosticPlacementConceptId,
+  getInitialConceptId,
   getLessonForConcept,
   getRecommendedConceptId,
 } from "./algebraModule.js";
@@ -74,7 +76,7 @@ const makeConceptDecision = (state, conceptId) => {
 
 const getDiagnosticItem = (step) => ALGEBRA_DIAGNOSTIC_ITEMS[Math.max(0, Math.min(step, ALGEBRA_DIAGNOSTIC_ITEMS.length - 1))];
 
-const getPlacementConceptIdForDiagnosticItem = (item) => item?.conceptId ?? "variables-and-expressions";
+const getPlacementConceptIdForDiagnosticItem = (item) => item?.conceptId ?? getInitialConceptId();
 
 const summarizeDiagnosticOutcome = (assessmentItems = {}) => {
   const diagnosticRecords = ALGEBRA_DIAGNOSTIC_ITEMS.map((item) => ({
@@ -92,7 +94,7 @@ const summarizeDiagnosticOutcome = (assessmentItems = {}) => {
         .filter(Boolean),
     ),
   ];
-  const recommendedConceptId = prerequisiteGaps[0] ?? "two-step-equations";
+  const recommendedConceptId = prerequisiteGaps[0] ?? getDiagnosticPlacementConceptId();
   const readiness =
     correctCount >= totalItems - 1 ? "ready" : correctCount >= Math.ceil(totalItems / 2) ? "developing" : "needs-foundations";
 
@@ -200,7 +202,7 @@ export const nextCurriculumDecision = (state) => {
   return makeConceptDecision(state, recommendedConceptId);
 };
 
-export const recordAssessmentCompletion = (state, placement = "variables-and-expressions") => {
+export const recordAssessmentCompletion = (state, placement = getInitialConceptId()) => {
   const diagnosticSummary =
     typeof placement === "string"
       ? {
@@ -213,7 +215,7 @@ export const recordAssessmentCompletion = (state, placement = "variables-and-exp
           recommendedConceptId: placement,
         }
       : placement;
-  const recommendedConceptId = diagnosticSummary?.recommendedConceptId ?? "variables-and-expressions";
+  const recommendedConceptId = diagnosticSummary?.recommendedConceptId ?? getInitialConceptId();
 
   return updateMilestones(
     createDefaultState({
@@ -261,7 +263,7 @@ export const advanceAssessment = (state, result = {}) => {
   const recommendedConceptId =
     result.recommendedConceptId ??
     state.pedagogicalState.recommendedConceptId ??
-    "variables-and-expressions";
+    getInitialConceptId();
   const correct = result.correct;
   const misconceptionTag =
     correct === false ? currentItem?.misconceptionTag ?? deriveMisconceptionTags(currentItem?.conceptId, false)[0] ?? null : null;

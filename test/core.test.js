@@ -4,8 +4,12 @@ import assert from "node:assert/strict";
 import {
   ALGEBRA_FOUNDATIONS_MODULE,
   ALGEBRA_LESSONS,
+  ALGEBRA_ASSESSMENT_ITEMS,
+  ALGEBRA_ATTEMPT_TEMPLATE,
   APP_CONFIG,
   ADAPTER_CONTRACTS,
+  ALGEBRA_SUBJECT_PACK,
+  ALGEBRA_VALIDATION_CONSTRAINTS,
   advanceAssessment,
   advanceTutoringSession,
   applyMasteryEvidence,
@@ -15,6 +19,9 @@ import {
   detectCapabilities,
   FIXED_UI_COMPONENT_REGISTRY,
   getAlgebraConcept,
+  getDiagnosticPlacementConceptId,
+  getAssessmentItemsForConcept,
+  getInitialConceptId,
   getLessonForConcept,
   interpretScene,
   migrateState,
@@ -298,6 +305,17 @@ test("algebra module metadata exposes the bounded concept pack", () => {
   assert.equal(ALGEBRA_FOUNDATIONS_MODULE.title, "Algebra Foundations");
   assert.ok(ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.length >= 20);
   assert.ok(ALGEBRA_LESSONS.length >= 20);
+  assert.ok(ALGEBRA_ASSESSMENT_ITEMS.length >= 5);
+  assert.equal(ALGEBRA_SUBJECT_PACK.getModule().id, "algebra-foundations");
+  assert.equal(ALGEBRA_SUBJECT_PACK.listConcepts().length, ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.length);
+  assert.equal(ALGEBRA_SUBJECT_PACK.listLessons().length, ALGEBRA_LESSONS.length);
+  assert.equal(ALGEBRA_SUBJECT_PACK.listAssessmentItems().length, ALGEBRA_ASSESSMENT_ITEMS.length);
+  assert.equal(ALGEBRA_SUBJECT_PACK.getInitialConceptId(), "variables-and-expressions");
+  assert.equal(ALGEBRA_SUBJECT_PACK.getDiagnosticPlacementConceptId(), "two-step-equations");
+  assert.equal(ALGEBRA_SUBJECT_PACK.getAttemptTemplate().result, "pending");
+  assert.deepEqual(ALGEBRA_SUBJECT_PACK.getValidationConstraints(), ALGEBRA_VALIDATION_CONSTRAINTS);
+  assert.equal(getInitialConceptId(), "variables-and-expressions");
+  assert.equal(getDiagnosticPlacementConceptId(), "two-step-equations");
   assert.equal(concept?.label, "Two-step equations");
   assert.equal(lesson?.title, "Two-step equations");
   assert.equal(lesson?.expectedResponse, "5");
@@ -326,11 +344,26 @@ test("algebra module metadata exposes the bounded concept pack", () => {
   assert.equal(getLessonForConcept("fraction-equations")?.expectedResponse, "14");
   assert.equal(getLessonForConcept("decimal-equations")?.expectedResponse, "3.5");
   assert.deepEqual(getLessonForConcept("inequalities-intro")?.choiceOptions, ["x > 5", "x < 5", "x = 5", "x >= 5"]);
+  assert.deepEqual(getAssessmentItemsForConcept("order-of-operations").map((item) => item.id), ["diagnostic.order-of-operations"]);
+  assert.equal(ALGEBRA_ATTEMPT_TEMPLATE.result, "pending");
+  assert.deepEqual(ALGEBRA_ATTEMPT_TEMPLATE.evidence, []);
   assert.deepEqual(concept?.prerequisites, [
     "one-step-addition-equations",
     "one-step-subtraction-equations",
     "one-step-multiplication-equations",
     "one-step-division-equations",
+  ]);
+  assert.deepEqual(concept?.dependents.sort(), [
+    "equations-with-distribution",
+    "equations-with-like-terms",
+    "inequalities-intro",
+    "solution-checking",
+    "translate-word-problems",
+  ]);
+  assert.deepEqual(getAlgebraConcept("variables-and-expressions")?.dependents.sort(), [
+    "evaluate-expressions",
+    "order-of-operations",
+    "translate-word-problems",
   ]);
 });
 

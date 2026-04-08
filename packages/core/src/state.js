@@ -1,6 +1,18 @@
 import { SCHEMA_VERSION, createStateShape } from "../../schemas/src/index.js";
+import { getInitialConceptId } from "./algebraModule.js";
 
-export const createDefaultState = (overrides = {}) => createStateShape(overrides);
+export const createDefaultState = (overrides = {}) => {
+  const initialConceptId = getInitialConceptId();
+
+  return createStateShape({
+    ...overrides,
+    pedagogicalState: {
+      currentConceptId: initialConceptId,
+      recommendedConceptId: initialConceptId,
+      ...overrides.pedagogicalState,
+    },
+  });
+};
 
 const migrateLegacyPedagogicalState = (rawState) => ({
   diagnosticStatus: "not-started",
@@ -9,10 +21,10 @@ const migrateLegacyPedagogicalState = (rawState) => ({
   prerequisiteGaps: [],
   likelyMisconceptions: [],
   diagnosticSummary: null,
-  currentConceptId: "variables-and-expressions",
+  currentConceptId: getInitialConceptId(),
   currentLessonId: null,
   currentObjectiveId: "diagnostic.variables",
-  recommendedConceptId: "variables-and-expressions",
+  recommendedConceptId: getInitialConceptId(),
   masteryByConcept: {},
   misconceptionsByConcept: {},
   evidenceLog: [],
