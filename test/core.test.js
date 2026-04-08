@@ -174,7 +174,7 @@ test("algebra module metadata exposes the bounded concept pack", () => {
 
   assert.equal(ALGEBRA_FOUNDATIONS_MODULE.title, "Algebra Foundations");
   assert.ok(ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.length >= 20);
-  assert.ok(ALGEBRA_LESSONS.length >= 17);
+  assert.ok(ALGEBRA_LESSONS.length >= 20);
   assert.equal(concept?.label, "Two-step equations");
   assert.equal(lesson?.title, "Two-step equations");
   assert.equal(lesson?.expectedResponse, "5");
@@ -199,6 +199,9 @@ test("algebra module metadata exposes the bounded concept pack", () => {
   assert.equal(getLessonForConcept("one-step-division-equations")?.expectedResponse, "15");
   assert.deepEqual(getLessonForConcept("distributive-property")?.choiceOptions, ["3x + 6", "3x + 2", "x + 6", "6x"]);
   assert.equal(getLessonForConcept("equations-with-like-terms")?.expectedResponse, "4");
+  assert.equal(getLessonForConcept("variables-on-both-sides")?.expectedResponse, "5");
+  assert.equal(getLessonForConcept("fraction-equations")?.expectedResponse, "14");
+  assert.equal(getLessonForConcept("decimal-equations")?.expectedResponse, "3.5");
   assert.deepEqual(getLessonForConcept("inequalities-intro")?.choiceOptions, ["x > 5", "x < 5", "x = 5", "x >= 5"]);
   assert.deepEqual(concept?.prerequisites, [
     "one-step-addition-equations",
