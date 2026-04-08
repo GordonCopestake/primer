@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   ALGEBRA_FOUNDATIONS_MODULE,
@@ -424,6 +425,25 @@ test("algebra module metadata exposes the bounded concept pack", () => {
   ]);
 });
 
+test("algebra concept graph prerequisites and dependents stay internally consistent", () => {
+  const concepts = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph;
+  const conceptIds = new Set(concepts.map((concept) => concept.id));
+
+  for (const concept of concepts) {
+    for (const prerequisiteId of concept.prerequisites) {
+      assert.equal(conceptIds.has(prerequisiteId), true, `Unknown prerequisite: ${prerequisiteId}`);
+      const prerequisite = concepts.find((entry) => entry.id === prerequisiteId);
+      assert.equal(prerequisite?.dependents.includes(concept.id), true, `${prerequisiteId} should list ${concept.id} as a dependent`);
+    }
+
+    for (const dependentId of concept.dependents) {
+      assert.equal(conceptIds.has(dependentId), true, `Unknown dependent: ${dependentId}`);
+      const dependent = concepts.find((entry) => entry.id === dependentId);
+      assert.equal(dependent?.prerequisites.includes(concept.id), true, `${dependentId} should depend on ${concept.id}`);
+    }
+  }
+});
+
 test("invalid scene output is replaced by the safe fallback scene", () => {
   const result = interpretScene(
     {
@@ -516,6 +536,20 @@ test("formal adapter contracts expose the spec extension points", () => {
     true,
   );
   assert.equal(validateContractImplementation("validationPlugin", MATH_VALIDATION_PLUGIN).ok, true);
+  assert.equal(
+    validateContractImplementation("aiProviderAdapter", {
+      sendTutorTurn() {},
+      sendChatTurn() {},
+    }).ok,
+    true,
+  );
+  assert.equal(
+    validateContractImplementation("telemetrySink", {
+      recordEvent() {},
+      flush() {},
+    }).ok,
+    true,
+  );
 });
 
 test("export manifests are versioned and validate required metadata", () => {
@@ -526,4 +560,18 @@ test("export manifests are versioned and validate required metadata", () => {
   assert.equal(manifest.formatVersion, 2);
   assert.equal(manifest.encryption, "primer-aes-gcm-v1");
   assert.equal(validation.ok, true);
+});
+
+test("ui source keeps keyboard shortcuts and reduced-motion safeguards wired", () => {
+  const mainSource = readFileSync(new URL("../apps/web/src/app/main.js", import.meta.url), "utf8");
+  const stylesSource = readFileSync(new URL("../apps/web/src/styles/app.css", import.meta.url), "utf8");
+
+  assert.match(mainSource, /event\.key === "Escape"/);
+  assert.match(mainSource, /event\.key\.toLowerCase\(\) === "m"/);
+  assert.match(mainSource, /event\.key\.toLowerCase\(\) === "t"/);
+  assert.match(mainSource, /event\.key\.toLowerCase\(\) === "i"/);
+  assert.match(mainSource, /matchMedia\("\(prefers-reduced-motion: reduce\)"\)/);
+  assert.match(stylesSource, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(stylesSource, /animation: none !important/);
+  assert.match(stylesSource, /transition: none !important/);
 });
