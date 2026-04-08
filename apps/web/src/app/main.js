@@ -14,6 +14,7 @@ import {
   decryptBackupPayload,
   deleteAssetRecord,
   detectCapabilities,
+  deriveStartupRecovery,
   estimateInstalledAssetBytes,
   estimateStorage,
   encryptBackupPayload,
@@ -2124,14 +2125,15 @@ syncStorageStatus().catch((error) => {
 });
 setOrbState(state.consentAndSettings.soundEnabled ? "idle" : "muted");
 const restoredScene = await hydrateScene();
-if (!state.moduleSelection?.selectedAt) {
-  setStatus("Complete setup to begin.");
+const startupRecovery = deriveStartupRecovery(state, restoredScene);
+if (startupRecovery.kind === "setup") {
+  setStatus(startupRecovery.statusMessage);
   renderLandingSetupView();
-} else if (restoredScene) {
-  setStatus("Restored the last safe scene.");
-  renderScene(recoverSceneForRuntime(restoredScene, state));
+} else if (startupRecovery.kind === "restore-scene") {
+  setStatus(startupRecovery.statusMessage);
+  renderScene(startupRecovery.scene);
 } else {
-  setStatus("Starting with the local baseline path.");
+  setStatus(startupRecovery.statusMessage);
   renderCurrentDecisionScene().catch((error) => {
     console.error("Initial scene render failed", error);
     renderScene(createFallbackScene("startup-failure"));

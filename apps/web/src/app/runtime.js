@@ -1250,6 +1250,28 @@ const recoverSceneForRuntime = (scene, runtimeState, decision = null) => {
   return validation.ok ? normalizedScene : createFallbackScene("recovery");
 };
 
+const deriveStartupRecovery = (runtimeState, restoredScene = null) => {
+  if (!runtimeState?.moduleSelection?.selectedAt) {
+    return {
+      kind: "setup",
+      statusMessage: "Complete setup to begin.",
+    };
+  }
+
+  if (restoredScene) {
+    return {
+      kind: "restore-scene",
+      statusMessage: "Restored the last safe scene.",
+      scene: recoverSceneForRuntime(restoredScene, runtimeState),
+    };
+  }
+
+  return {
+    kind: "resume-decision",
+    statusMessage: "Starting with the local baseline path.",
+  };
+};
+
 export {
   ALGEBRA_CONCEPT_GRAPH,
   APP_CONFIG,
@@ -1269,6 +1291,7 @@ export {
   deleteAssetRecord,
   detectCapabilities,
   DIRECTOR_TIMEOUT_MS,
+  deriveStartupRecovery,
   ENCRYPTION_AES_GCM,
   ENCRYPTION_LEGACY_XOR,
   encryptBackupPayload,

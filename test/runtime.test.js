@@ -691,6 +691,39 @@ test("recovered scenes fall back safely when persisted scene is malformed", () =
   assert.equal(recovered.scene.objectiveId, "fallback.safe-path");
 });
 
+test("startup recovery sends unconfigured learners to setup", () => {
+  const recovery = runtimeModule.deriveStartupRecovery(runtimeModule.createDefaultState(), null);
+
+  assert.equal(recovery.kind, "setup");
+  assert.equal(recovery.statusMessage, "Complete setup to begin.");
+});
+
+test("startup recovery restores the last safe scene for configured learners", () => {
+  const state = runtimeModule.createDefaultState({
+    moduleSelection: {
+      selectedAt: "2026-04-08T12:00:00.000Z",
+    },
+  });
+  const safeScene = runtimeModule.createFallbackScene("restore");
+  const recovery = runtimeModule.deriveStartupRecovery(state, safeScene);
+
+  assert.equal(recovery.kind, "restore-scene");
+  assert.equal(recovery.statusMessage, "Restored the last safe scene.");
+  assert.equal(recovery.scene.scene.kind, "fallback");
+});
+
+test("startup recovery resumes from learner state when no saved scene exists", () => {
+  const state = runtimeModule.createDefaultState({
+    moduleSelection: {
+      selectedAt: "2026-04-08T12:00:00.000Z",
+    },
+  });
+  const recovery = runtimeModule.deriveStartupRecovery(state, null);
+
+  assert.equal(recovery.kind, "resume-decision");
+  assert.equal(recovery.statusMessage, "Starting with the local baseline path.");
+});
+
 test("asset manifest seeds essential built-in assets", () => {
   const state = runtimeModule.hydrateAssetIndex(runtimeModule.createDefaultState());
   assert.equal(state.assetIndex.manifestVersion, 1);
