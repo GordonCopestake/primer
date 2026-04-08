@@ -7,6 +7,7 @@ import {
   applyMasteryEvidence,
   clearAdminPin,
   createBrowserStorageAdapter,
+  createSafetyRedirectScene,
   createExportBundle,
   createDefaultState,
   createFallbackScene,
@@ -45,6 +46,11 @@ import {
   validateShortTextResponse,
   verifyAdminPin,
   mergeProviderSecretIntoState,
+  recordTelemetryEvent,
+  stageTraceDonationDraft,
+  clearTraceDonationDraft,
+  donateReviewedTrace,
+  detectBlockedContent,
 } from "./runtime.js";
 
 const sceneRoot = document.querySelector("#scene-root");
@@ -318,6 +324,28 @@ const setLoading = (message) => {
   if (loadingIndicator) {
     loadingIndicator.textContent = message;
   }
+};
+
+const recordTelemetry = (category, summary, details = null, requiresReview = false) => {
+  state = recordTelemetryEvent(state, category, summary, details, requiresReview);
+  void persistState();
+};
+
+const interruptForSafety = (inputText, sourceLabel = "request") => {
+  const blockedMatches = detectBlockedContent(inputText);
+  if (blockedMatches.length === 0) {
+    return false;
+  }
+
+  stopAudioAndInput();
+  latestInput = {
+    type: "system-start",
+    content: `safety:${sourceLabel}`,
+  };
+  currentScene = createSafetyRedirectScene(blockedMatches);
+  renderScene(currentScene);
+  setStatus("Primer paused normal tutoring for this request. Try a neutral algebra question or return to the concept map.");
+  return true;
 };
 
 const updateProviderConfig = (updates) => {
@@ -1081,6 +1109,9 @@ const renderConceptDetailView = (conceptId) => {
 
 const renderTelemetryPreferencesView = () => {
   activeView = "telemetry";
+  const telemetryPreferences = state.consentAndSettings.telemetryPreferences ?? {};
+  const telemetryEventLog = state.telemetryState?.eventLog ?? [];
+  const pendingTraceDonation = state.telemetryState?.pendingTraceDonation ?? null;
   sceneRoot.innerHTML = `
     <div class="scene-body">
       <div class="scene-meta">
@@ -1095,14 +1126,42 @@ const renderTelemetryPreferencesView = () => {
           <p class="helper">${state.consentAndSettings.telemetryEnabled ? "Opt-in enabled" : "Telemetry off by default"}</p>
         </section>
         <section class="detail-card">
-          <h3>What may be shared later</h3>
-          <p class="helper">Validator mismatches, crash signals, and optional donated traces after explicit review.</p>
+          <h3>Telemetry classes</h3>
+          <p class="helper">Validator mismatch loops, crash reports, and reviewed trace donation are controlled separately.</p>
+        </section>
+        <section class="detail-card">
+          <h3>Pending review</h3>
+          <p class="helper">${pendingTraceDonation ? `Trace prepared for ${pendingTraceDonation.objectiveId ?? "current objective"}.` : "No reviewed trace is waiting."}</p>
+        </section>
+        <section class="detail-card">
+          <h3>Recent local events</h3>
+          <p class="helper">${telemetryEventLog.length ? `${telemetryEventLog.length} recorded locally.` : "No telemetry events recorded locally."}</p>
+        </section>
+      </div>
+      <div class="detail-grid">
+        <section class="detail-card">
+          <h3>Validator mismatch loops</h3>
+          <p class="helper">${telemetryPreferences.validatorMismatchEnabled ? "Enabled" : "Disabled"}</p>
+        </section>
+        <section class="detail-card">
+          <h3>Crash reports</h3>
+          <p class="helper">${telemetryPreferences.crashReportsEnabled ? "Enabled" : "Disabled"}</p>
+        </section>
+        <section class="detail-card">
+          <h3>Reviewed trace donation</h3>
+          <p class="helper">${telemetryPreferences.reviewedTraceDonationEnabled ? "Enabled after review" : "Disabled"}</p>
         </section>
       </div>
       <div class="trace-actions">
         <button id="telemetry-toggle-button" type="button" class="choice-button">
           ${state.consentAndSettings.telemetryEnabled ? "Disable telemetry" : "Enable telemetry"}
         </button>
+        <button id="telemetry-validator-button" type="button" class="choice-button">${telemetryPreferences.validatorMismatchEnabled ? "Disable validator mismatch events" : "Enable validator mismatch events"}</button>
+        <button id="telemetry-crash-button" type="button" class="choice-button">${telemetryPreferences.crashReportsEnabled ? "Disable crash reports" : "Enable crash reports"}</button>
+        <button id="telemetry-trace-button" type="button" class="choice-button">${telemetryPreferences.reviewedTraceDonationEnabled ? "Disable reviewed trace donation" : "Enable reviewed trace donation"}</button>
+        <button id="telemetry-stage-trace-button" type="button" class="choice-button">${pendingTraceDonation ? "Refresh trace review" : "Stage current trace for review"}</button>
+        <button id="telemetry-donate-trace-button" type="button" class="choice-button" ${pendingTraceDonation ? "" : "disabled"}>Donate reviewed trace</button>
+        <button id="telemetry-clear-trace-button" type="button" class="choice-button" ${pendingTraceDonation ? "" : "disabled"}>Clear trace review</button>
         <button id="telemetry-settings-button" type="button" class="choice-button">Open full settings</button>
       </div>
     </div>
@@ -1116,6 +1175,60 @@ const renderTelemetryPreferencesView = () => {
     updateSettingsForm();
     renderTelemetryPreferencesView();
     setStatus(state.consentAndSettings.telemetryEnabled ? "Telemetry opt-in enabled." : "Telemetry opt-in disabled.");
+  });
+
+  sceneRoot.querySelector("#telemetry-validator-button")?.addEventListener("click", () => {
+    state = updateConsentSettings(state, {
+      telemetryPreferences: {
+        ...state.consentAndSettings.telemetryPreferences,
+        validatorMismatchEnabled: !telemetryPreferences.validatorMismatchEnabled,
+      },
+    });
+    void persistState();
+    renderTelemetryPreferencesView();
+  });
+
+  sceneRoot.querySelector("#telemetry-crash-button")?.addEventListener("click", () => {
+    state = updateConsentSettings(state, {
+      telemetryPreferences: {
+        ...state.consentAndSettings.telemetryPreferences,
+        crashReportsEnabled: !telemetryPreferences.crashReportsEnabled,
+      },
+    });
+    void persistState();
+    renderTelemetryPreferencesView();
+  });
+
+  sceneRoot.querySelector("#telemetry-trace-button")?.addEventListener("click", () => {
+    state = updateConsentSettings(state, {
+      telemetryPreferences: {
+        ...state.consentAndSettings.telemetryPreferences,
+        reviewedTraceDonationEnabled: !telemetryPreferences.reviewedTraceDonationEnabled,
+      },
+    });
+    void persistState();
+    renderTelemetryPreferencesView();
+  });
+
+  sceneRoot.querySelector("#telemetry-stage-trace-button")?.addEventListener("click", () => {
+    state = stageTraceDonationDraft(state, currentScene);
+    void persistState();
+    renderTelemetryPreferencesView();
+    setStatus("Current trace prepared for local review.");
+  });
+
+  sceneRoot.querySelector("#telemetry-donate-trace-button")?.addEventListener("click", () => {
+    state = donateReviewedTrace(state);
+    void persistState();
+    renderTelemetryPreferencesView();
+    setStatus("Reviewed trace marked for optional donation.");
+  });
+
+  sceneRoot.querySelector("#telemetry-clear-trace-button")?.addEventListener("click", () => {
+    state = clearTraceDonationDraft(state);
+    void persistState();
+    renderTelemetryPreferencesView();
+    setStatus("Trace review cleared.");
   });
 
   sceneRoot.querySelector("#telemetry-settings-button")?.addEventListener("click", () => {
@@ -1186,6 +1299,10 @@ const renderScene = (scene) => {
   const result = interpretScene(runtimeScene, currentDecision);
   const safeScene = result.ok ? result.blueprint : createFallbackScene("validation-failure");
   const interactionType = safeScene.interaction.type;
+
+  if (!result.ok) {
+    recordTelemetry("validator-mismatch", "Scene validation fell back to the local safe path.", result.errors ?? null);
+  }
 
   currentScene = safeScene;
   lastLessonScene = safeScene;
@@ -1337,6 +1454,9 @@ const renderScene = (scene) => {
     submitButton?.addEventListener("click", async () => {
       const masteryTarget = currentDecision.conceptId ?? currentDecision.activeDomain;
       const response = String(input?.value ?? "").trim().toLowerCase();
+      if (interruptForSafety(response, "read-respond")) {
+        return;
+      }
       const expected = safeScene.interaction.expectedKeywords.map((value) => String(value).toLowerCase());
       const validation = validateShortTextResponse(response, expected);
       const correct = validation.correct;
@@ -1403,6 +1523,12 @@ const renderScene = (scene) => {
         safeScene.interaction.expectedExpression,
         currentDecision.conceptId,
       );
+      if (!validation.correct && validation.reason === "syntax") {
+        recordTelemetry("validator-mismatch", "Math input produced a syntax mismatch.", {
+          objectiveId: safeScene.scene.objectiveId,
+          conceptId: currentDecision.conceptId,
+        });
+      }
       latestInput = {
         type: "math-input",
         content: response || "empty",
@@ -1504,6 +1630,12 @@ const renderCurrentDecisionScene = async () => {
       maybeQueueSceneImage(relayResult.blueprint).catch((error) => {
         console.error("Image queue failed", error);
       });
+      return;
+    }
+
+    if (relayResult.error?.error?.code === "moderation_blocked") {
+      renderScene(createSafetyRedirectScene(relayResult.error.error.details ?? []));
+      setStatus("Primer paused normal tutoring for this request and returned to a safer local path.");
       return;
     }
 
@@ -1711,6 +1843,9 @@ listenButton?.addEventListener("click", () => {
     const transcript = event.results?.[0]?.[0]?.transcript ?? "";
     state = appendRecentTurn(state, { role: "user", content: `speech:${transcript}` });
     persistState();
+    if (interruptForSafety(transcript, "voice-input")) {
+      return;
+    }
     latestInput = {
       type: "transcript",
       content: transcript || "empty",
@@ -1791,6 +1926,20 @@ telemetryEnabledInput?.addEventListener("change", () => {
   persistState();
   updateSettingsForm();
   setStatus(telemetryEnabledInput.checked ? "Telemetry opt-in enabled." : "Telemetry opt-in disabled.");
+});
+
+globalThis.addEventListener?.("error", (event) => {
+  recordTelemetry("crash-report", "Window error captured locally.", {
+    message: event.message,
+    filename: event.filename,
+    lineno: event.lineno,
+  });
+});
+
+globalThis.addEventListener?.("unhandledrejection", (event) => {
+  recordTelemetry("crash-report", "Unhandled rejection captured locally.", {
+    reason: String(event.reason ?? "unknown"),
+  });
 });
 
 adminPinEnabledInput?.addEventListener("change", () => {

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const createModuleMetadata = (overrides = {}) => ({
   moduleId: "algebra-foundations",
@@ -55,6 +55,26 @@ export const createRecentInteractionMemoryEntry = (overrides = {}) => ({
   conceptId: null,
   objectiveId: null,
   recordedAt: null,
+  ...overrides,
+});
+
+export const createTelemetryEventRecord = (overrides = {}) => ({
+  eventId: null,
+  category: "validator-mismatch",
+  summary: "",
+  details: null,
+  requiresReview: false,
+  recordedAt: null,
+  ...overrides,
+});
+
+export const createTelemetryTraceDonationDraft = (overrides = {}) => ({
+  draftId: null,
+  sceneId: null,
+  objectiveId: null,
+  summary: "",
+  reviewStatus: "pending",
+  preparedAt: null,
   ...overrides,
 });
 
@@ -127,6 +147,12 @@ export const createStateShape = (overrides = {}) => ({
     cloudImageEnabled: true,
     cloudVisionEnabled: false,
     telemetryEnabled: false,
+    telemetryPreferences: {
+      validatorMismatchEnabled: false,
+      crashReportsEnabled: false,
+      reviewedTraceDonationEnabled: false,
+      ...overrides.consentAndSettings?.telemetryPreferences,
+    },
     adminPinEnabled: false,
     adminPinHash: null,
     adminUnlocked: false,
@@ -165,5 +191,11 @@ export const createStateShape = (overrides = {}) => ({
     lastImportedAt: null,
     exportFormatVersion: 2,
     ...overrides.exportMetadata,
+  },
+  telemetryState: {
+    eventLog: [],
+    pendingTraceDonation: null,
+    lastCrashAt: null,
+    ...overrides.telemetryState,
   },
 });

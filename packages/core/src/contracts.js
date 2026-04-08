@@ -63,7 +63,7 @@ export const validateContractImplementation = (contractName, implementation) => 
 export const createExportManifest = (state, encryption = "none", exportedAt = new Date().toISOString()) => ({
   manifestType: "primer-export-manifest",
   formatVersion: 2,
-  schemaVersion: state?.schemaVersion ?? 3,
+  schemaVersion: state?.schemaVersion ?? 5,
   moduleId: state?.moduleSelection?.selectedModuleId ?? "algebra-foundations",
   exportedAt,
   encryption,

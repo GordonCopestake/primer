@@ -151,6 +151,17 @@ export const migrateState = (rawState) => {
       ...rawState.providerConfig,
       hasStoredApiKey: Boolean(rawState.providerConfig?.apiKey || rawState.providerConfig?.hasStoredApiKey),
     },
+    consentAndSettings: {
+      ...rawState.consentAndSettings,
+      telemetryPreferences: {
+        ...createDefaultState().consentAndSettings.telemetryPreferences,
+        ...(rawState.consentAndSettings?.telemetryPreferences ?? {}),
+      },
+    },
+    telemetryState: {
+      ...createDefaultState().telemetryState,
+      ...(rawState.telemetryState ?? {}),
+    },
   });
 };
 

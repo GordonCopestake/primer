@@ -607,6 +607,35 @@ test("relay request failure returns a stable error without throwing", async () =
   assert.equal(result.error.error.code, "relay_request_failed");
 });
 
+test("relay moderation blocks are returned as explicit runtime safety errors", async () => {
+  process.env.PRIMER_RELAY_BASE_URL = "https://relay.example";
+  const runtime = await import(new URL(`../apps/web/src/app/runtime.js?moderation=${Date.now()}`, import.meta.url));
+  const state = runtime.createDefaultState({
+    consentAndSettings: { cloudEnabled: true },
+    providerConfig: { apiKey: "test-key" },
+  });
+  const decision = runtime.nextCurriculumDecision(state);
+  const result = await runtime.requestDirectorScene({
+    state,
+    decision,
+    latestInput: { type: "transcript", content: "graphic violence" },
+    localScene: runtime.createFallbackScene("moderation"),
+    fetchImpl: async () => ({
+      ok: false,
+      json: async () => ({
+        error: {
+          code: "moderation_blocked",
+          message: "Request blocked by mixed-age-safe moderation.",
+          details: ["graphic violence"],
+        },
+      }),
+    }),
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error.error.code, "moderation_blocked");
+});
+
 test("relay timeouts return a stable error without blocking indefinitely", async () => {
   process.env.PRIMER_RELAY_BASE_URL = "https://relay.example";
   const timeoutRuntime = await import(new URL(`../apps/web/src/app/runtime.js?timeout=${Date.now()}`, import.meta.url));
@@ -835,6 +864,53 @@ test("browser storage adapter keeps provider secret separate from saved state", 
   assert.equal(loadedState.providerConfig.apiKey, "");
   assert.equal(loadedState.providerConfig.hasStoredApiKey, true);
   assert.equal(loadedSecret, "secret-key");
+});
+
+test("telemetry events are gated by explicit opt-in and category preferences", () => {
+  let state = runtimeModule.createDefaultState();
+  state = runtimeModule.recordTelemetryEvent(state, "validator-mismatch", "Should not record.");
+  assert.equal(state.telemetryState.eventLog.length, 0);
+
+  state = runtimeModule.createDefaultState({
+    consentAndSettings: {
+      telemetryEnabled: true,
+      telemetryPreferences: {
+        validatorMismatchEnabled: true,
+        crashReportsEnabled: false,
+        reviewedTraceDonationEnabled: false,
+      },
+    },
+  });
+  state = runtimeModule.recordTelemetryEvent(state, "validator-mismatch", "Recorded mismatch.");
+  assert.equal(state.telemetryState.eventLog.length, 1);
+  assert.equal(state.telemetryState.eventLog[0].category, "validator-mismatch");
+});
+
+test("reviewed trace donation requires a staged draft and clears it after recording", () => {
+  let state = runtimeModule.createDefaultState({
+    consentAndSettings: {
+      telemetryEnabled: true,
+      telemetryPreferences: {
+        validatorMismatchEnabled: false,
+        crashReportsEnabled: false,
+        reviewedTraceDonationEnabled: true,
+      },
+    },
+  });
+  const scene = runtimeModule.createFallbackScene("trace-review");
+  state = runtimeModule.stageTraceDonationDraft(state, scene);
+  assert.ok(state.telemetryState.pendingTraceDonation);
+
+  state = runtimeModule.donateReviewedTrace(state);
+  assert.equal(state.telemetryState.pendingTraceDonation, null);
+  assert.equal(state.telemetryState.eventLog.at(-1).category, "reviewed-trace-donation");
+});
+
+test("safety redirect scene uses bounded non-companion recovery copy", () => {
+  const scene = runtimeModule.createSafetyRedirectScene(["graphic violence"]);
+  assert.equal(scene.scene.objectiveId, "safety.redirect");
+  assert.match(scene.narration.text, /paused normal tutoring/i);
+  assert.doesNotMatch(scene.narration.text, /friend|companion|always here/i);
 });
 
 test("offline recovery state retains the last safe scene metadata", () => {

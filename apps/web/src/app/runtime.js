@@ -8,6 +8,7 @@ import {
   createDefaultState as createDefaultStateCore,
   createExportManifest as createExportManifestCore,
   createFallbackScene as createFallbackSceneCore,
+  detectBlockedContent as detectBlockedContentCore,
   detectCapabilities as detectCapabilitiesCore,
   getMathValidationFeedbackMessage as getMathFeedbackMessageCore,
   interpretScene as interpretSceneCore,
@@ -68,6 +69,7 @@ const validateMathInputResponse = (input, expectedExpression, conceptId = null) 
   validateMathResponseCore(input, expectedExpression, conceptId);
 const getRelayBaseUrl = () =>
   String(globalThis.PRIMER_CONFIG?.relayBaseUrl ?? globalThis.process?.env?.PRIMER_RELAY_BASE_URL ?? APP_CONFIG.relayBaseUrl ?? "").trim();
+const detectBlockedContent = (...values) => detectBlockedContentCore(...values);
 
 const cloneJsonValue = (value) => JSON.parse(JSON.stringify(value));
 
@@ -90,6 +92,131 @@ const mergeProviderSecretIntoState = (state, apiKey = "") =>
       hasStoredApiKey: Boolean(apiKey),
     },
   });
+
+const TELEMETRY_EVENT_LIMIT = 24;
+
+const telemetryPreferenceEnabled = (state, category) => {
+  const preferences = state?.consentAndSettings?.telemetryPreferences ?? {};
+  if (!state?.consentAndSettings?.telemetryEnabled) {
+    return false;
+  }
+
+  if (category === "validator-mismatch") {
+    return preferences.validatorMismatchEnabled;
+  }
+  if (category === "crash-report") {
+    return preferences.crashReportsEnabled;
+  }
+  if (category === "reviewed-trace-donation") {
+    return preferences.reviewedTraceDonationEnabled;
+  }
+
+  return false;
+};
+
+const createTelemetryEvent = (category, summary, details = null, requiresReview = false) => ({
+  eventId: `telemetry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  category,
+  summary,
+  details,
+  requiresReview,
+  recordedAt: new Date().toISOString(),
+});
+
+const recordTelemetryEvent = (state, category, summary, details = null, requiresReview = false) => {
+  if (!telemetryPreferenceEnabled(state, category)) {
+    return state;
+  }
+
+  const event = createTelemetryEvent(category, summary, details, requiresReview);
+  return createDefaultState({
+    ...state,
+    telemetryState: {
+      ...state.telemetryState,
+      lastCrashAt: category === "crash-report" ? event.recordedAt : state.telemetryState?.lastCrashAt ?? null,
+      eventLog: [...(state.telemetryState?.eventLog ?? []), event].slice(-TELEMETRY_EVENT_LIMIT),
+    },
+  });
+};
+
+const stageTraceDonationDraft = (state, scene) =>
+  createDefaultState({
+    ...state,
+    telemetryState: {
+      ...state.telemetryState,
+      pendingTraceDonation: scene
+        ? {
+            draftId: `trace-${Date.now()}`,
+            sceneId: scene.scene?.id ?? null,
+            objectiveId: scene.scene?.objectiveId ?? null,
+            summary: scene.narration?.text ?? "Current tutoring trace",
+            reviewStatus: "pending",
+            preparedAt: new Date().toISOString(),
+          }
+        : null,
+    },
+  });
+
+const clearTraceDonationDraft = (state) =>
+  createDefaultState({
+    ...state,
+    telemetryState: {
+      ...state.telemetryState,
+      pendingTraceDonation: null,
+    },
+  });
+
+const donateReviewedTrace = (state) => {
+  const draft = state.telemetryState?.pendingTraceDonation;
+  if (!draft) {
+    return state;
+  }
+
+  return clearTraceDonationDraft(
+    recordTelemetryEvent(
+      state,
+      "reviewed-trace-donation",
+      `Reviewed trace donated for ${draft.objectiveId ?? "current objective"}.`,
+      {
+        draftId: draft.draftId,
+        sceneId: draft.sceneId,
+        objectiveId: draft.objectiveId,
+      },
+      true,
+    ),
+  );
+};
+
+const createSafetyRedirectScene = (blockedMatches = []) => ({
+  version: 1,
+  scene: {
+    id: `scene_safety_redirect_${Date.now()}`,
+    kind: "fallback",
+    objectiveId: "safety.redirect",
+    transition: "fade",
+    tone: "calm",
+  },
+  narration: {
+    text: "Primer paused normal tutoring for this request. Try a neutral algebra question, review your concept map, or take a short break before continuing.",
+    maxChars: 220,
+    estDurationMs: 1800,
+    bargeInAllowed: false,
+  },
+  interaction: {
+    type: "none",
+  },
+  visualIntent: {
+    type: "recipe",
+    recipeId: "neutral_choice_board",
+    vars: {
+      blockedCategories: blockedMatches.join(","),
+    },
+  },
+  evidence: {
+    observedSkill: "safety-redirect",
+    confidenceHint: 1,
+  },
+});
 
 const openStorageDatabase = (storageEnv = globalThis) =>
   new Promise((resolve, reject) => {
@@ -905,14 +1032,26 @@ const requestDirectorScene = async ({ state, decision, latestInput, localScene, 
               headers: { "content-type": "application/json" },
               body: JSON.stringify(request),
             }).then(async (res) => {
+              const body = await res.json().catch(() => null);
               if (!res.ok) {
-                throw new Error(`relay-${res.status}`);
+                return {
+                  __relayError: body?.error ?? createStableError(`relay-${res.status}`, "Relay request failed.").error,
+                };
               }
-              return res.json();
+              return body;
             }),
       DIRECTOR_TIMEOUT_MS,
       "relay-timeout",
     );
+
+    if (response?.__relayError) {
+      return {
+        ok: false,
+        error: {
+          error: response.__relayError,
+        },
+      };
+    }
 
     const validation = validateDirectorResponse(response, request.hardConstraints);
     if (!validation.ok) {
@@ -1153,6 +1292,7 @@ export {
   mergeProviderSecretIntoState,
   queueImageGeneration,
   recoverSceneForRuntime,
+  recordTelemetryEvent,
   requestDirectorScene,
   requestVisionInterpretation,
   resetLearnerState,
@@ -1160,7 +1300,12 @@ export {
   setActiveScene,
   setAdminPin,
   sanitizeStateForPersistence,
+  stageTraceDonationDraft,
+  clearTraceDonationDraft,
+  donateReviewedTrace,
+  createSafetyRedirectScene,
   createBrowserStorageAdapter,
+  detectBlockedContent,
   unlockAdmin,
   updateAssetAccess,
   updateConsentSettings,
