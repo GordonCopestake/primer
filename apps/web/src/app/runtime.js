@@ -889,10 +889,14 @@ const validateShortTextResponse = (input, expectedResponse) => {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
-  const normalizedExpected = String(expectedResponse ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
+  const normalizedExpectedValues = (Array.isArray(expectedResponse) ? expectedResponse : [expectedResponse])
+    .map((value) =>
+      String(value ?? "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " "),
+    )
+    .filter(Boolean);
 
   if (!normalizedInput) {
     return {
@@ -902,10 +906,12 @@ const validateShortTextResponse = (input, expectedResponse) => {
     };
   }
 
-  const correct =
-    normalizedInput === normalizedExpected ||
-    normalizedInput.includes(normalizedExpected) ||
-    normalizedExpected.includes(normalizedInput);
+  const correct = normalizedExpectedValues.some(
+    (normalizedExpected) =>
+      normalizedInput === normalizedExpected ||
+      normalizedInput.includes(normalizedExpected) ||
+      normalizedExpected.includes(normalizedInput),
+  );
 
   return {
     correct,

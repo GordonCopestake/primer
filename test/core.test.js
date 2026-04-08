@@ -125,6 +125,7 @@ test("diagnostic progress records assessment attempts and linked evidence", () =
   assert.equal(state.pedagogicalState.assessmentAttempts.length, 1);
   assert.equal(state.pedagogicalState.assessmentAttempts[0].source, "diagnostic");
   assert.equal(state.pedagogicalState.assessmentAttempts[0].conceptId, "variables-and-expressions");
+  assert.equal(state.pedagogicalState.assessmentAttempts[0].learnerResponse, "missing number");
   assert.equal(state.pedagogicalState.evidenceLog.at(-1).source, "diagnostic");
   assert.equal(state.pedagogicalState.evidenceLog.at(-1).objectiveId, "diagnostic.variables");
   assert.equal(state.pedagogicalState.evidenceLog.at(-1).relatedInteractionIds.length > 0, true);

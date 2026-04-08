@@ -315,6 +315,12 @@ test("short text validator accepts bounded textual responses", () => {
   assert.equal(result.reason, "short-text");
 });
 
+test("short text validator accepts any authored keyword match", () => {
+  const result = runtimeModule.validateShortTextResponse("unknown number", ["unknown", "value", "variable"]);
+  assert.equal(result.correct, true);
+  assert.equal(result.reason, "short-text");
+});
+
 test("scene normalization preserves bounded algebra interactions unchanged", () => {
   const scene = {
     version: 1,

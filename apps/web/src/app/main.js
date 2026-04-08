@@ -1143,6 +1143,7 @@ const renderScene = (scene) => {
       if (!isDiagnosticComplete()) {
         state = advanceAssessment(state, {
           correct,
+          learnerResponse: choiceId,
           recommendedConceptId: correct
             ? currentDecision.conceptId
             : state.pedagogicalState.recommendedConceptId ?? "variables-and-expressions",
@@ -1192,7 +1193,7 @@ const renderScene = (scene) => {
       const masteryTarget = currentDecision.conceptId ?? currentDecision.activeDomain;
       const response = String(input?.value ?? "").trim().toLowerCase();
       const expected = safeScene.interaction.expectedKeywords.map((value) => String(value).toLowerCase());
-      const validation = validateShortTextResponse(response, expected[0] ?? "");
+      const validation = validateShortTextResponse(response, expected);
       const correct = validation.correct;
       latestInput = {
         type: "transcript",
@@ -1205,6 +1206,7 @@ const renderScene = (scene) => {
       if (!isDiagnosticComplete()) {
         state = advanceAssessment(state, {
           correct,
+          learnerResponse: response,
           recommendedConceptId: correct ? currentDecision.conceptId : state.pedagogicalState.recommendedConceptId,
         });
         setStatus(correct ? "Diagnostic note saved." : validation.feedback);
@@ -1268,6 +1270,7 @@ const renderScene = (scene) => {
       if (!isDiagnosticComplete()) {
         state = advanceAssessment(state, {
           correct: validation.correct,
+          learnerResponse: response,
           recommendedConceptId: validation.correct
             ? currentDecision.conceptId
             : state.pedagogicalState.recommendedConceptId ?? currentDecision.conceptId,
