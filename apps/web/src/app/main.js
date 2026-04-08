@@ -133,6 +133,14 @@ const getLessonExpectedResponse = (lesson, conceptId) => {
 
 const getLessonResponseType = (lesson) => lesson?.responseType ?? "expression";
 
+const getLessonChoiceOptions = (lesson) =>
+  (lesson?.choiceOptions ?? []).map((label) => ({
+    id: label,
+    label,
+    audioLabel: label,
+    correct: String(label).toLowerCase() === String(lesson?.expectedResponse ?? "").toLowerCase(),
+  }));
+
 const getConceptStateLabel = (conceptId) =>
   deriveConceptStatuses().find((concept) => concept.id === conceptId)?.state ?? "locked";
 
@@ -601,8 +609,17 @@ const createSceneFromDecision = (decision) => {
     },
     visualIntent: fallbackScene.visualIntent,
     interaction: {
-      type: getLessonResponseType(lesson) === "short-text" ? "read-respond" : "math-input",
-      ...(getLessonResponseType(lesson) === "short-text"
+      type:
+        getLessonResponseType(lesson) === "multiple-choice"
+          ? "tap-choice"
+          : getLessonResponseType(lesson) === "short-text"
+            ? "read-respond"
+            : "math-input",
+      ...(getLessonResponseType(lesson) === "multiple-choice"
+        ? {
+            options: getLessonChoiceOptions(lesson),
+          }
+        : getLessonResponseType(lesson) === "short-text"
         ? {
             prompt:
               lesson?.prompt ??
