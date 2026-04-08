@@ -1008,6 +1008,51 @@ test("export bundle wraps state with a manifest and legacy imports normalize", (
   assert.equal(normalized.state.schemaVersion, state.schemaVersion);
 });
 
+test("export completion metadata updates only after a completed export step", () => {
+  const state = runtimeModule.createDefaultState();
+  const exportedAt = "2026-04-08T12:00:00.000Z";
+
+  const updated = runtimeModule.markExportCompleted(state, exportedAt);
+
+  assert.equal(state.exportMetadata.lastExportedAt, null);
+  assert.equal(updated.exportMetadata.lastExportedAt, exportedAt);
+});
+
+test("imported backup state preserves the current provider secret while recording import time", () => {
+  const currentState = runtimeModule.createDefaultState({
+    providerConfig: {
+      providerName: "openrouter",
+      modelName: "model-a",
+      apiKey: "secret-key",
+      hasStoredApiKey: true,
+    },
+  });
+  const importedState = runtimeModule.createDefaultState({
+    providerConfig: {
+      providerName: "openrouter",
+      modelName: "model-b",
+      apiKey: "",
+      hasStoredApiKey: false,
+    },
+    exportMetadata: {
+      lastExportedAt: "2026-04-07T09:00:00.000Z",
+    },
+  });
+
+  const applied = runtimeModule.applyImportedBackupState(
+    currentState,
+    importedState,
+    { tier: "standard-local" },
+    "2026-04-08T12:00:00.000Z",
+  );
+
+  assert.equal(applied.providerConfig.modelName, "model-b");
+  assert.equal(applied.providerConfig.apiKey, "secret-key");
+  assert.equal(applied.providerConfig.hasStoredApiKey, true);
+  assert.equal(applied.exportMetadata.lastExportedAt, "2026-04-07T09:00:00.000Z");
+  assert.equal(applied.exportMetadata.lastImportedAt, "2026-04-08T12:00:00.000Z");
+});
+
 test("import bundle validation rejects missing state payloads", () => {
   assert.throws(
     () => runtimeModule.parseImportBundle({ manifest: { manifestType: "primer-export-manifest" } }),

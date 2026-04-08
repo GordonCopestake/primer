@@ -664,6 +664,15 @@ const createExportBundle = ({ state, scene, encrypted = false, exportedAt = new 
   scene,
 });
 
+const markExportCompleted = (state, exportedAt = new Date().toISOString()) =>
+  createDefaultState({
+    ...state,
+    exportMetadata: {
+      ...state?.exportMetadata,
+      lastExportedAt: exportedAt,
+    },
+  });
+
 const parseImportBundle = (rawBundle) => {
   if (!rawBundle || typeof rawBundle !== "object") {
     throw new Error("Import bundle must be an object.");
@@ -690,6 +699,22 @@ const parseImportBundle = (rawBundle) => {
     encrypted: false,
     exportedAt: new Date().toISOString(),
   });
+};
+
+const applyImportedBackupState = (currentState, importedState, capabilitySnapshot, importedAt = new Date().toISOString()) => {
+  const migratedImportState = migrateState(importedState);
+  const preservedApiKey = currentState?.providerConfig?.apiKey ?? "";
+
+  return hydrateAssetIndex(
+    createDefaultState({
+      ...mergeProviderSecretIntoState(migratedImportState, preservedApiKey),
+      capabilities: capabilitySnapshot,
+      exportMetadata: {
+        ...migratedImportState.exportMetadata,
+        lastImportedAt: importedAt,
+      },
+    }),
+  );
 };
 
 const createAssetRecord = ({
@@ -1279,6 +1304,7 @@ export {
   advanceAssessment,
   advanceTutoringSession,
   appendRecentTurn,
+  applyImportedBackupState,
   applyMasteryEvidence,
   buildDirectorRequest,
   clearAdminPin,
@@ -1308,6 +1334,7 @@ export {
   interpretScene,
   listInstalledAssets,
   lockAdmin,
+  markExportCompleted,
   migrateState,
   nextCurriculumDecision,
   normalizeSceneForRuntime,

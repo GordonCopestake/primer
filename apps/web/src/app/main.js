@@ -4,6 +4,7 @@ import {
   advanceAssessment,
   advanceTutoringSession,
   appendRecentTurn,
+  applyImportedBackupState,
   applyMasteryEvidence,
   clearAdminPin,
   createBrowserStorageAdapter,
@@ -27,6 +28,7 @@ import {
   getLessonForConcept,
   lockAdmin,
   listInstalledAssets,
+  markExportCompleted,
   migrateState,
   normalizeSceneForRuntime,
   parseImportBundle,
@@ -1663,15 +1665,6 @@ const syncStorageStatus = async () => {
 
 const exportBackup = async () => {
   const exportedAt = new Date().toISOString();
-  state = createDefaultState({
-    ...state,
-    exportMetadata: {
-      ...state.exportMetadata,
-      lastExportedAt: exportedAt,
-    },
-  });
-  await persistState();
-  updateSettingsForm();
   const bundle = createExportBundle({
     state,
     scene: currentScene,
@@ -1693,6 +1686,9 @@ const exportBackup = async () => {
   }
 
   await storageAdapter.exportBackup(bundle);
+  state = markExportCompleted(state, exportedAt);
+  await persistState();
+  updateSettingsForm();
 
   const blob = new Blob([data], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -1715,18 +1711,7 @@ const importBackup = async (file) => {
   }
   const parsed = parseImportBundle(JSON.parse(text));
   const importedAt = new Date().toISOString();
-  const migratedImportState = migrateState(parsed.state);
-  const preservedApiKey = state.providerConfig?.apiKey ?? "";
-  state = hydrateAssetIndex(
-    createDefaultState({
-      ...mergeProviderSecretIntoState(migratedImportState, preservedApiKey),
-      capabilities: capabilitySnapshot,
-      exportMetadata: {
-        ...migratedImportState.exportMetadata,
-        lastImportedAt: importedAt,
-      },
-    }),
-  );
+  state = applyImportedBackupState(state, parsed.state, capabilitySnapshot, importedAt);
   currentScene = parsed.scene ?? null;
   await persistState();
   if (currentScene) {
