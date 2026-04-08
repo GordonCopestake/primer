@@ -279,6 +279,17 @@ test("local trace scoring accepts broad, deliberate strokes", () => {
   assert.ok(score.confidence >= 0.72);
 });
 
+test("math input validator accepts equivalent numeric answers", () => {
+  const result = runtimeModule.validateMathInputResponse("x = 4", "4");
+  assert.equal(result.correct, true);
+});
+
+test("math input validator rejects malformed expressions", () => {
+  const result = runtimeModule.validateMathInputResponse("alert(1)", "4");
+  assert.equal(result.correct, false);
+  assert.equal(result.reason, "syntax");
+});
+
 test("repeat-sound scenes fall back to a tap path when local audio is unavailable", () => {
   const state = runtimeModule.createDefaultState({
     capabilities: {
@@ -600,6 +611,12 @@ test("reset learner state clears progress but preserves local admin and capabili
         adminPinHash: runtimeModule.hashAdminPin("1234"),
         adminUnlocked: true,
       },
+      providerConfig: {
+        providerName: "openrouter",
+        modelName: "provider/model",
+        endpointUrl: "https://openrouter.ai/api/v1",
+        apiKey: "test-key",
+      },
     }),
   );
 
@@ -610,6 +627,7 @@ test("reset learner state clears progress but preserves local admin and capabili
   assert.equal(state.consentAndSettings.cloudEnabled, true);
   assert.equal(state.consentAndSettings.adminPinEnabled, true);
   assert.equal(state.consentAndSettings.adminUnlocked, false);
+  assert.equal(state.providerConfig.apiKey, "test-key");
 });
 
 test("offline recovery state retains the last safe scene metadata", () => {

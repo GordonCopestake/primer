@@ -81,6 +81,14 @@ const createStateShape = (overrides = {}) => ({
     storagePersistenceGranted: "unknown",
     ...overrides.consentAndSettings,
   },
+  providerConfig: {
+    providerName: "openrouter",
+    modelName: "",
+    endpointUrl: "",
+    apiKey: "",
+    configuredAt: null,
+    ...overrides.providerConfig,
+  },
   capabilities: {
     tier: "minimal",
     webgpu: false,
@@ -171,7 +179,7 @@ const numeracyDecision = (stage = 1) => ({
   activeDomain: "numeracy",
   literacyStage: stage,
   allowedSceneKinds: lessonKinds,
-  allowedInteractionTypes: ["tap-choice", "none"],
+  allowedInteractionTypes: ["tap-choice", "math-input", "none"],
   cloudEscalationAllowed: APP_CONFIG.features.cloudDirector,
   maxNarrationChars: 120,
   maxPromptComplexity: 2,
@@ -423,6 +431,7 @@ const resetLearnerState = (state) => {
       captionsEnabled: state.consentAndSettings.captionsEnabled,
       soundEnabled: state.consentAndSettings.soundEnabled,
     },
+    providerConfig: state.providerConfig,
     assetIndex: state.assetIndex,
   });
 };
@@ -1168,6 +1177,42 @@ const scoreTrace = (points, bounds) => {
   };
 };
 
+const validateMathInputResponse = (input, expectedExpression) => {
+  const normalizedInput = String(input ?? "").trim();
+  const normalizedExpected = String(expectedExpression ?? "").trim();
+  const safePattern = /^[0-9xX+\-*/().\s=]+$/;
+
+  if (!normalizedInput || !safePattern.test(normalizedInput)) {
+    return { correct: false, reason: "syntax" };
+  }
+
+  const inputRhs = normalizedInput.includes("=") ? normalizedInput.split("=").pop().trim() : normalizedInput;
+  const expectedRhs = normalizedExpected.includes("=")
+    ? normalizedExpected.split("=").pop().trim()
+    : normalizedExpected;
+
+  const asNumber = Number(inputRhs);
+  const expectedNumber = Number(expectedRhs);
+  if (Number.isFinite(asNumber) && Number.isFinite(expectedNumber)) {
+    return { correct: Math.abs(asNumber - expectedNumber) <= 1e-6, reason: "numeric" };
+  }
+
+  try {
+    const toEvaluator = (expr) => Function("x", `"use strict"; return (${expr});`);
+    const leftEval = toEvaluator(inputRhs);
+    const rightEval = toEvaluator(expectedRhs);
+    const checkpoints = [-3, -1, 0, 1, 2, 4];
+    const equivalent = checkpoints.every((x) => {
+      const left = leftEval(x);
+      const right = rightEval(x);
+      return Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) <= 1e-6;
+    });
+    return { correct: equivalent, reason: "expression" };
+  } catch {
+    return { correct: false, reason: "syntax" };
+  }
+};
+
 const requestVisionInterpretation = async ({ traceDataUrl, decision, target, fetchImpl = fetch }) => {
   const relayBaseUrl = APP_CONFIG.relayBaseUrl?.trim();
   if (!relayBaseUrl) {
@@ -1271,6 +1316,7 @@ export {
   requestDirectorScene,
   requestVisionInterpretation,
   scoreTrace,
+  validateMathInputResponse,
   setAdminPin,
   setActiveScene,
   normalizeSceneForRuntime,

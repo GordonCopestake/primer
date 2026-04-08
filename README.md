@@ -1,17 +1,17 @@
-# Primer
+# Open-Source Modular AI Tutor
 
-Primer is an adaptive learning web app
+This project is an open-source, web-first, local-first AI tutoring app prototype.
 
-The current implementation focuses on the v1 runtime foundation:
+The current implementation focuses on runtime foundations:
 
 - static web shell with installable PWA assets and offline shell caching
 - local learner-state persistence with safe scene restore
-- deterministic baseline assessment, reading, writing, and numeracy progression helpers
+- deterministic baseline assessment and bounded progression helpers
 - capability detection plus browser-native TTS/STT hooks where supported
 - local settings/admin entry point with export/import backup
 - safe fallback scene and strict scene validation/interpreter guards
 
-## What The App Does
+## Current Progress vs New PM Spec
 
 Primer presents bounded learning scenes inside a fixed local shell. A learner starts in a deterministic baseline assessment, then progresses through simple reading, writing, and numeracy scenes. The app stores learner state locally, restores the last safe scene after reload, and exposes local settings and backup controls.
 

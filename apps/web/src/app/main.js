@@ -30,6 +30,7 @@ import {
   scoreTrace,
   setAdminPin,
   setActiveScene,
+  validateMathInputResponse,
   unlockAdmin,
   updateAssetAccess,
   updateQuotaEstimate,
@@ -43,6 +44,7 @@ const statusIndicator = document.querySelector("#status-indicator");
 const loadingIndicator = document.querySelector("#loading-indicator");
 const listenButton = document.querySelector("#listen-button");
 const replayButton = document.querySelector("#replay-button");
+const conceptMapButton = document.querySelector("#concept-map-button");
 const settingsButton = document.querySelector("#settings-button");
 const stopButton = document.querySelector("#stop-button");
 const fallbackButton = document.querySelector("#fallback-button");
@@ -50,6 +52,11 @@ const settingsDialog = document.querySelector("#settings-dialog");
 const soundEnabledInput = document.querySelector("#sound-enabled");
 const captionsEnabledInput = document.querySelector("#captions-enabled");
 const cloudEnabledInput = document.querySelector("#cloud-enabled");
+const providerNameInput = document.querySelector("#provider-name-input");
+const providerModelInput = document.querySelector("#provider-model-input");
+const providerEndpointInput = document.querySelector("#provider-endpoint-input");
+const providerApiKeyInput = document.querySelector("#provider-api-key-input");
+const saveProviderButton = document.querySelector("#save-provider-button");
 const cloudImageEnabledInput = document.querySelector("#cloud-image-enabled");
 const cloudVisionEnabledInput = document.querySelector("#cloud-vision-enabled");
 const encryptedExportEnabledInput = document.querySelector("#encrypted-export-enabled");
@@ -232,6 +239,16 @@ const setLoading = (message) => {
   if (loadingIndicator) {
     loadingIndicator.textContent = message;
   }
+};
+
+const updateProviderConfig = (updates) => {
+  state = createDefaultState({
+    ...state,
+    providerConfig: {
+      ...state.providerConfig,
+      ...updates,
+    },
+  });
 };
 
 const readStorage = (key) => {
@@ -480,17 +497,97 @@ const createSceneFromDecision = (decision) => {
       },
       visualIntent: fallbackScene.visualIntent,
       interaction: {
-        type: "tap-choice",
-        options: [
-          { id: "two", label: "••", audioLabel: "Two dots", correct: false },
-          { id: "four", label: "••••", audioLabel: "Four dots", correct: true },
-        ],
+        type:
+          decision.literacyStage >= 2
+            ? "math-input"
+            : "tap-choice",
+        ...(decision.literacyStage >= 2
+          ? {
+              expressionPrompt: "Solve for x: 2x + 3 = 11",
+              expectedExpression: "4",
+            }
+          : {
+              options: [
+                { id: "two", label: "••", audioLabel: "Two dots", correct: false },
+                { id: "four", label: "••••", audioLabel: "Four dots", correct: true },
+              ],
+            }),
       },
       evidence: fallbackScene.evidence,
     };
   }
 
   return createFallbackScene("decision-miss");
+};
+
+const deriveConceptStatuses = () => {
+  const solvedApproximation = Math.max(
+    0,
+    (state.pedagogicalState.domainStage.reading ?? 0) +
+      (state.pedagogicalState.domainStage.writing ?? 0) +
+      (state.pedagogicalState.domainStage.numeracy ?? 0),
+  );
+  const progressIndex = Math.min(algebraConceptGraph.length, solvedApproximation + 1);
+
+  return algebraConceptGraph.map((concept, index) => {
+    if (index < progressIndex - 1) {
+      return { ...concept, state: "mastered" };
+    }
+
+    if (index === progressIndex - 1) {
+      return { ...concept, state: "recommended next" };
+    }
+
+    const prereqsMet = concept.prerequisites.every((prereq) => {
+      const prereqIndex = algebraConceptGraph.findIndex((node) => node.id === prereq);
+      return prereqIndex >= 0 && prereqIndex < progressIndex;
+    });
+
+    return {
+      ...concept,
+      state: prereqsMet ? "available" : "locked",
+    };
+  });
+};
+
+const renderConceptMapView = () => {
+  const nodes = deriveConceptStatuses();
+  const rows = nodes
+    .map(
+      (node) => `
+        <li class="concept-node" data-node-state="${node.state.replaceAll(" ", "-")}">
+          <div>
+            <strong>${node.label}</strong>
+            <p class="helper">Prerequisites: ${node.prerequisites.length ? node.prerequisites.join(", ") : "None"}</p>
+          </div>
+          <span class="status-pill subtle">${node.state}</span>
+        </li>
+      `,
+    )
+    .join("");
+
+  sceneRoot.innerHTML = `
+    <div class="scene-body">
+      <h2>Algebra foundations concept map</h2>
+      <p class="helper">Tech-tree style progress view for the bounded MVP module.</p>
+      <ul class="concept-map-list">${rows}</ul>
+      <div class="trace-actions">
+        <button id="resume-lesson-button" type="button" class="choice-button">Resume lesson</button>
+      </div>
+    </div>
+  `;
+
+  sceneRoot.querySelector("#resume-lesson-button")?.addEventListener("click", () => {
+    if (lastLessonScene) {
+      renderScene(lastLessonScene);
+      return;
+    }
+    renderCurrentDecisionScene().catch((error) => {
+      console.error("Resume lesson failed", error);
+      renderScene(createFallbackScene("resume-failure"));
+    });
+  });
+  setStatus("Concept map loaded.");
 };
 
 const stopAudioAndInput = () => {
@@ -514,6 +611,7 @@ const renderScene = (scene) => {
   const interactionType = safeScene.interaction.type;
 
   currentScene = safeScene;
+  lastLessonScene = safeScene;
   state = setActiveScene(state, safeScene);
   if (safeScene.visualIntent?.recipeId) {
     state = updateAssetAccess(state, "shell-core");
@@ -851,8 +949,9 @@ const maybeQueueSceneImage = async (scene) => {
 const renderCurrentDecisionScene = async () => {
   const decision = nextCurriculumDecision(state);
   const localScene = createSceneFromDecision(decision);
+  const hasProviderKey = typeof state.providerConfig?.apiKey === "string" && state.providerConfig.apiKey.length > 0;
 
-  if (state.consentAndSettings.cloudEnabled && decision.cloudEscalationAllowed) {
+  if (state.consentAndSettings.cloudEnabled && decision.cloudEscalationAllowed && hasProviderKey) {
     setLoading("Checking scene");
     const relayResult = await requestDirectorScene({
       state,
@@ -870,7 +969,9 @@ const renderCurrentDecisionScene = async () => {
       return;
     }
 
-    setStatus("Relay unavailable. Continuing in local-only mode.");
+    setStatus("Relay unavailable. Continuing in local deterministic mode.");
+  } else if (state.consentAndSettings.cloudEnabled && !hasProviderKey) {
+    setStatus("Cloud assist is enabled, but no API key is configured. Using local deterministic mode.");
   }
 
   renderScene(localScene);
@@ -883,6 +984,10 @@ const updateSettingsForm = () => {
   soundEnabledInput.checked = state.consentAndSettings.soundEnabled;
   captionsEnabledInput.checked = state.consentAndSettings.captionsEnabled;
   cloudEnabledInput.checked = state.consentAndSettings.cloudEnabled;
+  if (providerNameInput) providerNameInput.value = state.providerConfig?.providerName ?? "";
+  if (providerModelInput) providerModelInput.value = state.providerConfig?.modelName ?? "";
+  if (providerEndpointInput) providerEndpointInput.value = state.providerConfig?.endpointUrl ?? "";
+  if (providerApiKeyInput) providerApiKeyInput.value = state.providerConfig?.apiKey ?? "";
   cloudImageEnabledInput.checked = state.consentAndSettings.cloudImageEnabled;
   cloudVisionEnabledInput.checked = state.consentAndSettings.cloudVisionEnabled;
   encryptedExportEnabledInput.checked = APP_CONFIG.features.encryptedExport;
@@ -894,7 +999,7 @@ const updateSettingsForm = () => {
   const installedAssets = listInstalledAssets(state);
   storageIndicator.textContent =
     `Storage persistence: ${state.consentAndSettings.storagePersistenceGranted}. ` +
-    `Relay: ${APP_CONFIG.relayBaseUrl || "disabled"}. ` +
+    `Relay: ${APP_CONFIG.relayBaseUrl || "disabled"}. Provider: ${state.providerConfig?.providerName || "unset"}. ` +
     (quota ? `Usage ${Math.round((usage ?? 0) / 1024)} KB of ${Math.round(quota / 1024)} KB.` : "Usage estimate unavailable.");
   assetIndicator.textContent =
     `Assets: ${installedAssets.length} installed, ${Math.round(installedBytes / 1024)} KB local.`;
@@ -979,6 +1084,11 @@ fallbackButton?.addEventListener("click", () => {
   renderScene(createFallbackScene("manual"));
 });
 
+conceptMapButton?.addEventListener("click", () => {
+  stopAudioAndInput();
+  renderConceptMapView();
+});
+
 replayButton?.addEventListener("click", () => {
   if (currentScene) {
     speakScene(currentScene);
@@ -1051,6 +1161,19 @@ captionsEnabledInput?.addEventListener("change", () => {
   state = updateConsentSettings(state, { captionsEnabled: captionsEnabledInput.checked });
   persistState();
   renderScene(currentScene ?? createFallbackScene("captions"));
+});
+
+saveProviderButton?.addEventListener("click", () => {
+  updateProviderConfig({
+    providerName: providerNameInput?.value.trim() || "openrouter",
+    modelName: providerModelInput?.value.trim() || "",
+    endpointUrl: providerEndpointInput?.value.trim() || "",
+    apiKey: providerApiKeyInput?.value.trim() || "",
+    configuredAt: new Date().toISOString(),
+  });
+  persistState();
+  updateSettingsForm();
+  setStatus("Provider settings saved locally.");
 });
 
 cloudEnabledInput?.addEventListener("change", () => {

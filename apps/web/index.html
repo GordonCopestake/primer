@@ -57,6 +57,31 @@
           <span>Cloud assist enabled</span>
           <input id="cloud-enabled" type="checkbox" />
         </label>
+        <section class="settings-block" aria-labelledby="provider-heading">
+          <div>
+            <p class="eyebrow">Provider</p>
+            <h3 id="provider-heading">BYO API configuration</h3>
+          </div>
+          <label class="setting-row">
+            <span>Provider</span>
+            <input id="provider-name-input" type="text" placeholder="openrouter" />
+          </label>
+          <label class="setting-row">
+            <span>Model</span>
+            <input id="provider-model-input" type="text" placeholder="provider/model" />
+          </label>
+          <label class="setting-row">
+            <span>Endpoint URL</span>
+            <input id="provider-endpoint-input" type="url" placeholder="https://..." />
+          </label>
+          <label class="setting-row">
+            <span>API Key</span>
+            <input id="provider-api-key-input" type="password" />
+          </label>
+          <div class="settings-actions">
+            <button id="save-provider-button" type="button" class="shell-button">Save provider settings</button>
+          </div>
+        </section>
         <section class="settings-block" aria-labelledby="privacy-heading">
           <div>
             <p class="eyebrow">Privacy</p>

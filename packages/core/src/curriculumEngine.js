@@ -72,7 +72,7 @@ const numeracyDecision = (stage = 1) => ({
   activeDomain: "numeracy",
   literacyStage: stage,
   allowedSceneKinds: lessonKinds,
-  allowedInteractionTypes: ["tap-choice", "none"],
+  allowedInteractionTypes: ["tap-choice", "math-input", "none"],
   cloudEscalationAllowed: APP_CONFIG.features.cloudDirector,
   maxNarrationChars: 120,
   maxPromptComplexity: 2,

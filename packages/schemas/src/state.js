@@ -55,6 +55,14 @@ export const createStateShape = (overrides = {}) => ({
     storagePersistenceGranted: "unknown",
     ...overrides.consentAndSettings,
   },
+  providerConfig: {
+    providerName: "openrouter",
+    modelName: "",
+    endpointUrl: "",
+    apiKey: "",
+    configuredAt: null,
+    ...overrides.providerConfig,
+  },
   capabilities: {
     tier: "minimal",
     webgpu: false,
