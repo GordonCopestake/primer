@@ -6,6 +6,7 @@ export const createMasteryRecord = (overrides = {}) => ({
   attempts: 0,
   lastPracticedAt: null,
   reviewDueAt: null,
+  supportReason: null,
   ...overrides,
 });
 

@@ -179,6 +179,34 @@ test("placement concepts with matching misconception signals insert remediation 
   assert.equal(decision.sessionPhase, "learner-attempt");
 });
 
+test("placement-driven mastery evidence keeps diagnostic support reasons distinct", () => {
+  let state = createDefaultState();
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "variables-and-expressions" });
+  state = advanceAssessment(state, { correct: false, recommendedConceptId: "variables-and-expressions" });
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "evaluate-expressions" });
+  state = advanceAssessment(state, { correct: false, recommendedConceptId: "one-step-addition-equations" });
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "two-step-equations" });
+
+  state = advanceTutoringSession(state, "order-of-operations", "continue");
+  state = advanceTutoringSession(state, "order-of-operations", "continue");
+  state = advanceTutoringSession(state, "order-of-operations", "continue");
+  state = applyMasteryEvidence(state, "order-of-operations", 1);
+
+  assert.equal(state.pedagogicalState.masteryByConcept["order-of-operations"].supportReason, "diagnostic-targeted-remediation");
+  assert.equal(state.pedagogicalState.lessonRecords["lesson.order-of-operations"].supportReason, "diagnostic-targeted-remediation");
+  assert.equal(state.pedagogicalState.attemptLog.at(-1).supportReason, "diagnostic-targeted-remediation");
+  assert.equal(state.pedagogicalState.evidenceLog.at(-1).supportReason, "diagnostic-targeted-remediation");
+});
+
+test("fresh tutoring mistakes are recorded as tutoring-error remediation", () => {
+  const state = applyMasteryEvidence(recordAssessmentCompletion(createDefaultState(), "variables-and-expressions"), "variables-and-expressions", 0);
+
+  assert.equal(state.pedagogicalState.masteryByConcept["variables-and-expressions"].supportReason, "tutoring-error-remediation");
+  assert.equal(state.pedagogicalState.lessonRecords["lesson.variables-and-expressions"].supportReason, "tutoring-error-remediation");
+  assert.equal(state.pedagogicalState.attemptLog.at(-1).supportReason, "tutoring-error-remediation");
+  assert.equal(state.pedagogicalState.evidenceLog.at(-1).supportReason, "tutoring-error-remediation");
+});
+
 test("mastery evidence advances toward the next available algebra concept", () => {
   const assessed = recordAssessmentCompletion(createDefaultState(), "variables-and-expressions");
   const shifted = applyMasteryEvidence(assessed, "variables-and-expressions", 1);

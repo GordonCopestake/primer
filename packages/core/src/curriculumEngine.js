@@ -154,8 +154,27 @@ const buildAttemptRecord = ({ conceptId, objectiveId, correct, input, inputType,
   inputType,
   learnerResponse: input,
   result: correct ? "correct" : "needs-review",
+  supportReason: null,
   recordedAt: new Date().toISOString(),
 });
+
+const getSupportReasonForConcept = (state, conceptId) => {
+  const prerequisiteGaps = state.pedagogicalState.prerequisiteGaps ?? [];
+  const likelyMisconceptions = state.pedagogicalState.likelyMisconceptions ?? [];
+  const concept = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.find((item) => item.id === conceptId);
+  const conceptMisconceptions = concept?.misconceptionTags ?? [];
+  const hasMatchingMisconception = likelyMisconceptions.some((tag) => conceptMisconceptions.includes(tag));
+
+  if (prerequisiteGaps.includes(conceptId) && hasMatchingMisconception) {
+    return "diagnostic-targeted-remediation";
+  }
+
+  if (prerequisiteGaps.includes(conceptId)) {
+    return "diagnostic-placement-review";
+  }
+
+  return null;
+};
 
 const deriveMisconceptionTags = (conceptId, correct) => {
   if (correct) {
@@ -314,6 +333,7 @@ export const applyMasteryEvidence = (state, conceptId, delta = 1) => {
   const misconceptionTags = deriveMisconceptionTags(conceptId, correct);
   const now = new Date().toISOString();
   const reviewDueAt = nextScore >= 1 ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null;
+  const supportReason = correct ? currentRecord.supportReason ?? getSupportReasonForConcept(state, conceptId) : "tutoring-error-remediation";
   const recommendedConceptId = getRecommendedConceptId({
     ...state.pedagogicalState.masteryByConcept,
     [conceptId]: {
@@ -357,6 +377,7 @@ export const applyMasteryEvidence = (state, conceptId, delta = 1) => {
             attempts: (currentRecord.attempts ?? 0) + 1,
             lastPracticedAt: now,
             reviewDueAt,
+            supportReason,
           },
         },
         misconceptionsByConcept: {
@@ -378,19 +399,23 @@ export const applyMasteryEvidence = (state, conceptId, delta = 1) => {
             conceptId,
             status: nextScore >= 1 ? "completed" : "in-progress",
             sessionPhase: correct ? "feedback" : "remediation",
+            supportReason,
             lastUpdatedAt: now,
           },
         },
         attemptLog: [
           ...(state.pedagogicalState.attemptLog ?? []),
-          buildAttemptRecord({
+          {
+            ...buildAttemptRecord({
             conceptId,
             objectiveId: state.pedagogicalState.currentObjectiveId ?? `concept.${conceptId}`,
             correct,
             input: delta,
             inputType: "engine-evidence",
             phase: "tutoring",
-          }),
+            }),
+            supportReason,
+          },
         ].slice(-50),
         evidenceLog: [
           ...state.pedagogicalState.evidenceLog,
@@ -400,6 +425,7 @@ export const applyMasteryEvidence = (state, conceptId, delta = 1) => {
             misconceptionTags,
             recordedAt: now,
             source: "tutoring-loop",
+            supportReason,
           },
         ].slice(-40),
       },
@@ -422,6 +448,11 @@ export const advanceTutoringSession = (state, conceptId, action = "continue") =>
     matchingMisconceptions.length > 0 &&
     sessionPhase === "worked-example" &&
     lessonRecord.supportPlanApplied !== true;
+  const supportReason = shouldInsertTargetedRemediation
+    ? "diagnostic-targeted-remediation"
+    : prerequisiteGaps.includes(conceptId)
+      ? "diagnostic-placement-review"
+      : lessonRecord.supportReason ?? null;
 
   let nextConceptId = conceptId;
   let nextSessionPhase = sessionPhase;
@@ -467,6 +498,7 @@ export const advanceTutoringSession = (state, conceptId, action = "continue") =>
           sessionPhase:
             nextConceptId === conceptId ? nextSessionPhase : state.pedagogicalState.lessonRecords?.[lessonId]?.sessionPhase ?? sessionPhase,
           supportPlanApplied,
+          supportReason,
           lastUpdatedAt: new Date().toISOString(),
         },
         ...(nextConceptId !== conceptId
@@ -477,6 +509,7 @@ export const advanceTutoringSession = (state, conceptId, action = "continue") =>
                 status: "in-progress",
                 sessionPhase: "explain",
                 supportPlanApplied: false,
+                supportReason: getSupportReasonForConcept(state, nextConceptId),
                 lastUpdatedAt: new Date().toISOString(),
               },
             }
