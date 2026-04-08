@@ -23,6 +23,7 @@ import {
   validateDirectorResponse as validateDirectorResponseSchema,
   validateSceneBlueprint,
 } from "../../../../packages/schemas/src/index.js";
+import { MOCK_PROVIDER_ADAPTER } from "../../../../relay/src/providers/mockProvider.js";
 
 const DIRECTOR_TIMEOUT_MS = 3_500;
 const IMAGE_TIMEOUT_MS = 2_500;
@@ -57,7 +58,7 @@ const getMathFeedbackMessage = (validation, conceptId = "algebra") =>
 const validateMathInputResponse = (input, expectedExpression, conceptId = null) =>
   validateMathResponseCore(input, expectedExpression, conceptId);
 const getRelayBaseUrl = () =>
-  String(globalThis.process?.env?.PRIMER_RELAY_BASE_URL ?? APP_CONFIG.relayBaseUrl ?? "").trim();
+  String(globalThis.PRIMER_CONFIG?.relayBaseUrl ?? globalThis.process?.env?.PRIMER_RELAY_BASE_URL ?? APP_CONFIG.relayBaseUrl ?? "").trim();
 
 const normalizeSceneForRuntime = (scene, runtimeState) => {
   if (!scene) {
@@ -627,32 +628,25 @@ const buildDirectorRequest = (state, decision, latestInput) => ({
     maxNarrationChars: decision.maxNarrationChars,
     imageGenerationAllowed: APP_CONFIG.features.cloudImage && state.consentAndSettings.cloudImageEnabled,
     locale: state.learnerProfile.locale,
+    tutoringContext: {
+      sessionPhase: decision.sessionPhase ?? null,
+      lessonType: decision.lessonType ?? null,
+      responseType: decision.responseType ?? undefined,
+      supportLevel: decision.supportLevel ?? null,
+      recommendationKind: decision.recommendationKind ?? null,
+      recommendationReason: decision.recommendationReason ?? null,
+      prompt: decision.prompt ?? null,
+      expectedResponse: decision.expectedResponse ?? null,
+      expectedExpression: decision.expectedResponse ?? null,
+      expectedKeywords: decision.expectedKeywords ?? [],
+      choiceOptions: decision.choiceOptions ?? [],
+      sceneHint:
+        decision.phase === "diagnostic"
+          ? "Use the authored diagnostic step to place the learner."
+          : "Stay within the authored concept lesson and bounded interaction.",
+    },
   },
 });
-
-const createMockDirectorResponse = (request, localScene) => {
-  const contentType = request.latestInput.type;
-  const blueprint = {
-    ...localScene,
-    scene: {
-      ...localScene.scene,
-      tone: contentType === "transcript" ? "encouraging" : localScene.scene.tone,
-    },
-    narration: {
-      ...localScene.narration,
-      text:
-        contentType === "transcript"
-          ? "I heard you. Let's keep going with one clear algebra step."
-          : localScene.narration.text,
-    },
-    visualIntent: {
-      ...(localScene.visualIntent ?? { type: "recipe", recipeId: "neutral_choice_board", vars: {} }),
-      recipeId: "neutral_choice_board",
-    },
-  };
-
-  return { blueprint };
-};
 
 const withTimeout = async (promiseFactory, timeoutMs, timeoutCode) => {
   let timeoutId = null;
@@ -692,7 +686,7 @@ const requestDirectorScene = async ({ state, decision, latestInput, localScene, 
     const response = await withTimeout(
       async () =>
         relayBaseUrl === "mock"
-          ? createMockDirectorResponse(request, localScene)
+          ? MOCK_PROVIDER_ADAPTER.sendTutorTurn(request)
           : fetchImpl(`${relayBaseUrl}/director`, {
               method: "POST",
               headers: { "content-type": "application/json" },

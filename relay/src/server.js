@@ -22,6 +22,12 @@ const METHOD_NOT_ALLOWED = {
   body: createStableError("method_not_allowed", "Only POST is supported."),
 };
 
+const CORS_HEADERS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "POST, OPTIONS",
+  "access-control-allow-headers": "content-type",
+};
+
 const routeRequest = async (urlPath, body) => {
   if (urlPath === "/director") {
     return handleDirectorRoute(body);
@@ -44,8 +50,17 @@ const routeRequest = async (urlPath, body) => {
 
 export const createRelayServer = () =>
   http.createServer(async (request, response) => {
+    if (request.method === "OPTIONS") {
+      response.writeHead(204, CORS_HEADERS);
+      response.end();
+      return;
+    }
+
     if (request.method !== "POST") {
-      response.writeHead(METHOD_NOT_ALLOWED.status, METHOD_NOT_ALLOWED.headers);
+      response.writeHead(METHOD_NOT_ALLOWED.status, {
+        ...METHOD_NOT_ALLOWED.headers,
+        ...CORS_HEADERS,
+      });
       response.end(JSON.stringify(METHOD_NOT_ALLOWED.body));
       return;
     }
@@ -59,10 +74,13 @@ export const createRelayServer = () =>
       try {
         const parsed = bodyText ? JSON.parse(bodyText) : {};
         const result = await routeRequest(new URL(request.url, "http://localhost").pathname, parsed);
-        response.writeHead(result.status, result.headers);
+        response.writeHead(result.status, {
+          ...result.headers,
+          ...CORS_HEADERS,
+        });
         response.end(JSON.stringify(result.body));
       } catch (error) {
-        response.writeHead(500, { "content-type": "application/json" });
+        response.writeHead(500, { "content-type": "application/json", ...CORS_HEADERS });
         response.end(
           JSON.stringify(createStableError("relay_internal_error", "Relay request failed.", String(error))),
         );

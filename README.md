@@ -55,7 +55,13 @@ Reset rule:
 
 ## How To Run It
 
-Install nothing for the current test-only setup. The repo uses Node's built-in test runner.
+Primer currently runs as a static web app plus an optional local relay.
+
+Install dependencies:
+
+```bash
+npm install
+```
 
 Run the test suite:
 
@@ -63,7 +69,9 @@ Run the test suite:
 npm test
 ```
 
-Serve the repo root so the browser can resolve shared package imports. For example:
+### Web App Only
+
+Start the static web server:
 
 ```bash
 npm run serve:web
@@ -72,10 +80,40 @@ npm run serve:web
 Then open:
 
 ```text
-http://localhost:4173/apps/web/
+http://127.0.0.1:4173/apps/web/
 ```
+
+This is enough to use the local deterministic flow and the mock relay mode.
+
+### Web App Plus Local Relay
+
+In one terminal, start the relay:
+
+```bash
+npm run relay
+```
+
+In another terminal, start the static web server:
+
+```bash
+npm run serve:web
+```
+
+Then open:
+
+```text
+http://127.0.0.1:4173/apps/web/
+```
+
+By default, the web app now targets a local relay at `http://<current-host>:8787`, so if you are serving the web app from `127.0.0.1` or `localhost` and run `npm run relay`, the browser should discover it automatically.
+
+If you want a different relay URL, set `window.PRIMER_CONFIG.relayBaseUrl` before the app module loads.
+
+### About Vite
+
+There is not a committed Vite dev setup in this repository yet. The supported local workflow right now is the static server above via `npm run serve:web`.
 
 Notes:
 
-- Serve the repository root, not `apps/web`, because the browser runtime imports shared modules from `packages/`.
+- Serving `apps/web` directly now works because the web root exposes the shared `packages/` and `relay/` paths the browser runtime imports.
 - Use a browser for full runtime behavior. PWA installability, service worker caching, and speech APIs do not work from a raw file URL.

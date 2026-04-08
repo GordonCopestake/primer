@@ -460,6 +460,103 @@ test("mock director can propose a bounded scene when relay is set to mock", asyn
   assert.equal(result.blueprint.interaction.type, "math-input");
 });
 
+test("browser relay config is used when process env is unavailable", async () => {
+  const originalRelayBaseUrl = process.env.PRIMER_RELAY_BASE_URL;
+  const originalPrimerConfig = globalThis.PRIMER_CONFIG;
+  delete process.env.PRIMER_RELAY_BASE_URL;
+  globalThis.PRIMER_CONFIG = {
+    relayBaseUrl: "https://relay.example",
+  };
+
+  const configuredRuntime = await import(new URL(`../apps/web/src/app/runtime.js?browser-config=${Date.now()}`, import.meta.url));
+  const state = configuredRuntime.createDefaultState();
+  const decision = configuredRuntime.nextCurriculumDecision(state);
+  let requestedUrl = null;
+  const interactionType = decision.allowedInteractionTypes[0];
+  const interaction =
+    interactionType === "read-respond"
+      ? {
+          type: "read-respond",
+          prompt: "Share one short algebra idea.",
+          expectedKeywords: ["variable"],
+        }
+      : interactionType === "math-input"
+        ? {
+            type: "math-input",
+            expressionPrompt: "Solve x + 2 = 9.",
+            expectedExpression: "7",
+          }
+        : interactionType === "tap-choice"
+          ? {
+              type: "tap-choice",
+              options: [
+                { id: "7", label: "7", audioLabel: "7", correct: true },
+                { id: "5", label: "5", audioLabel: "5", correct: false },
+              ],
+            }
+          : {
+              type: "none",
+            };
+
+  const result = await configuredRuntime.requestDirectorScene({
+    state,
+    decision,
+    latestInput: {
+      type: "system-start",
+      content: "startup",
+    },
+    localScene: configuredRuntime.createFallbackScene("configured-relay"),
+    fetchImpl: async (url) => {
+      requestedUrl = url;
+      return {
+        ok: true,
+        json: async () => ({
+          blueprint: {
+            version: 1,
+            scene: {
+              id: "scene_configured_relay",
+              kind: decision.allowedSceneKinds[0],
+              objectiveId: decision.objectiveId,
+              transition: "slide",
+              tone: "encouraging",
+            },
+            narration: {
+              text: "Stay with the current bounded algebra objective.",
+              maxChars: decision.maxNarrationChars,
+              estDurationMs: 1200,
+              bargeInAllowed: true,
+            },
+            interaction,
+            visualIntent: {
+              type: "recipe",
+              recipeId: "neutral_choice_board",
+              vars: {},
+            },
+            evidence: {
+              observedSkill: decision.conceptId ?? "algebra-foundations",
+              confidenceHint: 0.7,
+            },
+          },
+        }),
+      };
+    },
+  });
+
+  if (originalRelayBaseUrl === undefined) {
+    delete process.env.PRIMER_RELAY_BASE_URL;
+  } else {
+    process.env.PRIMER_RELAY_BASE_URL = originalRelayBaseUrl;
+  }
+  if (originalPrimerConfig === undefined) {
+    delete globalThis.PRIMER_CONFIG;
+  } else {
+    globalThis.PRIMER_CONFIG = originalPrimerConfig;
+  }
+
+  assert.equal(result.ok, true);
+  assert.equal(requestedUrl, "https://relay.example/director");
+});
+
 test("relay request failure returns a stable error without throwing", async () => {
   process.env.PRIMER_RELAY_BASE_URL = "https://relay.example";
   const failingRuntime = await import(new URL(`../apps/web/src/app/runtime.js?fail=${Date.now()}`, import.meta.url));
