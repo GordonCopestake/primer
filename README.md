@@ -1,19 +1,19 @@
 # Open-Source Modular AI Tutor
 
-This project is an open-source, web-first, local-first AI tutoring app prototype.
+This project is an open-source, web-first, local-first AI tutoring app prototype. `spec.md` is the source of truth.
 
-The current implementation focuses on runtime foundations:
+The current implementation focuses on the bounded algebra MVP foundation:
 
-- static web shell with installable PWA assets and offline shell caching
-- local learner-state persistence with safe scene restore
-- shared algebra module data and bounded diagnostic/tutoring progression helpers
-- capability detection plus browser-native TTS/STT hooks where supported
-- local settings/admin entry point with export/import backup
-- safe fallback scene and strict scene validation/interpreter guards
+- shared algebra module data and concept graph
+- local-first learner-state persistence with migration helpers
+- bounded diagnostic and tutoring decisions
+- dedicated math-input scenes and deterministic validation helpers
+- relay/runtime contracts aligned to the algebra tutor flow
+- local settings, backup controls, and safe fallback handling
 
 ## Current Progress vs New PM Spec
 
-Primer presents bounded learning scenes inside a fixed local shell. The current refactor is moving the shared model from a literacy prototype to an algebra foundations MVP with a diagnostic, concept graph, and mastery records. The app stores learner state locally, restores the last safe scene after reload, and exposes local settings and backup controls.
+Primer now targets one bounded algebra foundations module. The shared core, relay contract, and browser runtime are aligned around a local-first learner state, a short diagnostic, a concept graph, and deterministic math-input scenes. The browser also presents a first-run module selection step before starting tutoring.
 
 Primer follows the spec posture: cloud AI with local learner storage and no required login.
 
@@ -32,20 +32,19 @@ Run the test suite:
 npm test
 ```
 
-Serve the static web app from the `apps/web` directory with any local static file server. For example:
+Serve the repo root so the browser can resolve shared package imports. For example:
 
 ```bash
-cd apps/web
-python3 -m http.server 4173
+npm run serve:web
 ```
 
 Then open:
 
 ```text
-http://localhost:4173
+http://localhost:4173/apps/web/
 ```
 
 Notes:
 
-- Serve `apps/web` as the web root so the manifest, service worker, and module paths resolve correctly.
+- Serve the repository root, not `apps/web`, because the browser runtime imports shared modules from `packages/`.
 - Use a browser for full runtime behavior. PWA installability, service worker caching, and speech APIs do not work from a raw file URL.
