@@ -78,6 +78,7 @@ test("new learner starts in the algebra diagnostic", () => {
   assert.equal(decision.moduleId, ALGEBRA_FOUNDATIONS_MODULE.id);
   assert.equal(decision.objectiveId, "diagnostic.variables");
   assert.equal(state.pedagogicalState.currentObjectiveId, "diagnostic.variables");
+  assert.equal(state.pedagogicalState.milestones.length >= 2, true);
 });
 
 test("assessment advances through staged diagnostic checkpoints", () => {
@@ -99,6 +100,8 @@ test("completed diagnostic unlocks the algebra tutoring flow", () => {
   assert.equal(decision.phase, "tutoring");
   assert.equal(decision.conceptId, "variables-and-expressions");
   assert.equal(decision.objectiveId, "concept.variables-and-expressions");
+  assert.equal(state.pedagogicalState.goals[0].status, "active");
+  assert.equal(state.pedagogicalState.milestones[0].status, "completed");
 });
 
 test("mastery evidence advances toward the next available algebra concept", () => {
@@ -108,6 +111,37 @@ test("mastery evidence advances toward the next available algebra concept", () =
   assert.equal(shifted.pedagogicalState.masteryByConcept["variables-and-expressions"].status, "mastered");
   assert.equal(shifted.pedagogicalState.currentConceptId, "evaluate-expressions");
   assert.equal(shifted.pedagogicalState.currentObjectiveId, "concept.evaluate-expressions");
+  assert.equal(shifted.pedagogicalState.reviewSchedule[0].conceptId, "variables-and-expressions");
+  assert.equal(shifted.pedagogicalState.lessonRecords["lesson.variables-and-expressions"].status, "completed");
+  assert.equal(shifted.pedagogicalState.attemptLog.length, 1);
+  assert.equal(shifted.pedagogicalState.milestones[1].status, "completed");
+});
+
+test("incorrect evidence records misconceptions and prioritizes due review", () => {
+  const now = new Date(Date.now() - 60_000).toISOString();
+  const diagnosed = recordAssessmentCompletion(createDefaultState(), "variables-and-expressions");
+  const incorrect = applyMasteryEvidence(diagnosed, "two-step-equations", 0);
+  const withDueReview = createDefaultState({
+    ...incorrect,
+    pedagogicalState: {
+      ...incorrect.pedagogicalState,
+      diagnosticStatus: "complete",
+      currentConceptId: "evaluate-expressions",
+      recommendedConceptId: "evaluate-expressions",
+      reviewSchedule: [
+        {
+          conceptId: "two-step-equations",
+          reviewDueAt: now,
+          reason: "mastery-check",
+        },
+      ],
+    },
+  });
+  const decision = nextCurriculumDecision(withDueReview);
+
+  assert.deepEqual(incorrect.pedagogicalState.misconceptionsByConcept["two-step-equations"], ["wrong-first-step"]);
+  assert.equal(incorrect.pedagogicalState.evidenceLog.at(-1).source, "tutoring-loop");
+  assert.equal(decision.conceptId, "two-step-equations");
 });
 
 test("algebra module metadata exposes the bounded concept pack", () => {

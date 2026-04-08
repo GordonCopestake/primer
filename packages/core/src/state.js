@@ -19,6 +19,7 @@ const migrateLegacyPedagogicalState = (rawState) => ({
   assessmentItems: {},
   attemptLog: [],
   goals: [],
+  milestones: createDefaultState().pedagogicalState.milestones,
   ...(rawState?.pedagogicalState?.goals ? { goals: rawState.pedagogicalState.goals } : {}),
 });
 

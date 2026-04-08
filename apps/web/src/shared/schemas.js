@@ -42,6 +42,18 @@ export const createStateShape = (overrides = {}) => ({
     assessmentItems: {},
     attemptLog: [],
     goals: [],
+    milestones: [
+      {
+        id: "complete-diagnostic",
+        label: "Complete the algebra diagnostic",
+        status: "active",
+      },
+      {
+        id: "master-first-concept",
+        label: "Master your first algebra concept",
+        status: "upcoming",
+      },
+    ],
     ...overrides.pedagogicalState,
   },
   runtimeSession: {

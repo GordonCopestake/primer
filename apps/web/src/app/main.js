@@ -102,10 +102,13 @@ let orbState = "idle";
 let reducedMotionQuery = null;
 
 const getRecentActivityItems = () =>
-  [...(state.runtimeSession?.recentTurns ?? [])]
+  [
+    ...(state.pedagogicalState?.recentActivity ?? []).map((item) => item?.type ?? ""),
+    ...(state.runtimeSession?.recentTurns ?? []).map((turn) => turn?.content ?? ""),
+  ]
     .slice(-5)
     .reverse()
-    .map((turn) => String(turn.content ?? "").trim())
+    .map((item) => String(item).trim())
     .filter(Boolean);
 
 const getConceptStateLabel = (conceptId) =>
@@ -489,6 +492,11 @@ const createSceneFromDecision = (decision) => {
 const deriveConceptStatuses = () => {
   const masteryByConcept = state.pedagogicalState.masteryByConcept ?? {};
   const hasConceptMastery = Object.keys(masteryByConcept).length > 0;
+  const dueReviewConceptIds = new Set(
+    (state.pedagogicalState.reviewSchedule ?? [])
+      .filter((entry) => Date.parse(entry.reviewDueAt ?? "") <= Date.now())
+      .map((entry) => entry.conceptId),
+  );
   const recommendedConceptId =
     state.pedagogicalState.recommendedConceptId ??
     state.pedagogicalState.currentConceptId ??
@@ -496,6 +504,10 @@ const deriveConceptStatuses = () => {
 
   return ALGEBRA_CONCEPT_GRAPH.map((concept, index) => {
     const mastery = masteryByConcept[concept.id];
+    if (dueReviewConceptIds.has(concept.id)) {
+      return { ...concept, state: "review due" };
+    }
+
     if ((mastery?.score ?? 0) >= 1) {
       return { ...concept, state: "mastered" };
     }
@@ -555,6 +567,12 @@ const renderConceptMapView = () => {
         <section class="detail-card">
           <h3>Recommended next</h3>
           <p class="helper">${state.pedagogicalState.recommendedConceptId ?? "variables-and-expressions"}</p>
+        </section>
+        <section class="detail-card">
+          <h3>Milestones</h3>
+          <p class="helper">${(state.pedagogicalState.milestones ?? [])
+            .map((item) => `${item.label}: ${item.status}`)
+            .join(" | ")}</p>
         </section>
         <section class="detail-card">
           <h3>Recent activity</h3>
