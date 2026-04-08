@@ -309,6 +309,12 @@ test("math input validator returns concept-aware remediation for incorrect algeb
   assert.match(result.feedback, /inverse operation|check the result/i);
 });
 
+test("short text validator accepts bounded textual responses", () => {
+  const result = runtimeModule.validateShortTextResponse("divide by 5", "divide by 5");
+  assert.equal(result.correct, true);
+  assert.equal(result.reason, "short-text");
+});
+
 test("repeat-sound scenes fall back to a tap path when local audio is unavailable", () => {
   const state = runtimeModule.createDefaultState({
     capabilities: {

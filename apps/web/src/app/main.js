@@ -40,6 +40,7 @@ import {
   updateAssetAccess,
   updateQuotaEstimate,
   updateConsentSettings,
+  validateShortTextResponse,
   verifyAdminPin,
 } from "./runtime.js";
 
@@ -129,6 +130,8 @@ const getLessonExpectedResponse = (lesson, conceptId) => {
   }
   return "4";
 };
+
+const getLessonResponseType = (lesson) => lesson?.responseType ?? "expression";
 
 const getConceptStateLabel = (conceptId) =>
   deriveConceptStatuses().find((concept) => concept.id === conceptId)?.state ?? "locked";
@@ -598,16 +601,26 @@ const createSceneFromDecision = (decision) => {
     },
     visualIntent: fallbackScene.visualIntent,
     interaction: {
-      type: "math-input",
-      expressionPrompt: lesson?.prompt ??
-        (decision.conceptId === "variables-and-expressions"
-          ? "If x = 4, what is x + 3?"
-          : decision.conceptId === "evaluate-expressions"
-            ? "Evaluate 3x - 2 when x = 5."
-            : decision.conceptId === "one-step-addition-equations"
-              ? "Solve x + 4 = 11."
-              : "Solve 2x + 3 = 11."),
-      expectedExpression: getLessonExpectedResponse(lesson, decision.conceptId),
+      type: getLessonResponseType(lesson) === "short-text" ? "read-respond" : "math-input",
+      ...(getLessonResponseType(lesson) === "short-text"
+        ? {
+            prompt:
+              lesson?.prompt ??
+              "Give the bounded short answer.",
+            expectedKeywords: [getLessonExpectedResponse(lesson, decision.conceptId)],
+          }
+        : {
+            expressionPrompt:
+              lesson?.prompt ??
+              (decision.conceptId === "variables-and-expressions"
+                ? "If x = 4, what is x + 3?"
+                : decision.conceptId === "evaluate-expressions"
+                  ? "Evaluate 3x - 2 when x = 5."
+                  : decision.conceptId === "one-step-addition-equations"
+                    ? "Solve x + 4 = 11."
+                    : "Solve 2x + 3 = 11."),
+            expectedExpression: getLessonExpectedResponse(lesson, decision.conceptId),
+          }),
     },
     evidence: {
       observedSkill: decision.conceptId,
@@ -1217,7 +1230,8 @@ const renderScene = (scene) => {
       const masteryTarget = currentDecision.conceptId ?? currentDecision.activeDomain;
       const response = String(input?.value ?? "").trim().toLowerCase();
       const expected = safeScene.interaction.expectedKeywords.map((value) => String(value).toLowerCase());
-      const correct = expected.some((keyword) => response.includes(keyword));
+      const validation = validateShortTextResponse(response, expected[0] ?? "");
+      const correct = validation.correct;
       latestInput = {
         type: "transcript",
         content: response || "empty",
@@ -1230,10 +1244,10 @@ const renderScene = (scene) => {
         state = advanceAssessment(state, {
           recommendedConceptId: correct ? currentDecision.conceptId : state.pedagogicalState.recommendedConceptId,
         });
-        setStatus(correct ? "Diagnostic note saved." : "Saved. Primer will continue the diagnostic.");
+        setStatus(correct ? "Diagnostic note saved." : validation.feedback);
       } else {
         state = applyMasteryEvidence(state, masteryTarget, correct ? 1 : 0);
-        setStatus(correct ? "Explanation recorded." : "Saved. Try another response on the next step.");
+        setStatus(correct ? validation.feedback : validation.feedback);
       }
       persistState();
       await renderCurrentDecisionScene();

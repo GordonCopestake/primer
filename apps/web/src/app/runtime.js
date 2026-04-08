@@ -922,6 +922,38 @@ const validateMathInputResponse = (input, expectedExpression, conceptId = null) 
   }
 };
 
+const validateShortTextResponse = (input, expectedResponse) => {
+  const normalizedInput = String(input ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  const normalizedExpected = String(expectedResponse ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+  if (!normalizedInput) {
+    return {
+      correct: false,
+      reason: "empty",
+      feedback: "Enter a short answer before continuing.",
+    };
+  }
+
+  const correct =
+    normalizedInput === normalizedExpected ||
+    normalizedInput.includes(normalizedExpected) ||
+    normalizedExpected.includes(normalizedInput);
+
+  return {
+    correct,
+    reason: correct ? "short-text" : "conceptual",
+    feedback: correct
+      ? "That short response matches the expected idea."
+      : "That response does not match the expected idea yet. Re-read the key operation or check.",
+  };
+};
+
 const requestVisionInterpretation = async ({ traceDataUrl, decision, target, fetchImpl = fetch }) => {
   const relayBaseUrl = getRelayBaseUrl();
   if (!relayBaseUrl) {
@@ -1041,6 +1073,7 @@ export {
   updateConsentSettings,
   updateQuotaEstimate,
   getMathFeedbackMessage,
+  validateShortTextResponse,
   validateDirectorRequest,
   validateDirectorResponse,
   validateMathInputResponse,
