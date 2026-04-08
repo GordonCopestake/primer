@@ -415,7 +415,7 @@ test("mock director can propose a bounded scene when relay is set to mock", asyn
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.blueprint.scene.kind, "assessment");
+  assert.equal(result.blueprint.scene.kind, "lesson");
   assert.equal(result.blueprint.interaction.type, "math-input");
 });
 
