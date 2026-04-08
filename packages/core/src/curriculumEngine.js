@@ -18,6 +18,10 @@ const makeDiagnosticDecision = (state, item) => ({
   objectiveId: item.id,
   prompt: item.prompt,
   inputType: item.inputType,
+  expectedResponse: item.expectedResponse ?? null,
+  expectedKeywords: item.expectedKeywords ?? [],
+  choiceOptions: item.choiceOptions ?? [],
+  misconceptionTag: item.misconceptionTag ?? null,
   allowedSceneKinds: DIAGNOSTIC_SCENE_KINDS,
   allowedInteractionTypes:
     item.inputType === "multiple-choice"
@@ -166,10 +170,14 @@ export const recordAssessmentCompletion = (state, recommendedConceptId = "variab
 export const advanceAssessment = (state, result = {}) => {
   const currentStep = state.pedagogicalState.diagnosticStep ?? 0;
   const nextStep = currentStep + 1;
+  const currentItem = getDiagnosticItem(currentStep);
   const recommendedConceptId =
     result.recommendedConceptId ??
     state.pedagogicalState.recommendedConceptId ??
     "variables-and-expressions";
+  const correct = result.correct;
+  const misconceptionTag =
+    correct === false ? currentItem?.misconceptionTag ?? deriveMisconceptionTags(currentItem?.conceptId, false)[0] ?? null : null;
 
   if (nextStep >= ALGEBRA_DIAGNOSTIC_ITEMS.length) {
     return recordAssessmentCompletion(state, recommendedConceptId);
@@ -181,11 +189,23 @@ export const advanceAssessment = (state, result = {}) => {
       ...appendUniqueRecentActivity(state, {
         type: "diagnostic-step-complete",
         step: currentStep,
+        conceptId: currentItem?.conceptId ?? null,
+        correct: typeof correct === "boolean" ? correct : null,
       }),
       diagnosticStatus: "in-progress",
       diagnosticStep: nextStep,
       currentObjectiveId: getDiagnosticItem(nextStep).id,
       recommendedConceptId,
+      misconceptionsByConcept:
+        misconceptionTag && currentItem?.conceptId
+          ? {
+              ...state.pedagogicalState.misconceptionsByConcept,
+              [currentItem.conceptId]: [
+                ...(state.pedagogicalState.misconceptionsByConcept?.[currentItem.conceptId] ?? []),
+                misconceptionTag,
+              ].slice(-5),
+            }
+          : state.pedagogicalState.misconceptionsByConcept,
     },
   });
 };

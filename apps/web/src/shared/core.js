@@ -184,24 +184,42 @@ export const ALGEBRA_DIAGNOSTIC_ITEMS = [
     conceptId: "variables-and-expressions",
     prompt: "What does the variable mean in x + 3 = 10?",
     inputType: "short-explanation",
+    expectedResponse: "unknown number",
+    expectedKeywords: ["unknown", "number", "value", "variable"],
+    misconceptionTag: "variable-as-label",
+  },
+  {
+    id: "diagnostic.order-of-operations",
+    conceptId: "order-of-operations",
+    prompt: "Which value matches 2 + 3 * 4?",
+    inputType: "multiple-choice",
+    expectedResponse: "14",
+    choiceOptions: ["14", "20", "24", "11"],
+    misconceptionTag: "left-to-right-only",
   },
   {
     id: "diagnostic.substitution",
     conceptId: "evaluate-expressions",
     prompt: "Evaluate 2x + 1 when x = 4.",
     inputType: "numeric",
+    expectedResponse: "9",
+    misconceptionTag: "missed-substitution",
   },
   {
     id: "diagnostic.one-step",
     conceptId: "one-step-addition-equations",
     prompt: "Solve x + 5 = 12.",
     inputType: "expression",
+    expectedResponse: "7",
+    misconceptionTag: "move-without-inverse",
   },
   {
     id: "diagnostic.two-step",
     conceptId: "two-step-equations",
     prompt: "Solve 2x + 3 = 11.",
     inputType: "expression",
+    expectedResponse: "4",
+    misconceptionTag: "wrong-first-step",
   },
 ];
 
@@ -699,6 +717,10 @@ const makeDiagnosticDecision = (state, item) => ({
   objectiveId: item.id,
   prompt: item.prompt,
   inputType: item.inputType,
+  expectedResponse: item.expectedResponse ?? null,
+  expectedKeywords: item.expectedKeywords ?? [],
+  choiceOptions: item.choiceOptions ?? [],
+  misconceptionTag: item.misconceptionTag ?? null,
   allowedSceneKinds: DIAGNOSTIC_SCENE_KINDS,
   allowedInteractionTypes:
     item.inputType === "multiple-choice"
@@ -848,10 +870,14 @@ export const recordAssessmentCompletion = (state, recommendedConceptId = "variab
 export const advanceAssessment = (state, result = {}) => {
   const currentStep = state.pedagogicalState.diagnosticStep ?? 0;
   const nextStep = currentStep + 1;
+  const currentItem = getDiagnosticItem(currentStep);
   const recommendedConceptId =
     result.recommendedConceptId ??
     state.pedagogicalState.recommendedConceptId ??
     "variables-and-expressions";
+  const correct = result.correct;
+  const misconceptionTag =
+    correct === false ? currentItem?.misconceptionTag ?? deriveMisconceptionTags(currentItem?.conceptId, false)[0] ?? null : null;
 
   if (nextStep >= ALGEBRA_DIAGNOSTIC_ITEMS.length) {
     return recordAssessmentCompletion(state, recommendedConceptId);
@@ -863,11 +889,23 @@ export const advanceAssessment = (state, result = {}) => {
       ...appendUniqueRecentActivity(state, {
         type: "diagnostic-step-complete",
         step: currentStep,
+        conceptId: currentItem?.conceptId ?? null,
+        correct: typeof correct === "boolean" ? correct : null,
       }),
       diagnosticStatus: "in-progress",
       diagnosticStep: nextStep,
       currentObjectiveId: getDiagnosticItem(nextStep).id,
       recommendedConceptId,
+      misconceptionsByConcept:
+        misconceptionTag && currentItem?.conceptId
+          ? {
+              ...state.pedagogicalState.misconceptionsByConcept,
+              [currentItem.conceptId]: [
+                ...(state.pedagogicalState.misconceptionsByConcept?.[currentItem.conceptId] ?? []),
+                misconceptionTag,
+              ].slice(-5),
+            }
+          : state.pedagogicalState.misconceptionsByConcept,
     },
   });
 };

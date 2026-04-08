@@ -84,14 +84,29 @@ test("new learner starts in the algebra diagnostic", () => {
 
 test("assessment advances through staged diagnostic checkpoints", () => {
   let state = createDefaultState();
-  state = advanceAssessment(state, { recommendedConceptId: "evaluate-expressions" });
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "variables-and-expressions" });
+  assert.equal(nextCurriculumDecision(state).objectiveId, "diagnostic.order-of-operations");
+
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "order-of-operations" });
   assert.equal(nextCurriculumDecision(state).objectiveId, "diagnostic.substitution");
 
-  state = advanceAssessment(state, { recommendedConceptId: "one-step-addition-equations" });
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "one-step-addition-equations" });
   assert.equal(nextCurriculumDecision(state).objectiveId, "diagnostic.one-step");
 
-  state = advanceAssessment(state, { recommendedConceptId: "two-step-equations" });
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "two-step-equations" });
   assert.equal(nextCurriculumDecision(state).objectiveId, "diagnostic.two-step");
+});
+
+test("diagnostic decisions expose mixed input contracts from authored data", () => {
+  let decision = nextCurriculumDecision(createDefaultState());
+  assert.equal(decision.inputType, "short-explanation");
+  assert.ok(decision.expectedKeywords.includes("variable"));
+
+  const afterFirstStep = advanceAssessment(createDefaultState(), { correct: true, recommendedConceptId: "variables-and-expressions" });
+  decision = nextCurriculumDecision(afterFirstStep);
+  assert.equal(decision.inputType, "multiple-choice");
+  assert.deepEqual(decision.choiceOptions, ["14", "20", "24", "11"]);
+  assert.equal(decision.expectedResponse, "14");
 });
 
 test("completed diagnostic unlocks the algebra tutoring flow", () => {
@@ -165,6 +180,16 @@ test("incorrect evidence records misconceptions and prioritizes due review", () 
   assert.deepEqual(incorrect.pedagogicalState.misconceptionsByConcept["two-step-equations"], ["wrong-first-step"]);
   assert.equal(incorrect.pedagogicalState.evidenceLog.at(-1).source, "tutoring-loop");
   assert.equal(decision.conceptId, "two-step-equations");
+});
+
+test("incorrect diagnostic evidence records a misconception tag for the assessed concept", () => {
+  const state = advanceAssessment(createDefaultState(), {
+    correct: false,
+    recommendedConceptId: "variables-and-expressions",
+  });
+
+  assert.deepEqual(state.pedagogicalState.misconceptionsByConcept["variables-and-expressions"], ["variable-as-label"]);
+  assert.equal(state.pedagogicalState.recentActivity.at(-1)?.correct, false);
 });
 
 test("algebra module metadata exposes the bounded concept pack", () => {

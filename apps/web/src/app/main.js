@@ -435,7 +435,42 @@ const createSceneFromDecision = (decision) => {
         interaction: {
           type: "read-respond",
           prompt: decision.prompt,
-          expectedKeywords: ["unknown", "number", "value", "variable"],
+          expectedKeywords: decision.expectedKeywords?.length
+            ? decision.expectedKeywords
+            : [decision.expectedResponse].filter(Boolean),
+        },
+        evidence: {
+          observedSkill: decision.conceptId,
+          confidenceHint: 0.5,
+        },
+      };
+    }
+
+    if (decision.inputType === "multiple-choice") {
+      return {
+        version: 1,
+        scene: {
+          id: `scene_${decision.objectiveId.replaceAll(".", "_")}`,
+          kind: "assessment",
+          objectiveId: decision.objectiveId,
+          transition: "fade",
+          tone: "focused",
+        },
+        narration: {
+          text: `Diagnostic check: ${conceptLabel}.`,
+          maxChars: 180,
+          estDurationMs: 1800,
+          bargeInAllowed: true,
+        },
+        visualIntent: fallbackScene.visualIntent,
+        interaction: {
+          type: "tap-choice",
+          options: (decision.choiceOptions ?? []).map((label) => ({
+            id: label,
+            label,
+            audioLabel: label,
+            correct: String(label) === String(decision.expectedResponse ?? ""),
+          })),
         },
         evidence: {
           observedSkill: decision.conceptId,
@@ -463,12 +498,7 @@ const createSceneFromDecision = (decision) => {
       interaction: {
         type: "math-input",
         expressionPrompt: decision.prompt,
-        expectedExpression:
-          decision.objectiveId === "diagnostic.substitution"
-            ? "9"
-            : decision.objectiveId === "diagnostic.one-step"
-              ? "7"
-              : "4",
+        expectedExpression: decision.expectedResponse ?? "4",
       },
       evidence: {
         observedSkill: decision.conceptId,
@@ -1087,6 +1117,7 @@ const renderScene = (scene) => {
 
       if (!isDiagnosticComplete()) {
         state = advanceAssessment(state, {
+          correct,
           recommendedConceptId: correct
             ? currentDecision.conceptId
             : state.pedagogicalState.recommendedConceptId ?? "variables-and-expressions",
@@ -1259,6 +1290,7 @@ const renderScene = (scene) => {
       });
       if (!isDiagnosticComplete()) {
         state = advanceAssessment(state, {
+          correct,
           recommendedConceptId: correct ? currentDecision.conceptId : state.pedagogicalState.recommendedConceptId,
         });
         setStatus(correct ? "Diagnostic note saved." : validation.feedback);
@@ -1321,6 +1353,7 @@ const renderScene = (scene) => {
 
       if (!isDiagnosticComplete()) {
         state = advanceAssessment(state, {
+          correct: validation.correct,
           recommendedConceptId: validation.correct
             ? currentDecision.conceptId
             : state.pedagogicalState.recommendedConceptId ?? currentDecision.conceptId,
