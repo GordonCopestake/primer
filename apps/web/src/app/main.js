@@ -1,4 +1,5 @@
 import {
+  ALGEBRA_CONCEPT_GRAPH,
   APP_CONFIG,
   advanceAssessment,
   appendRecentTurn,
@@ -312,6 +313,116 @@ const persistScene = (scene) => {
 
 const createSceneFromDecision = (decision) => {
   const fallbackScene = createFallbackScene("decision");
+
+  if (decision?.moduleId === "algebra-foundations") {
+    const conceptLabel =
+      ALGEBRA_CONCEPT_GRAPH.find((concept) => concept.id === decision.conceptId)?.label ?? "algebra concept";
+
+    if (decision.phase === "diagnostic") {
+      if (decision.inputType === "read-respond") {
+        return {
+          version: 1,
+          scene: {
+            id: `scene_${decision.objectiveId.replaceAll(".", "_")}`,
+            kind: "assessment",
+            objectiveId: decision.objectiveId,
+            transition: "fade",
+            tone: "focused",
+          },
+          narration: {
+            text: "Start with a short algebra diagnostic so Primer can place your first concept.",
+            maxChars: 180,
+            estDurationMs: 2200,
+            bargeInAllowed: true,
+          },
+          visualIntent: fallbackScene.visualIntent,
+          interaction: {
+            type: "read-respond",
+            prompt: decision.prompt,
+            expectedKeywords: ["unknown", "number", "value", "variable"],
+          },
+          evidence: {
+            observedSkill: decision.conceptId,
+            confidenceHint: 0.5,
+          },
+        };
+      }
+
+      return {
+        version: 1,
+        scene: {
+          id: `scene_${decision.objectiveId.replaceAll(".", "_")}`,
+          kind: "assessment",
+          objectiveId: decision.objectiveId,
+          transition: "fade",
+          tone: "focused",
+        },
+        narration: {
+          text: `Diagnostic check: ${conceptLabel}.`,
+          maxChars: 180,
+          estDurationMs: 1800,
+          bargeInAllowed: true,
+        },
+        visualIntent: fallbackScene.visualIntent,
+        interaction: {
+          type: "math-input",
+          expressionPrompt: decision.prompt,
+          expectedExpression:
+            decision.objectiveId === "diagnostic.substitution"
+              ? "9"
+              : decision.objectiveId === "diagnostic.one-step"
+                ? "7"
+                : "4",
+        },
+        evidence: {
+          observedSkill: decision.conceptId,
+          confidenceHint: 0.5,
+        },
+      };
+    }
+
+    return {
+      version: 1,
+      scene: {
+        id: `scene_${decision.conceptId.replaceAll("-", "_")}`,
+        kind: "lesson",
+        objectiveId: decision.objectiveId,
+        transition: "slide",
+        tone: "encouraging",
+      },
+      narration: {
+        text: `Next concept: ${conceptLabel}. Solve one bounded algebra step and Primer will update your mastery map.`,
+        maxChars: 220,
+        estDurationMs: 2400,
+        bargeInAllowed: true,
+      },
+      visualIntent: fallbackScene.visualIntent,
+      interaction: {
+        type: "math-input",
+        expressionPrompt:
+          decision.conceptId === "variables-and-expressions"
+            ? "If x = 4, what is x + 3?"
+            : decision.conceptId === "evaluate-expressions"
+              ? "Evaluate 3x - 2 when x = 5."
+              : decision.conceptId === "one-step-addition-equations"
+                ? "Solve x + 4 = 11."
+                : "Solve 2x + 3 = 11.",
+        expectedExpression:
+          decision.conceptId === "variables-and-expressions"
+            ? "7"
+            : decision.conceptId === "evaluate-expressions"
+              ? "13"
+              : decision.conceptId === "one-step-addition-equations"
+                ? "7"
+                : "4",
+      },
+      evidence: {
+        observedSkill: decision.conceptId,
+        confidenceHint: 0.68,
+      },
+    };
+  }
+
   const byObjective = {
     "baseline.observe-sound.0": {
       scene: {
@@ -521,27 +632,38 @@ const createSceneFromDecision = (decision) => {
 };
 
 const deriveConceptStatuses = () => {
-  const solvedApproximation = Math.max(
-    0,
-    (state.pedagogicalState.domainStage.reading ?? 0) +
-      (state.pedagogicalState.domainStage.writing ?? 0) +
-      (state.pedagogicalState.domainStage.numeracy ?? 0),
-  );
-  const progressIndex = Math.min(algebraConceptGraph.length, solvedApproximation + 1);
+  const masteryByConcept = state.pedagogicalState.masteryByConcept ?? {};
+  const hasConceptMastery = Object.keys(masteryByConcept).length > 0;
+  const recommendedConceptId =
+    state.pedagogicalState.recommendedConceptId ??
+    state.pedagogicalState.currentConceptId ??
+    ALGEBRA_CONCEPT_GRAPH[Math.max(
+      0,
+      Math.min(
+        ALGEBRA_CONCEPT_GRAPH.length - 1,
+        (state.pedagogicalState.domainStage?.reading ?? 0) +
+          (state.pedagogicalState.domainStage?.writing ?? 0) +
+          (state.pedagogicalState.domainStage?.numeracy ?? 0),
+      ),
+    )]?.id ??
+    ALGEBRA_CONCEPT_GRAPH[0]?.id;
 
-  return algebraConceptGraph.map((concept, index) => {
-    if (index < progressIndex - 1) {
+  return ALGEBRA_CONCEPT_GRAPH.map((concept, index) => {
+    const mastery = masteryByConcept[concept.id];
+    if ((mastery?.score ?? 0) >= 1) {
       return { ...concept, state: "mastered" };
     }
 
-    if (index === progressIndex - 1) {
+    if (concept.id === recommendedConceptId) {
       return { ...concept, state: "recommended next" };
     }
 
-    const prereqsMet = concept.prerequisites.every((prereq) => {
-      const prereqIndex = algebraConceptGraph.findIndex((node) => node.id === prereq);
-      return prereqIndex >= 0 && prereqIndex < progressIndex;
-    });
+    const prereqsMet = hasConceptMastery
+      ? concept.prerequisites.every((prereq) => (masteryByConcept[prereq]?.score ?? 0) >= 1)
+      : index <=
+        (state.pedagogicalState.domainStage?.reading ?? 0) +
+          (state.pedagogicalState.domainStage?.writing ?? 0) +
+          (state.pedagogicalState.domainStage?.numeracy ?? 0);
 
     return {
       ...concept,
@@ -549,6 +671,9 @@ const deriveConceptStatuses = () => {
     };
   });
 };
+
+const isDiagnosticComplete = () =>
+  (state.pedagogicalState.diagnosticStatus ?? state.pedagogicalState.assessmentStatus) === "complete";
 
 const renderConceptMapView = () => {
   const nodes = deriveConceptStatuses();
@@ -701,6 +826,20 @@ const renderScene = (scene) => {
       `
       : "";
 
+  const mathInputMarkup =
+    interactionType === "math-input"
+      ? `
+        <div class="trace-stage">
+          <p class="trace-hint">${safeScene.interaction.expressionPrompt}</p>
+          <input id="math-response-input" class="response-input" type="text" inputmode="text" maxlength="80" />
+          <div class="trace-actions">
+            <button type="button" class="choice-button" id="math-response-submit">Submit</button>
+            <button type="button" class="choice-button" id="math-response-skip">Skip</button>
+          </div>
+        </div>
+      `
+      : "";
+
   sceneRoot.innerHTML = `
     <div class="scene-body">
       <div class="scene-meta">
@@ -711,7 +850,7 @@ const renderScene = (scene) => {
       ${
         interactionType === "tap-choice"
           ? `<div class="choice-grid">${choiceMarkup}</div>`
-          : traceMarkup || repeatMarkup || readRespondMarkup || continueMarkup
+          : traceMarkup || repeatMarkup || readRespondMarkup || mathInputMarkup || continueMarkup
       }
       ${
         state.consentAndSettings.captionsEnabled
@@ -723,6 +862,7 @@ const renderScene = (scene) => {
 
   sceneRoot.querySelectorAll("[data-choice-id]").forEach((button) => {
     button.addEventListener("click", async () => {
+      const masteryTarget = currentDecision.conceptId ?? currentDecision.activeDomain;
       const correct = button.dataset.correct === "true";
       const choiceId = button.dataset.choiceId;
 
@@ -735,14 +875,15 @@ const renderScene = (scene) => {
         content: `${safeScene.scene.objectiveId}:${choiceId}`,
       };
 
-      if (state.pedagogicalState.assessmentStatus !== "complete") {
-        const demonstratedStage = correct
-          ? currentDecision.literacyStage
-          : Math.max(0, currentDecision.literacyStage - 1);
-        state = advanceAssessment(state, demonstratedStage);
+      if (!isDiagnosticComplete()) {
+        state = advanceAssessment(state, {
+          recommendedConceptId: correct
+            ? currentDecision.conceptId
+            : state.pedagogicalState.recommendedConceptId ?? "variables-and-expressions",
+        });
         setStatus("Assessment updated locally.");
       } else {
-        state = applyMasteryEvidence(state, currentDecision.activeDomain, correct ? 1 : 0);
+        state = applyMasteryEvidence(state, masteryTarget, correct ? 1 : 0);
         setStatus(correct ? "Progress saved." : "Saved. Another path is ready.");
       }
 
@@ -767,6 +908,7 @@ const renderScene = (scene) => {
       event.preventDefault();
       const traceMetrics = pad?.getTraceMetrics();
       const traceScore = scoreTrace(traceMetrics?.points ?? [], traceMetrics?.bounds);
+      const masteryTarget = currentDecision.conceptId ?? currentDecision.activeDomain;
       latestInput = {
         type: "trace-result",
         content: `confidence:${traceScore.confidence}`,
@@ -777,10 +919,10 @@ const renderScene = (scene) => {
           role: "user",
           content: `trace:${safeScene.interaction.target}:local:${traceScore.confidence}`,
         });
-        if (state.pedagogicalState.assessmentStatus !== "complete") {
-          state = advanceAssessment(state, currentDecision.literacyStage);
+        if (!isDiagnosticComplete()) {
+          state = advanceAssessment(state, { recommendedConceptId: currentDecision.conceptId });
         } else {
-          state = applyMasteryEvidence(state, currentDecision.activeDomain, 1);
+          state = applyMasteryEvidence(state, masteryTarget, 1);
         }
         persistState();
         setStatus(`Trace accepted locally (${traceScore.confidence}).`);
@@ -807,10 +949,10 @@ const renderScene = (scene) => {
             role: "user",
             content: `trace:${safeScene.interaction.target}:vision:${relayResult.response.confidence}`,
           });
-          if (state.pedagogicalState.assessmentStatus !== "complete") {
-            state = advanceAssessment(state, currentDecision.literacyStage);
+          if (!isDiagnosticComplete()) {
+            state = advanceAssessment(state, { recommendedConceptId: currentDecision.conceptId });
           } else {
-            state = applyMasteryEvidence(state, currentDecision.activeDomain, 1);
+            state = applyMasteryEvidence(state, masteryTarget, 1);
           }
           persistState();
           setStatus(relayResult.response.feedbackAudio || "Trace accepted after review.");
@@ -882,6 +1024,7 @@ const renderScene = (scene) => {
     const skipButton = sceneRoot.querySelector("#read-respond-skip");
 
     submitButton?.addEventListener("click", async () => {
+      const masteryTarget = currentDecision.conceptId ?? currentDecision.activeDomain;
       const response = String(input?.value ?? "").trim().toLowerCase();
       const expected = safeScene.interaction.expectedKeywords.map((value) => String(value).toLowerCase());
       const correct = expected.some((keyword) => response.includes(keyword));
@@ -893,9 +1036,16 @@ const renderScene = (scene) => {
         role: "user",
         content: `read-respond:${safeScene.scene.objectiveId}:${response || "empty"}`,
       });
-      state = applyMasteryEvidence(state, currentDecision.activeDomain, correct ? 1 : 0);
+      if (!isDiagnosticComplete()) {
+        state = advanceAssessment(state, {
+          recommendedConceptId: correct ? currentDecision.conceptId : state.pedagogicalState.recommendedConceptId,
+        });
+        setStatus(correct ? "Diagnostic note saved." : "Saved. Primer will continue the diagnostic.");
+      } else {
+        state = applyMasteryEvidence(state, masteryTarget, correct ? 1 : 0);
+        setStatus(correct ? "Explanation recorded." : "Saved. Try another response on the next step.");
+      }
       persistState();
-      setStatus(correct ? "Great reading response." : "Saved. Try another response on the next step.");
       await renderCurrentDecisionScene();
     });
 
@@ -907,6 +1057,54 @@ const renderScene = (scene) => {
       state = appendRecentTurn(state, {
         role: "user",
         content: `read-respond-skip:${safeScene.scene.objectiveId}`,
+      });
+      persistState();
+      await renderCurrentDecisionScene();
+    });
+  }
+
+  if (interactionType === "math-input") {
+    const input = sceneRoot.querySelector("#math-response-input");
+    const submitButton = sceneRoot.querySelector("#math-response-submit");
+    const skipButton = sceneRoot.querySelector("#math-response-skip");
+
+    submitButton?.addEventListener("click", async () => {
+      const masteryTarget = currentDecision.conceptId ?? currentDecision.activeDomain;
+      const response = String(input?.value ?? "").trim();
+      const validation = validateMathInputResponse(response, safeScene.interaction.expectedExpression);
+      latestInput = {
+        type: "math-input",
+        content: response || "empty",
+      };
+      state = appendRecentTurn(state, {
+        role: "user",
+        content: `math-input:${safeScene.scene.objectiveId}:${response || "empty"}`,
+      });
+
+      if (!isDiagnosticComplete()) {
+        state = advanceAssessment(state, {
+          recommendedConceptId: validation.correct
+            ? currentDecision.conceptId
+            : state.pedagogicalState.recommendedConceptId ?? currentDecision.conceptId,
+        });
+        setStatus(validation.correct ? "Diagnostic step accepted." : `Saved with ${validation.reason} feedback.`);
+      } else {
+        state = applyMasteryEvidence(state, masteryTarget, validation.correct ? 1 : 0);
+        setStatus(validation.correct ? "Validated and saved." : `Saved with ${validation.reason} feedback.`);
+      }
+
+      persistState();
+      await renderCurrentDecisionScene();
+    });
+
+    skipButton?.addEventListener("click", async () => {
+      latestInput = {
+        type: "tap-choice",
+        content: `${safeScene.scene.objectiveId}:skip-math-input`,
+      };
+      state = appendRecentTurn(state, {
+        role: "user",
+        content: `math-input-skip:${safeScene.scene.objectiveId}`,
       });
       persistState();
       await renderCurrentDecisionScene();

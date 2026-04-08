@@ -1,3 +1,9 @@
+import {
+  ALGEBRA_DIAGNOSTIC_ITEMS,
+  ALGEBRA_FOUNDATIONS_MODULE,
+  getRecommendedConceptId,
+} from "../../../../packages/core/src/algebraModule.js";
+
 const env = typeof process === "undefined" ? {} : process.env;
 const DIRECTOR_TIMEOUT_MS = 3_500;
 const IMAGE_TIMEOUT_MS = 2_500;
@@ -18,21 +24,23 @@ const APP_CONFIG = {
   },
 };
 
-const SCHEMA_VERSION = 1;
-const V1_INTERACTIONS = ["none", "tap-choice", "repeat-sound", "trace-symbol", "read-respond"];
-const V1_SCENE_KINDS = ["assessment", "lesson", "practice", "review", "reward", "fallback"];
+const SCHEMA_VERSION = 2;
+const V1_INTERACTIONS = ["none", "tap-choice", "repeat-sound", "trace-symbol", "read-respond", "math-input"];
+const V1_SCENE_KINDS = ["assessment", "lesson", "practice", "review", "fallback"];
 const VALID_TRANSITIONS = new Set(["fade", "slide", "pan"]);
 const VALID_TONES = new Set(["calm", "encouraging", "celebratory", "focused", "curious"]);
 const SAFE_RECIPE_IDS = new Set(["ambient_safe_path", "neutral_choice_board", "symbol_trace_board"]);
 const ASSET_MANIFEST_VERSION = 1;
 
-const masteryBucket = () => ({
-  phonemes: {},
-  graphemes: {},
-  vocabularyThemes: {},
-  numeracyConcepts: {},
-  mathConcepts: {},
-  scienceConcepts: {},
+const ALGEBRA_CONCEPT_GRAPH = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph;
+
+const createMasteryRecord = (overrides = {}) => ({
+  score: 0,
+  status: "available",
+  attempts: 0,
+  lastPracticedAt: null,
+  reviewDueAt: null,
+  ...overrides,
 });
 
 const createStateShape = (overrides = {}) => ({
@@ -45,20 +53,29 @@ const createStateShape = (overrides = {}) => ({
     preferredModalities: ["audio", "visual", "interactive"],
     ...overrides.learnerProfile,
   },
+  moduleSelection: {
+    selectedModuleId: "algebra-foundations",
+    availableModuleIds: ["algebra-foundations"],
+    selectedAt: null,
+    ...overrides.moduleSelection,
+  },
   pedagogicalState: {
-    literacyStage: 0,
-    assessmentStep: 0,
-    domainStage: {
-      reading: 0,
-      writing: 0,
-      numeracy: 0,
-      mathematics: 0,
-      science: 0,
-      physics: 0,
-    },
-    currentObjectiveId: "baseline.observe-sound.0",
-    assessmentStatus: "not-started",
-    mastery: masteryBucket(),
+    diagnosticStatus: "not-started",
+    diagnosticStep: 0,
+    readiness: "unknown",
+    currentConceptId: "variables-and-expressions",
+    currentLessonId: null,
+    currentObjectiveId: "diagnostic.variables",
+    recommendedConceptId: "variables-and-expressions",
+    masteryByConcept: {},
+    misconceptionsByConcept: {},
+    evidenceLog: [],
+    reviewSchedule: [],
+    recentActivity: [],
+    lessonRecords: {},
+    assessmentItems: {},
+    attemptLog: [],
+    goals: [],
     ...overrides.pedagogicalState,
   },
   runtimeSession: {
@@ -105,122 +122,57 @@ const createStateShape = (overrides = {}) => ({
     quotaEstimate: null,
     ...overrides.assetIndex,
   },
-});
-
-const lessonKinds = ["lesson", "practice", "review", "reward", "fallback"];
-
-const assessmentSequence = [
-  {
-    objectiveId: "baseline.observe-sound.0",
-    activeDomain: "preliteracy",
-    literacyStage: 0,
-    allowedSceneKinds: ["assessment", "fallback"],
-    allowedInteractionTypes: ["tap-choice", "repeat-sound", "none"],
-    cloudEscalationAllowed: false,
-    maxNarrationChars: 90,
-    maxPromptComplexity: 1,
+  exportMetadata: {
+    lastExportedAt: null,
+    lastImportedAt: null,
+    exportFormatVersion: 1,
+    ...overrides.exportMetadata,
   },
-  {
-    objectiveId: "baseline.symbol-match.1",
-    activeDomain: "preliteracy",
-    literacyStage: 1,
-    allowedSceneKinds: ["assessment", "fallback"],
-    allowedInteractionTypes: ["tap-choice", "trace-symbol", "none"],
-    cloudEscalationAllowed: false,
-    maxNarrationChars: 96,
-    maxPromptComplexity: 1,
-  },
-  {
-    objectiveId: "baseline.trace-letter.2",
-    activeDomain: "writing",
-    literacyStage: 2,
-    allowedSceneKinds: ["assessment", "fallback"],
-    allowedInteractionTypes: ["trace-symbol", "tap-choice", "none"],
-    cloudEscalationAllowed: false,
-    maxNarrationChars: 104,
-    maxPromptComplexity: 1,
-  },
-  {
-    objectiveId: "baseline.read-short.3",
-    activeDomain: "reading",
-    literacyStage: 3,
-    allowedSceneKinds: ["assessment", "fallback"],
-    allowedInteractionTypes: ["tap-choice", "repeat-sound", "none"],
-    cloudEscalationAllowed: false,
-    maxNarrationChars: 120,
-    maxPromptComplexity: 2,
-  },
-];
-
-const readingDecision = (stage = 1) => ({
-  objectiveId: `reading.symbol-match.${stage}`,
-  activeDomain: "reading",
-  literacyStage: stage,
-  allowedSceneKinds: lessonKinds,
-  allowedInteractionTypes: ["tap-choice", "trace-symbol", "repeat-sound", "read-respond", "none"],
-  cloudEscalationAllowed: APP_CONFIG.features.cloudDirector,
-  maxNarrationChars: 120,
-  maxPromptComplexity: 2,
 });
-
-const writingDecision = (stage = 1) => ({
-  objectiveId: `writing.trace-and-build.${stage}`,
-  activeDomain: "writing",
-  literacyStage: stage,
-  allowedSceneKinds: lessonKinds,
-  allowedInteractionTypes: ["trace-symbol", "tap-choice", "none"],
-  cloudEscalationAllowed: APP_CONFIG.features.cloudDirector,
-  maxNarrationChars: 110,
-  maxPromptComplexity: 2,
-});
-
-const numeracyDecision = (stage = 1) => ({
-  objectiveId: `numeracy.more-less.${stage}`,
-  activeDomain: "numeracy",
-  literacyStage: stage,
-  allowedSceneKinds: lessonKinds,
-  allowedInteractionTypes: ["tap-choice", "math-input", "none"],
-  cloudEscalationAllowed: APP_CONFIG.features.cloudDirector,
-  maxNarrationChars: 120,
-  maxPromptComplexity: 2,
-});
-
-const getMasteryScore = (state, domain) => state.pedagogicalState.domainStage[domain] ?? 0;
-
-const nextCurriculumDecision = (state) => {
-  if (state.pedagogicalState.assessmentStatus !== "complete") {
-    const step = Math.max(
-      0,
-      Math.min(state.pedagogicalState.assessmentStep ?? 0, assessmentSequence.length - 1),
-    );
-    return assessmentSequence[step];
-  }
-
-  const readingScore = getMasteryScore(state, "reading");
-  const writingScore = getMasteryScore(state, "writing");
-  const numeracyScore = getMasteryScore(state, "numeracy");
-  const currentObjectiveId = state.pedagogicalState.currentObjectiveId ?? "";
-
-  if (currentObjectiveId.startsWith("reading.") && readingScore <= Math.max(writingScore, numeracyScore)) {
-    return readingDecision(Math.max(1, readingScore));
-  }
-
-  if (readingScore <= writingScore && readingScore <= numeracyScore) {
-    return readingDecision(Math.max(1, readingScore));
-  }
-
-  if (writingScore <= numeracyScore) {
-    return writingDecision(Math.max(1, writingScore));
-  }
-
-  return numeracyDecision(Math.max(1, numeracyScore));
-};
 
 const createDefaultState = (overrides = {}) => createStateShape(overrides);
 
 const migrateState = (rawState) => {
   if (!rawState || typeof rawState !== "object") {
     return createDefaultState();
+  }
+
+  if (!rawState.schemaVersion || rawState.schemaVersion < SCHEMA_VERSION) {
+    return createDefaultState({
+      ...rawState,
+      moduleSelection: {
+        ...createDefaultState().moduleSelection,
+        ...(rawState.moduleSelection ?? {}),
+      },
+      pedagogicalState: {
+        ...createDefaultState().pedagogicalState,
+        ...(rawState.pedagogicalState ?? {}),
+      },
+      runtimeSession: {
+        ...createDefaultState().runtimeSession,
+        ...(rawState.runtimeSession ?? {}),
+      },
+      consentAndSettings: {
+        ...createDefaultState().consentAndSettings,
+        ...(rawState.consentAndSettings ?? {}),
+      },
+      providerConfig: {
+        ...createDefaultState().providerConfig,
+        ...(rawState.providerConfig ?? {}),
+      },
+      capabilities: {
+        ...createDefaultState().capabilities,
+        ...(rawState.capabilities ?? {}),
+      },
+      assetIndex: {
+        ...createDefaultState().assetIndex,
+        ...(rawState.assetIndex ?? {}),
+      },
+      exportMetadata: {
+        ...createDefaultState().exportMetadata,
+        ...(rawState.exportMetadata ?? {}),
+      },
+    });
   }
 
   return createDefaultState(rawState);
@@ -243,6 +195,9 @@ const setActiveScene = (state, scene) =>
     pedagogicalState: {
       ...state.pedagogicalState,
       currentObjectiveId: scene?.scene?.objectiveId ?? state.pedagogicalState.currentObjectiveId,
+      ...(typeof scene?.scene?.objectiveId === "string" && scene.scene.objectiveId.startsWith("concept.")
+        ? { currentConceptId: scene.scene.objectiveId.slice("concept.".length) }
+        : {}),
     },
     runtimeSession: {
       ...state.runtimeSession,
@@ -260,54 +215,156 @@ const updateConsentSettings = (state, updates) =>
     },
   });
 
-const recordAssessmentCompletion = (state, literacyStage = 1) => ({
-  ...state,
-  pedagogicalState: {
-    ...state.pedagogicalState,
-    assessmentStep: assessmentSequence.length,
-    assessmentStatus: "complete",
-    literacyStage,
-    currentObjectiveId: readingDecision(Math.max(1, literacyStage)).objectiveId,
-    domainStage: {
-      ...state.pedagogicalState.domainStage,
-      reading: Math.max(state.pedagogicalState.domainStage.reading, literacyStage),
-      writing: Math.max(state.pedagogicalState.domainStage.writing, literacyStage - 1),
-      numeracy: Math.max(state.pedagogicalState.domainStage.numeracy, Math.min(2, literacyStage)),
-    },
-  },
+const getDiagnosticItem = (step) =>
+  ALGEBRA_DIAGNOSTIC_ITEMS[Math.max(0, Math.min(step, ALGEBRA_DIAGNOSTIC_ITEMS.length - 1))];
+
+const makeDiagnosticDecision = (state, item) => ({
+  moduleId: ALGEBRA_FOUNDATIONS_MODULE.id,
+  activeDomain: "mathematics",
+  phase: "diagnostic",
+  conceptId: item.conceptId,
+  objectiveId: item.id,
+  prompt: item.prompt,
+  inputType: item.inputType,
+  allowedSceneKinds: ["assessment", "fallback"],
+  allowedInteractionTypes:
+    item.inputType === "read-respond"
+      ? ["read-respond", "none"]
+      : item.inputType === "tap-choice"
+        ? ["tap-choice", "none"]
+        : ["math-input", "none"],
+  cloudEscalationAllowed: false,
+  maxNarrationChars: 180,
+  maxPromptComplexity: 2,
+  recommendedConceptId: state.pedagogicalState.recommendedConceptId,
 });
 
-const advanceAssessment = (state, demonstratedStage = null) => {
-  const currentStep = state.pedagogicalState.assessmentStep ?? 0;
-  const inferredStage = demonstratedStage ?? currentStep;
-  const nextStep = currentStep + 1;
-
-  if (nextStep >= assessmentSequence.length) {
-    return recordAssessmentCompletion(state, Math.max(0, Math.min(3, inferredStage)));
-  }
-
+const makeConceptDecision = (state, conceptId) => {
+  const concept = ALGEBRA_CONCEPT_GRAPH.find((node) => node.id === conceptId);
   return {
-    ...state,
-    pedagogicalState: {
-      ...state.pedagogicalState,
-      assessmentStatus: "in-progress",
-      assessmentStep: nextStep,
-      literacyStage: Math.max(state.pedagogicalState.literacyStage, inferredStage),
-      currentObjectiveId: assessmentSequence[nextStep].objectiveId,
-    },
+    moduleId: ALGEBRA_FOUNDATIONS_MODULE.id,
+    activeDomain: "mathematics",
+    phase: "tutoring",
+    conceptId,
+    objectiveId: `concept.${conceptId}`,
+    prompt: concept?.description ?? "Continue with the next algebra concept.",
+    allowedSceneKinds: ["lesson", "practice", "review", "fallback"],
+    allowedInteractionTypes: ["math-input", "tap-choice", "read-respond", "none"],
+    cloudEscalationAllowed: APP_CONFIG.features.cloudDirector,
+    maxNarrationChars: 220,
+    maxPromptComplexity: 2,
+    recommendedConceptId: state.pedagogicalState.recommendedConceptId,
   };
 };
 
-const applyMasteryEvidence = (state, domain, delta = 1) => ({
-  ...state,
-  pedagogicalState: {
-    ...state.pedagogicalState,
-    domainStage: {
-      ...state.pedagogicalState.domainStage,
-      [domain]: Math.max(0, (state.pedagogicalState.domainStage[domain] ?? 0) + delta),
+const nextCurriculumDecision = (state) => {
+  if (state.pedagogicalState.diagnosticStatus !== "complete") {
+    return makeDiagnosticDecision(state, getDiagnosticItem(state.pedagogicalState.diagnosticStep ?? 0));
+  }
+
+  const recommendedConceptId =
+    state.pedagogicalState.currentConceptId ??
+    state.pedagogicalState.recommendedConceptId ??
+    getRecommendedConceptId(state.pedagogicalState.masteryByConcept);
+
+  return makeConceptDecision(state, recommendedConceptId);
+};
+
+const recordAssessmentCompletion = (state, recommendedConceptId = "variables-and-expressions") =>
+  createDefaultState({
+    ...state,
+    pedagogicalState: {
+      ...state.pedagogicalState,
+      diagnosticStep: ALGEBRA_DIAGNOSTIC_ITEMS.length,
+      diagnosticStatus: "complete",
+      readiness: "ready",
+      currentConceptId: recommendedConceptId,
+      currentObjectiveId: `concept.${recommendedConceptId}`,
+      recommendedConceptId,
+      recentActivity: [
+        ...state.pedagogicalState.recentActivity,
+        {
+          type: "diagnostic-complete",
+          conceptId: recommendedConceptId,
+        },
+      ].slice(-10),
     },
-  },
-});
+  });
+
+const advanceAssessment = (state, result = {}) => {
+  const currentStep = state.pedagogicalState.diagnosticStep ?? 0;
+  const nextStep = currentStep + 1;
+  const recommendedConceptId =
+    result.recommendedConceptId ??
+    state.pedagogicalState.recommendedConceptId ??
+    "variables-and-expressions";
+
+  if (nextStep >= ALGEBRA_DIAGNOSTIC_ITEMS.length) {
+    return recordAssessmentCompletion(state, recommendedConceptId);
+  }
+
+  return createDefaultState({
+    ...state,
+    pedagogicalState: {
+      ...state.pedagogicalState,
+      diagnosticStatus: "in-progress",
+      diagnosticStep: nextStep,
+      currentObjectiveId: getDiagnosticItem(nextStep).id,
+      recommendedConceptId,
+      recentActivity: [
+        ...state.pedagogicalState.recentActivity,
+        {
+          type: "diagnostic-step-complete",
+          step: currentStep,
+        },
+      ].slice(-10),
+    },
+  });
+};
+
+const applyMasteryEvidence = (state, conceptId, delta = 1) => {
+  const currentRecord = state.pedagogicalState.masteryByConcept[conceptId] ?? {};
+  const nextScore = Math.max(0, (currentRecord.score ?? 0) + delta);
+  const nextMasteryByConcept = {
+    ...state.pedagogicalState.masteryByConcept,
+    [conceptId]: {
+      ...createMasteryRecord(currentRecord),
+      score: nextScore,
+      status: nextScore >= 1 ? "mastered" : "in-progress",
+      attempts: (currentRecord.attempts ?? 0) + 1,
+      lastPracticedAt: new Date().toISOString(),
+      reviewDueAt: null,
+    },
+  };
+  const recommendedConceptId = getRecommendedConceptId(nextMasteryByConcept);
+
+  return createDefaultState({
+    ...state,
+    pedagogicalState: {
+      ...state.pedagogicalState,
+      currentConceptId: recommendedConceptId,
+      currentObjectiveId: `concept.${recommendedConceptId}`,
+      recommendedConceptId,
+      masteryByConcept: nextMasteryByConcept,
+      evidenceLog: [
+        ...state.pedagogicalState.evidenceLog,
+        {
+          conceptId,
+          delta,
+          recordedAt: new Date().toISOString(),
+        },
+      ].slice(-40),
+      recentActivity: [
+        ...state.pedagogicalState.recentActivity,
+        {
+          type: "mastery-evidence",
+          conceptId,
+          delta,
+        },
+      ].slice(-10),
+    },
+  });
+};
 
 const createFallbackScene = (reason = "unknown") => ({
   version: 1,
@@ -766,7 +823,9 @@ const getAssetInstallPlan = (state) => {
 
 const toConstraintDecision = (hardConstraints) => ({
   activeDomain: hardConstraints.activeDomain,
-  literacyStage: hardConstraints.literacyStage,
+  phase: hardConstraints.phase,
+  moduleId: hardConstraints.moduleId,
+  conceptId: hardConstraints.conceptId,
   objectiveId: hardConstraints.objectiveId,
   allowedSceneKinds: hardConstraints.allowedSceneKinds,
   allowedInteractionTypes: hardConstraints.allowedInteractionTypes,
@@ -837,6 +896,15 @@ const validateSceneBlueprint = (blueprint, decision = null) => {
       blueprint.interaction.expectedKeywords.length === 0
     ) {
       errors.push("Read/respond scenes require expected keywords.");
+    }
+  }
+
+  if (interactionType === "math-input") {
+    if (!blueprint?.interaction?.expressionPrompt || typeof blueprint.interaction.expressionPrompt !== "string") {
+      errors.push("Math input scenes require an expression prompt.");
+    }
+    if (!blueprint?.interaction?.expectedExpression || typeof blueprint.interaction.expectedExpression !== "string") {
+      errors.push("Math input scenes require an expected expression.");
     }
   }
 
@@ -927,9 +995,8 @@ const detectCapabilities = (runtime) => {
 
 const buildLearnerSummary = (state) =>
   truncateText(
-    `Locale ${state.learnerProfile.locale}. Literacy stage ${state.pedagogicalState.literacyStage}. ` +
-      `Reading ${state.pedagogicalState.domainStage.reading}, writing ${state.pedagogicalState.domainStage.writing}, ` +
-      `numeracy ${state.pedagogicalState.domainStage.numeracy}.`,
+    `Locale ${state.learnerProfile.locale}. Module ${state.moduleSelection?.selectedModuleId ?? "algebra-foundations"}. ` +
+      `Diagnostic ${state.pedagogicalState.diagnosticStatus}. Concept ${state.pedagogicalState.currentConceptId}.`,
     180,
   );
 
@@ -954,7 +1021,9 @@ const buildDirectorRequest = (state, decision, latestInput) => ({
   latestInput,
   hardConstraints: {
     activeDomain: decision.activeDomain,
-    literacyStage: decision.literacyStage,
+    phase: decision.phase,
+    moduleId: decision.moduleId,
+    conceptId: decision.conceptId,
     objectiveId: decision.objectiveId,
     allowedSceneKinds: decision.allowedSceneKinds,
     allowedInteractionTypes: decision.allowedInteractionTypes,
@@ -966,7 +1035,7 @@ const buildDirectorRequest = (state, decision, latestInput) => ({
 
 const validateDirectorRequest = (request) => {
   const errors = [];
-  const allowedInputTypes = new Set(["transcript", "tap-choice", "trace-result", "system-start"]);
+  const allowedInputTypes = new Set(["transcript", "tap-choice", "trace-result", "system-start", "math-input", "short-answer"]);
   if (!request?.requestId) {
     errors.push("requestId is required.");
   }
@@ -987,6 +1056,12 @@ const validateDirectorRequest = (request) => {
   }
   if (!Array.isArray(request?.hardConstraints?.allowedInteractionTypes)) {
     errors.push("allowedInteractionTypes are required.");
+  }
+  if (!request?.hardConstraints?.moduleId) {
+    errors.push("hardConstraints.moduleId is required.");
+  }
+  if (!request?.hardConstraints?.conceptId) {
+    errors.push("hardConstraints.conceptId is required.");
   }
   return {
     ok: errors.length === 0,
@@ -1228,7 +1303,7 @@ const requestVisionInterpretation = async ({ traceDataUrl, decision, target, fet
     task: "complex-symbol-check",
     context: {
       target,
-      learnerStage: decision.literacyStage,
+      learnerStage: decision.phase === "diagnostic" ? 0 : 1,
       domain: decision.activeDomain,
     },
   };
@@ -1280,6 +1355,7 @@ const recoverSceneForRuntime = (scene, runtimeState, decision = null) => {
 };
 
 export {
+  ALGEBRA_CONCEPT_GRAPH,
   APP_CONFIG,
   ASSET_MANIFEST_VERSION,
   advanceAssessment,
