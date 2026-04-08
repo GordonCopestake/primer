@@ -616,6 +616,40 @@ const createSceneFromDecision = (decision) => {
     };
   }
 
+  if (sessionPhase === "recommendation") {
+    const nextConceptLabel = formatConceptLabel(decision.recommendedConceptId ?? decision.conceptId);
+    const recommendationText =
+      decision.recommendationKind === "advance"
+        ? `Primer recommends moving next to ${nextConceptLabel}.`
+        : decision.recommendationKind === "stay"
+          ? `Primer recommends another supported attempt on ${conceptLabel}.`
+          : `Primer has a next step ready for ${conceptLabel}.`;
+    return {
+      version: 1,
+      scene: {
+        id: `scene_${decision.conceptId.replaceAll("-", "_")}_recommendation`,
+        kind: "review",
+        objectiveId: decision.objectiveId,
+        transition: "fade",
+        tone: "encouraging",
+      },
+      narration: {
+        text: [recommendationText, decision.recommendationReason?.replaceAll("-", " ")].filter(Boolean).join(" "),
+        maxChars: 220,
+        estDurationMs: 2000,
+        bargeInAllowed: true,
+      },
+      visualIntent: fallbackScene.visualIntent,
+      interaction: {
+        type: "none",
+      },
+      evidence: {
+        observedSkill: decision.conceptId,
+        confidenceHint: 0.75,
+      },
+    };
+  }
+
   if (sessionPhase === "remediation") {
     const placementSupport = decision?.matchingMisconceptions?.length
       ? `This matches the earlier ${decision.matchingMisconceptions

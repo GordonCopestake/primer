@@ -222,6 +222,8 @@ test("placement concepts with matching misconception signals insert remediation 
   state = advanceTutoringSession(state, "order-of-operations", "continue");
   decision = nextCurriculumDecision(state);
   assert.equal(decision.sessionPhase, "remediation");
+  assert.equal(state.pedagogicalState.tutoringDecisions.at(-1).decisionOutcome, "stay");
+  assert.equal(state.pedagogicalState.tutoringDecisions.at(-1).transitionReason, "targeted-remediation-needed");
 
   state = advanceTutoringSession(state, "order-of-operations", "continue");
   decision = nextCurriculumDecision(state);
@@ -267,11 +269,13 @@ test("mastery evidence advances toward the next available algebra concept", () =
   assert.equal(shifted.pedagogicalState.reviewSchedule[0].conceptId, "variables-and-expressions");
   assert.equal(shifted.pedagogicalState.lessonRecords["lesson.variables-and-expressions"].status, "completed");
   assert.equal(shifted.pedagogicalState.lessonRecords["lesson.variables-and-expressions"].sessionPhase, "feedback");
+  assert.equal(shifted.pedagogicalState.lessonRecords["lesson.variables-and-expressions"].recommendationKind, "advance");
+  assert.match(shifted.pedagogicalState.lessonRecords["lesson.variables-and-expressions"].recommendationReason, /mastery-demonstrated/);
   assert.equal(shifted.pedagogicalState.attemptLog.length, 1);
   assert.equal(shifted.pedagogicalState.milestones[1].status, "completed");
 });
 
-test("tutoring session advances through explain, worked example, attempt, and next concept", () => {
+test("tutoring session advances through explain, worked example, attempt, feedback, recommendation, and next concept", () => {
   let state = recordAssessmentCompletion(createDefaultState(), "variables-and-expressions");
   assert.equal(nextCurriculumDecision(state).sessionPhase, "explain");
 
@@ -283,11 +287,17 @@ test("tutoring session advances through explain, worked example, attempt, and ne
 
   state = applyMasteryEvidence(state, "variables-and-expressions", 1);
   assert.equal(nextCurriculumDecision(state).sessionPhase, "feedback");
+  assert.equal(nextCurriculumDecision(state).recommendationKind, "advance");
+
+  state = advanceTutoringSession(state, "variables-and-expressions", "continue");
+  assert.equal(nextCurriculumDecision(state).sessionPhase, "recommendation");
 
   state = advanceTutoringSession(state, "variables-and-expressions", "continue");
   const nextDecision = nextCurriculumDecision(state);
   assert.equal(nextDecision.conceptId, "evaluate-expressions");
   assert.equal(nextDecision.sessionPhase, "explain");
+  assert.equal(state.pedagogicalState.tutoringDecisions.at(-1).decisionOutcome, "redirect");
+  assert.equal(state.pedagogicalState.tutoringDecisions.at(-1).transitionReason, "recommended-next-concept");
 });
 
 test("incorrect evidence records misconceptions and prioritizes due review", () => {

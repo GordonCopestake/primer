@@ -93,6 +93,7 @@ export const createStateShape = (overrides = {}) => ({
     evidenceLog: [],
     reviewSchedule: [],
     recentActivity: [],
+    tutoringDecisions: [],
     lessonRecords: {},
     assessmentItems: {},
     assessmentAttempts: [],

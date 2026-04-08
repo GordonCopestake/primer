@@ -52,6 +52,7 @@ const normalizeState = (rawState = {}) =>
     pedagogicalState: {
       ...rawState.pedagogicalState,
       assessmentAttempts: rawState.pedagogicalState?.assessmentAttempts ?? [],
+      tutoringDecisions: rawState.pedagogicalState?.tutoringDecisions ?? [],
     },
     runtimeSession: {
       ...rawState.runtimeSession,
@@ -89,6 +90,7 @@ const migrateLegacyPedagogicalState = (rawState) => ({
   evidenceLog: [],
   reviewSchedule: [],
   recentActivity: [],
+  tutoringDecisions: [],
   lessonRecords: {},
   assessmentItems: {},
   assessmentAttempts: [],

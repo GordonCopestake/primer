@@ -12,6 +12,7 @@ import { createDefaultState } from "./state.js";
 const DIAGNOSTIC_SCENE_KINDS = ["assessment", "fallback"];
 const LESSON_SCENE_KINDS = ["lesson", "practice", "review", "fallback"];
 const DEFAULT_SESSION_PHASE = "explain";
+const DECISION_LOG_LIMIT = 40;
 
 const makeDiagnosticDecision = (state, item) => ({
   moduleId: ALGEBRA_FOUNDATIONS_MODULE.id,
@@ -72,6 +73,8 @@ const makeConceptDecision = (state, conceptId) => {
         : prerequisiteGaps.includes(conceptId)
           ? "placement-review"
           : "standard",
+    recommendationKind: lessonRecord.recommendationKind ?? null,
+    recommendationReason: lessonRecord.recommendationReason ?? null,
   };
 };
 
@@ -168,6 +171,9 @@ const buildAttemptRecord = ({ conceptId, objectiveId, correct, input, inputType,
   supportReason: null,
   recordedAt: new Date().toISOString(),
 });
+
+const appendTutoringDecision = (state, decision) =>
+  [...(state.pedagogicalState.tutoringDecisions ?? []), decision].slice(-DECISION_LOG_LIMIT);
 
 const getSupportReasonForConcept = (state, conceptId) => {
   const prerequisiteGaps = state.pedagogicalState.prerequisiteGaps ?? [];
@@ -405,6 +411,12 @@ export const applyMasteryEvidence = (state, conceptId, delta = 1) => {
         ]
       : []),
   ].slice(-20);
+  const recommendationKind = correct ? "advance" : "stay";
+  const recommendationReason = correct
+    ? reviewDueAt
+      ? "mastery-demonstrated-review-scheduled"
+      : "mastery-demonstrated"
+    : "needs-remediation";
 
   return updateMilestones(
     createDefaultState({
@@ -443,6 +455,17 @@ export const applyMasteryEvidence = (state, conceptId, delta = 1) => {
             : {}),
         },
         reviewSchedule,
+        tutoringDecisions: appendTutoringDecision(state, {
+          decisionId: `tutoring-decision:${conceptId}:${Date.now()}`,
+          conceptId,
+          sessionPhaseBefore: state.pedagogicalState.lessonRecords?.[lessonId]?.sessionPhase ?? "learner-attempt",
+          sessionPhaseAfter: correct ? "feedback" : "remediation",
+          decisionOutcome: correct ? "advance" : "stay",
+          transitionReason: recommendationReason,
+          supportReason,
+          recommendedConceptId,
+          recordedAt: now,
+        }),
         lessonRecords: {
           ...state.pedagogicalState.lessonRecords,
           [lessonId]: {
@@ -451,6 +474,8 @@ export const applyMasteryEvidence = (state, conceptId, delta = 1) => {
             status: nextScore >= 1 ? "completed" : "in-progress",
             sessionPhase: correct ? "feedback" : "remediation",
             supportReason,
+            recommendationKind,
+            recommendationReason,
             lastUpdatedAt: now,
           },
         },
@@ -513,22 +538,34 @@ export const advanceTutoringSession = (state, conceptId, action = "continue") =>
   let nextConceptId = conceptId;
   let nextSessionPhase = sessionPhase;
   let supportPlanApplied = lessonRecord.supportPlanApplied === true;
+  let decisionOutcome = "advance";
+  let transitionReason = "continue-session";
 
   if (action === "continue") {
     if (sessionPhase === "explain") {
       nextSessionPhase = "worked-example";
+      transitionReason = "concept-introduction-complete";
     } else if (sessionPhase === "worked-example") {
       if (shouldInsertTargetedRemediation) {
         nextSessionPhase = "remediation";
         supportPlanApplied = true;
+        decisionOutcome = "stay";
+        transitionReason = "targeted-remediation-needed";
       } else {
         nextSessionPhase = "learner-attempt";
+        transitionReason = "worked-example-complete";
       }
     } else if (sessionPhase === "feedback") {
+      nextSessionPhase = "recommendation";
+      transitionReason = lessonRecord.recommendationReason ?? "mastery-demonstrated";
+    } else if (sessionPhase === "recommendation") {
       nextConceptId = recommendedConceptId;
       nextSessionPhase = "explain";
+      decisionOutcome = nextConceptId === conceptId ? "stay" : "redirect";
+      transitionReason = nextConceptId === conceptId ? "repeat-current-concept" : "recommended-next-concept";
     } else if (sessionPhase === "remediation") {
       nextSessionPhase = "learner-attempt";
+      transitionReason = "retry-after-remediation";
     }
   }
 
@@ -540,11 +577,24 @@ export const advanceTutoringSession = (state, conceptId, action = "continue") =>
         conceptId,
         fromPhase: sessionPhase,
         toPhase: nextSessionPhase,
+        decisionOutcome,
+        transitionReason,
         recordedAt: new Date().toISOString(),
       }),
       currentConceptId: nextConceptId,
       currentLessonId: `lesson.${nextConceptId}`,
       currentObjectiveId: `concept.${nextConceptId}`,
+      tutoringDecisions: appendTutoringDecision(state, {
+        decisionId: `session-transition:${conceptId}:${Date.now()}`,
+        conceptId,
+        sessionPhaseBefore: sessionPhase,
+        sessionPhaseAfter: nextSessionPhase,
+        decisionOutcome,
+        transitionReason,
+        supportReason,
+        recommendedConceptId,
+        recordedAt: new Date().toISOString(),
+      }),
       lessonRecords: {
         ...state.pedagogicalState.lessonRecords,
         [lessonId]: {
@@ -555,6 +605,10 @@ export const advanceTutoringSession = (state, conceptId, action = "continue") =>
             nextConceptId === conceptId ? nextSessionPhase : state.pedagogicalState.lessonRecords?.[lessonId]?.sessionPhase ?? sessionPhase,
           supportPlanApplied,
           supportReason,
+          recommendationKind: lessonRecord.recommendationKind ?? null,
+          recommendationReason: lessonRecord.recommendationReason ?? null,
+          lastTransitionOutcome: decisionOutcome,
+          lastTransitionReason: transitionReason,
           lastUpdatedAt: new Date().toISOString(),
         },
         ...(nextConceptId !== conceptId
@@ -566,6 +620,8 @@ export const advanceTutoringSession = (state, conceptId, action = "continue") =>
                 sessionPhase: "explain",
                 supportPlanApplied: false,
                 supportReason: getSupportReasonForConcept(state, nextConceptId),
+                recommendationKind: null,
+                recommendationReason: null,
                 lastUpdatedAt: new Date().toISOString(),
               },
             }
