@@ -790,6 +790,53 @@ test("reset learner state clears progress but preserves local admin and capabili
   assert.equal(state.providerConfig.apiKey, "test-key");
 });
 
+test("persistable state strips provider api keys from the learner blob", () => {
+  const state = runtimeModule.createDefaultState({
+    providerConfig: {
+      providerName: "openrouter",
+      apiKey: "secret-key",
+    },
+  });
+
+  const sanitized = runtimeModule.sanitizeStateForPersistence(state);
+  assert.equal(sanitized.providerConfig.apiKey, "");
+  assert.equal(sanitized.providerConfig.hasStoredApiKey, true);
+});
+
+test("browser storage adapter keeps provider secret separate from saved state", async () => {
+  const backingStore = new Map();
+  const localStorage = {
+    getItem(key) {
+      return backingStore.has(key) ? backingStore.get(key) : null;
+    },
+    setItem(key, value) {
+      backingStore.set(key, String(value));
+    },
+    removeItem(key) {
+      backingStore.delete(key);
+    },
+  };
+  const adapter = runtimeModule.createBrowserStorageAdapter({ localStorage });
+  const state = runtimeModule.sanitizeStateForPersistence(
+    runtimeModule.createDefaultState({
+      providerConfig: {
+        providerName: "openrouter",
+        apiKey: "secret-key",
+      },
+    }),
+  );
+
+  await adapter.saveState(state);
+  await adapter.saveProviderSecret("secret-key");
+
+  const loadedState = await adapter.loadState();
+  const loadedSecret = await adapter.loadProviderSecret();
+
+  assert.equal(loadedState.providerConfig.apiKey, "");
+  assert.equal(loadedState.providerConfig.hasStoredApiKey, true);
+  assert.equal(loadedSecret, "secret-key");
+});
+
 test("offline recovery state retains the last safe scene metadata", () => {
   const safeScene = runtimeModule.createFallbackScene("restore");
   const state = runtimeModule.setActiveScene(runtimeModule.createDefaultState(), safeScene);
@@ -835,12 +882,26 @@ test("legacy encrypted backup payloads remain importable", async () => {
 });
 
 test("export bundle wraps state with a manifest and legacy imports normalize", () => {
-  const state = runtimeModule.createDefaultState();
+  const state = runtimeModule.createDefaultState({
+    providerConfig: {
+      providerName: "openrouter",
+      apiKey: "secret-key",
+    },
+  });
   const bundle = runtimeModule.createExportBundle({ state, scene: null, encrypted: true });
   const normalized = runtimeModule.parseImportBundle({ state, scene: null });
 
   assert.equal(bundle.manifest.manifestType, "primer-export-manifest");
   assert.equal(bundle.manifest.encryption, runtimeModule.ENCRYPTION_AES_GCM);
+  assert.equal(bundle.state.providerConfig.apiKey, "");
+  assert.equal(bundle.state.providerConfig.hasStoredApiKey, true);
   assert.equal(normalized.manifest.formatVersion, runtimeModule.EXPORT_FORMAT_VERSION);
   assert.equal(normalized.state.schemaVersion, state.schemaVersion);
+});
+
+test("import bundle validation rejects missing state payloads", () => {
+  assert.throws(
+    () => runtimeModule.parseImportBundle({ manifest: { manifestType: "primer-export-manifest" } }),
+    /import manifest is invalid|state is required/i,
+  );
 });

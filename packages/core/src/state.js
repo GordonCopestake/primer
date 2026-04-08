@@ -145,7 +145,13 @@ export const migrateState = (rawState) => {
     });
   }
 
-  return normalizeState(rawState);
+  return normalizeState({
+    ...rawState,
+    providerConfig: {
+      ...rawState.providerConfig,
+      hasStoredApiKey: Boolean(rawState.providerConfig?.apiKey || rawState.providerConfig?.hasStoredApiKey),
+    },
+  });
 };
 
 export const appendRecentTurn = (state, turn) => {

@@ -36,12 +36,18 @@ These cover the subject-pack, provider/model/storage adapter, validation plugin,
 
 ## Learner State Rules
 
-Learner state is now versioned at schema v3 and keeps:
+Learner state is now versioned at schema v4 and keeps:
 
 - selected module plus persisted module metadata
 - diagnostic records, assessment attempts, and tutoring attempts
 - concept-linked evidence and bounded recent interaction memory
 - review schedule, goals, milestones, provider settings, telemetry consent, and export metadata
+
+Persistence/security notes:
+
+- browser persistence now prefers IndexedDB with localStorage as a fallback
+- provider API keys are stored locally but kept separate from the general learner-state blob
+- export bundles keep provider metadata, but do not include the saved API key
 
 Migration rule:
 

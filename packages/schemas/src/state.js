@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const createModuleMetadata = (overrides = {}) => ({
   moduleId: "algebra-foundations",
@@ -140,6 +140,7 @@ export const createStateShape = (overrides = {}) => ({
     modelName: "",
     endpointUrl: "",
     apiKey: "",
+    hasStoredApiKey: false,
     configuredAt: null,
     ...overrides.providerConfig,
   },
@@ -162,7 +163,7 @@ export const createStateShape = (overrides = {}) => ({
   exportMetadata: {
     lastExportedAt: null,
     lastImportedAt: null,
-    exportFormatVersion: 1,
+    exportFormatVersion: 2,
     ...overrides.exportMetadata,
   },
 });

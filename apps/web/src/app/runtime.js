@@ -6,6 +6,7 @@ import {
   appendRecentTurn as appendRecentTurnCore,
   applyMasteryEvidence as applyMasteryEvidenceCore,
   createDefaultState as createDefaultStateCore,
+  createExportManifest as createExportManifestCore,
   createFallbackScene as createFallbackSceneCore,
   detectCapabilities as detectCapabilitiesCore,
   getMathValidationFeedbackMessage as getMathFeedbackMessageCore,
@@ -15,6 +16,7 @@ import {
   nextCurriculumDecision as nextCurriculumDecisionCore,
   setActiveScene as setActiveSceneCore,
   updateConsentSettings as updateConsentSettingsCore,
+  validateExportManifest as validateExportManifestCore,
   validateMathResponse as validateMathResponseCore,
 } from "../../../../packages/core/src/index.js";
 import {
@@ -34,6 +36,13 @@ const ENCRYPTION_AES_GCM = "primer-aes-gcm-v1";
 const ENCRYPTION_LEGACY_XOR = "primer-xor-v1";
 const PBKDF2_ITERATIONS = 250_000;
 const ALGEBRA_CONCEPT_GRAPH = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph;
+const STORAGE_DB_NAME = "primer-storage-v1";
+const STORAGE_DB_VERSION = 1;
+const STORAGE_RECORDS_STORE = "records";
+const STORAGE_KEY_STATE = "state";
+const STORAGE_KEY_SCENE = "scene";
+const STORAGE_KEY_PROVIDER_SECRET = "provider-secret";
+const STORAGE_KEY_BACKUP_BUNDLE = "backup-bundle";
 
 const createDefaultState = (overrides = {}) => createDefaultStateCore(overrides);
 const migrateState = (rawState) => migrateStateCore(rawState);
@@ -59,6 +68,205 @@ const validateMathInputResponse = (input, expectedExpression, conceptId = null) 
   validateMathResponseCore(input, expectedExpression, conceptId);
 const getRelayBaseUrl = () =>
   String(globalThis.PRIMER_CONFIG?.relayBaseUrl ?? globalThis.process?.env?.PRIMER_RELAY_BASE_URL ?? APP_CONFIG.relayBaseUrl ?? "").trim();
+
+const cloneJsonValue = (value) => JSON.parse(JSON.stringify(value));
+
+const sanitizeStateForPersistence = (state) => {
+  const sanitizedState = cloneJsonValue(state ?? createDefaultState());
+  sanitizedState.providerConfig = {
+    ...(sanitizedState.providerConfig ?? {}),
+    apiKey: "",
+    hasStoredApiKey: Boolean(state?.providerConfig?.apiKey),
+  };
+  return sanitizedState;
+};
+
+const mergeProviderSecretIntoState = (state, apiKey = "") =>
+  createDefaultState({
+    ...state,
+    providerConfig: {
+      ...state?.providerConfig,
+      apiKey,
+      hasStoredApiKey: Boolean(apiKey),
+    },
+  });
+
+const openStorageDatabase = (storageEnv = globalThis) =>
+  new Promise((resolve, reject) => {
+    const openRequest = storageEnv?.indexedDB?.open?.(STORAGE_DB_NAME, STORAGE_DB_VERSION);
+    if (!openRequest) {
+      reject(new Error("IndexedDB is unavailable."));
+      return;
+    }
+
+    openRequest.onupgradeneeded = () => {
+      const database = openRequest.result;
+      if (!database.objectStoreNames.contains(STORAGE_RECORDS_STORE)) {
+        database.createObjectStore(STORAGE_RECORDS_STORE);
+      }
+    };
+    openRequest.onsuccess = () => resolve(openRequest.result);
+    openRequest.onerror = () => reject(openRequest.error ?? new Error("IndexedDB open failed."));
+  });
+
+const readIndexedDbRecord = async (storageEnv, key) => {
+  const database = await openStorageDatabase(storageEnv);
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(STORAGE_RECORDS_STORE, "readonly");
+    const store = transaction.objectStore(STORAGE_RECORDS_STORE);
+    const request = store.get(key);
+    request.onsuccess = () => resolve(request.result ?? null);
+    request.onerror = () => reject(request.error ?? new Error("IndexedDB read failed."));
+    transaction.oncomplete = () => database.close();
+    transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB transaction failed."));
+  });
+};
+
+const writeIndexedDbRecord = async (storageEnv, key, value) => {
+  const database = await openStorageDatabase(storageEnv);
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(STORAGE_RECORDS_STORE, "readwrite");
+    const store = transaction.objectStore(STORAGE_RECORDS_STORE);
+    store.put(value, key);
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB write failed."));
+  });
+};
+
+const deleteIndexedDbRecord = async (storageEnv, key) => {
+  const database = await openStorageDatabase(storageEnv);
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(STORAGE_RECORDS_STORE, "readwrite");
+    const store = transaction.objectStore(STORAGE_RECORDS_STORE);
+    store.delete(key);
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB delete failed."));
+  });
+};
+
+const createLocalStorageAdapter = (storageEnv = globalThis) => ({
+  mode: "localStorage",
+  async loadState() {
+    const raw = storageEnv.localStorage?.getItem(STORAGE_KEY_STATE) ?? null;
+    return raw ? JSON.parse(raw) : null;
+  },
+  async saveState(state) {
+    storageEnv.localStorage?.setItem(STORAGE_KEY_STATE, JSON.stringify(state));
+  },
+  async loadScene() {
+    const raw = storageEnv.localStorage?.getItem(STORAGE_KEY_SCENE) ?? null;
+    return raw ? JSON.parse(raw) : null;
+  },
+  async saveScene(scene) {
+    storageEnv.localStorage?.setItem(STORAGE_KEY_SCENE, JSON.stringify(scene));
+  },
+  async clearScene() {
+    storageEnv.localStorage?.removeItem(STORAGE_KEY_SCENE);
+  },
+  async loadProviderSecret() {
+    return storageEnv.localStorage?.getItem(STORAGE_KEY_PROVIDER_SECRET) ?? "";
+  },
+  async saveProviderSecret(secret) {
+    if (secret) {
+      storageEnv.localStorage?.setItem(STORAGE_KEY_PROVIDER_SECRET, secret);
+    } else {
+      storageEnv.localStorage?.removeItem(STORAGE_KEY_PROVIDER_SECRET);
+    }
+  },
+  async exportBackup(bundle) {
+    storageEnv.localStorage?.setItem(STORAGE_KEY_BACKUP_BUNDLE, JSON.stringify(bundle));
+  },
+  async importBackup() {
+    const raw = storageEnv.localStorage?.getItem(STORAGE_KEY_BACKUP_BUNDLE) ?? null;
+    return raw ? JSON.parse(raw) : null;
+  },
+});
+
+const createIndexedDbStorageAdapter = (storageEnv = globalThis) => ({
+  mode: "indexedDB",
+  async loadState() {
+    return readIndexedDbRecord(storageEnv, STORAGE_KEY_STATE);
+  },
+  async saveState(state) {
+    await writeIndexedDbRecord(storageEnv, STORAGE_KEY_STATE, state);
+  },
+  async loadScene() {
+    return readIndexedDbRecord(storageEnv, STORAGE_KEY_SCENE);
+  },
+  async saveScene(scene) {
+    await writeIndexedDbRecord(storageEnv, STORAGE_KEY_SCENE, scene);
+  },
+  async clearScene() {
+    await deleteIndexedDbRecord(storageEnv, STORAGE_KEY_SCENE);
+  },
+  async loadProviderSecret() {
+    return (await readIndexedDbRecord(storageEnv, STORAGE_KEY_PROVIDER_SECRET)) ?? "";
+  },
+  async saveProviderSecret(secret) {
+    if (secret) {
+      await writeIndexedDbRecord(storageEnv, STORAGE_KEY_PROVIDER_SECRET, secret);
+    } else {
+      await deleteIndexedDbRecord(storageEnv, STORAGE_KEY_PROVIDER_SECRET);
+    }
+  },
+  async exportBackup(bundle) {
+    await writeIndexedDbRecord(storageEnv, STORAGE_KEY_BACKUP_BUNDLE, bundle);
+  },
+  async importBackup() {
+    return readIndexedDbRecord(storageEnv, STORAGE_KEY_BACKUP_BUNDLE);
+  },
+});
+
+const createBrowserStorageAdapter = (storageEnv = globalThis) => {
+  const indexedDbAvailable = Boolean(storageEnv?.indexedDB?.open);
+  const primaryAdapter = indexedDbAvailable ? createIndexedDbStorageAdapter(storageEnv) : createLocalStorageAdapter(storageEnv);
+  const fallbackAdapter = createLocalStorageAdapter(storageEnv);
+
+  const withFallback = async (operationName, operation) => {
+    try {
+      return await operation(primaryAdapter);
+    } catch {
+      return operation(fallbackAdapter);
+    }
+  };
+
+  return {
+    mode: primaryAdapter.mode,
+    async loadState() {
+      return withFallback("loadState", (adapter) => adapter.loadState());
+    },
+    async saveState(state) {
+      return withFallback("saveState", (adapter) => adapter.saveState(state));
+    },
+    async loadScene() {
+      return withFallback("loadScene", (adapter) => adapter.loadScene());
+    },
+    async saveScene(scene) {
+      return withFallback("saveScene", (adapter) => adapter.saveScene(scene));
+    },
+    async clearScene() {
+      return withFallback("clearScene", (adapter) => adapter.clearScene());
+    },
+    async loadProviderSecret() {
+      return withFallback("loadProviderSecret", (adapter) => adapter.loadProviderSecret());
+    },
+    async saveProviderSecret(secret) {
+      return withFallback("saveProviderSecret", (adapter) => adapter.saveProviderSecret(secret));
+    },
+    async exportBackup(bundle) {
+      return withFallback("exportBackup", (adapter) => adapter.exportBackup(bundle));
+    },
+    async importBackup() {
+      return withFallback("importBackup", (adapter) => adapter.importBackup());
+    },
+  };
+};
 
 const normalizeSceneForRuntime = (scene, runtimeState) => {
   if (!scene) {
@@ -324,24 +532,29 @@ const decryptBackupPayload = async (encodedText, passphrase) => {
 };
 
 const createExportBundle = ({ state, scene, encrypted = false, exportedAt = new Date().toISOString() }) => ({
-  manifest: {
-    manifestType: "primer-export-manifest",
-    formatVersion: EXPORT_FORMAT_VERSION,
-    schemaVersion: state?.schemaVersion ?? 3,
-    moduleId: state?.moduleSelection?.selectedModuleId ?? "algebra-foundations",
-    exportedAt,
-    encryption: encrypted ? ENCRYPTION_AES_GCM : "none",
-    assetManifestVersion: state?.assetIndex?.manifestVersion ?? ASSET_MANIFEST_VERSION,
-    telemetryConsent: state?.consentAndSettings?.telemetryEnabled ? "opt-in" : "off",
-    selectedProvider: state?.providerConfig?.providerName ?? "",
-  },
-  state,
+  manifest: createExportManifestCore(state, encrypted ? ENCRYPTION_AES_GCM : "none", exportedAt),
+  state: sanitizeStateForPersistence(state),
   scene,
 });
 
 const parseImportBundle = (rawBundle) => {
+  if (!rawBundle || typeof rawBundle !== "object") {
+    throw new Error("Import bundle must be an object.");
+  }
+
   if (rawBundle?.manifest?.manifestType === "primer-export-manifest") {
+    const manifestValidation = validateExportManifestCore(rawBundle.manifest);
+    if (!manifestValidation.ok) {
+      throw new Error(`Import manifest is invalid: ${manifestValidation.errors.join(" ")}`);
+    }
+    if (!rawBundle.state || typeof rawBundle.state !== "object") {
+      throw new Error("Import bundle state is required.");
+    }
     return rawBundle;
+  }
+
+  if (!rawBundle?.state && rawBundle?.schemaVersion === undefined) {
+    throw new Error("Import bundle is missing learner state.");
   }
 
   return createExportBundle({
@@ -937,6 +1150,7 @@ export {
   nextCurriculumDecision,
   normalizeSceneForRuntime,
   parseImportBundle,
+  mergeProviderSecretIntoState,
   queueImageGeneration,
   recoverSceneForRuntime,
   requestDirectorScene,
@@ -945,6 +1159,8 @@ export {
   scoreTrace,
   setActiveScene,
   setAdminPin,
+  sanitizeStateForPersistence,
+  createBrowserStorageAdapter,
   unlockAdmin,
   updateAssetAccess,
   updateConsentSettings,

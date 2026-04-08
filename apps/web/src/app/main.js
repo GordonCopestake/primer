@@ -6,6 +6,7 @@ import {
   appendRecentTurn,
   applyMasteryEvidence,
   clearAdminPin,
+  createBrowserStorageAdapter,
   createExportBundle,
   createDefaultState,
   createFallbackScene,
@@ -35,6 +36,7 @@ import {
   scoreTrace,
   setAdminPin,
   setActiveScene,
+  sanitizeStateForPersistence,
   validateMathInputResponse,
   unlockAdmin,
   updateAssetAccess,
@@ -42,6 +44,7 @@ import {
   updateConsentSettings,
   validateShortTextResponse,
   verifyAdminPin,
+  mergeProviderSecretIntoState,
 } from "./runtime.js";
 
 const sceneRoot = document.querySelector("#scene-root");
@@ -87,10 +90,8 @@ const exportButton = document.querySelector("#export-button");
 const importButton = document.querySelector("#import-button");
 const importInput = document.querySelector("#import-input");
 
-const STORAGE_KEY = "primer.state.v1";
-const SCENE_KEY = "primer.scene.v1";
-
 const capabilitySnapshot = detectCapabilities(globalThis);
+const storageAdapter = createBrowserStorageAdapter(globalThis);
 const recognitionCtor = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
 let recognition = null;
 let currentDecision = null;
@@ -329,63 +330,56 @@ const updateProviderConfig = (updates) => {
   });
 };
 
-const readStorage = (key) => {
+const hydrateState = async () => {
   try {
-    return globalThis.localStorage?.getItem(key) ?? null;
+    const rawState = await storageAdapter.loadState();
+    const providerSecret = (await storageAdapter.loadProviderSecret()) || rawState?.providerConfig?.apiKey || "";
+    const migrated = migrateState(rawState);
+    return createDefaultState({
+      ...mergeProviderSecretIntoState(migrated, providerSecret),
+      capabilities: capabilitySnapshot,
+    });
+  } catch {
+    return createDefaultState({
+      capabilities: capabilitySnapshot,
+    });
+  }
+};
+
+const hydrateScene = async () => {
+  try {
+    return (await storageAdapter.loadScene()) ?? null;
   } catch {
     return null;
   }
 };
 
-const writeStorage = (key, value) => {
+let state = hydrateAssetIndex(
+  createDefaultState({
+    capabilities: capabilitySnapshot,
+  }),
+);
+
+const persistState = async () => {
   try {
-    globalThis.localStorage?.setItem(key, value);
+    await storageAdapter.saveProviderSecret(state.providerConfig?.apiKey ?? "");
+    await storageAdapter.saveState(sanitizeStateForPersistence(state));
   } catch (error) {
     console.error("Storage write failed", error);
     setStatus("Storage is unavailable. Progress will only last this session.");
   }
 };
 
-const removeStorage = (key) => {
+const persistScene = async (scene) => {
   try {
-    globalThis.localStorage?.removeItem(key);
-  } catch {
-    // Ignore storage removal failures and continue locally.
+    if (scene) {
+      await storageAdapter.saveScene(scene);
+    } else {
+      await storageAdapter.clearScene();
+    }
+  } catch (error) {
+    console.error("Scene storage failed", error);
   }
-};
-
-const hydrateState = () => {
-  const raw = readStorage(STORAGE_KEY);
-  let parsed = null;
-  try {
-    parsed = raw ? JSON.parse(raw) : null;
-  } catch {
-    parsed = null;
-  }
-  const migrated = migrateState(parsed);
-  return createDefaultState({
-    ...migrated,
-    capabilities: capabilitySnapshot,
-  });
-};
-
-const hydrateScene = () => {
-  const raw = readStorage(SCENE_KEY);
-  try {
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-};
-
-let state = hydrateAssetIndex(hydrateState());
-
-const persistState = () => {
-  writeStorage(STORAGE_KEY, JSON.stringify(state));
-};
-
-const persistScene = (scene) => {
-  writeStorage(SCENE_KEY, JSON.stringify(scene));
 };
 
 const selectModule = (moduleId) => {
@@ -483,7 +477,7 @@ const renderProviderConfigurationView = () => {
 
 const renderLandingSetupView = () => {
   activeView = "setup";
-  const providerConfigured = Boolean(state.providerConfig?.apiKey);
+  const providerConfigured = Boolean(state.providerConfig?.apiKey || state.providerConfig?.hasStoredApiKey);
   const moduleSelected = Boolean(state.moduleSelection?.selectedAt);
   sceneRoot.innerHTML = `
     <div class="scene-body">
@@ -1580,7 +1574,7 @@ const exportBackup = async () => {
       lastExportedAt: exportedAt,
     },
   });
-  persistState();
+  await persistState();
   updateSettingsForm();
   const bundle = createExportBundle({
     state,
@@ -1601,6 +1595,8 @@ const exportBackup = async () => {
     data = await encryptBackupPayload(payload, passphrase);
     filename = "primer-backup.encrypted.json";
   }
+
+  await storageAdapter.exportBackup(bundle);
 
   const blob = new Blob([data], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -1624,9 +1620,10 @@ const importBackup = async (file) => {
   const parsed = parseImportBundle(JSON.parse(text));
   const importedAt = new Date().toISOString();
   const migratedImportState = migrateState(parsed.state);
+  const preservedApiKey = state.providerConfig?.apiKey ?? "";
   state = hydrateAssetIndex(
     createDefaultState({
-      ...migratedImportState,
+      ...mergeProviderSecretIntoState(migratedImportState, preservedApiKey),
       capabilities: capabilitySnapshot,
       exportMetadata: {
         ...migratedImportState.exportMetadata,
@@ -1635,13 +1632,13 @@ const importBackup = async (file) => {
     }),
   );
   currentScene = parsed.scene ?? null;
-  persistState();
+  await persistState();
   if (currentScene) {
-    persistScene(currentScene);
+    await persistScene(currentScene);
     renderScene(currentScene);
   } else {
-    removeStorage(SCENE_KEY);
-    renderCurrentDecisionScene();
+    await persistScene(null);
+    await renderCurrentDecisionScene();
   }
   updateSettingsForm();
   setStatus("Backup restored locally.");
@@ -1853,7 +1850,7 @@ resetButton?.addEventListener("click", () => {
   state = lockAdmin(resetLearnerState(state));
   currentScene = null;
   persistState();
-  removeStorage(SCENE_KEY);
+  void persistScene(null);
   updateSettingsForm();
   setStatus("Local learner progress reset.");
   renderCurrentDecisionScene().catch((error) => {
@@ -2009,13 +2006,12 @@ if (globalThis.matchMedia) {
   reducedMotionQuery.addEventListener?.("change", syncReducedMotionPreference);
 }
 
+state = hydrateAssetIndex(await hydrateState());
 syncStorageStatus().catch((error) => {
   console.error("Storage check failed", error);
 });
-
 setOrbState(state.consentAndSettings.soundEnabled ? "idle" : "muted");
-
-const restoredScene = hydrateScene();
+const restoredScene = await hydrateScene();
 if (!state.moduleSelection?.selectedAt) {
   setStatus("Complete setup to begin.");
   renderLandingSetupView();

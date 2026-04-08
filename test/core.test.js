@@ -46,7 +46,7 @@ test("migrateState converts legacy prototype state into the algebra MVP shape", 
     },
   });
 
-  assert.equal(migrated.schemaVersion, 3);
+  assert.equal(migrated.schemaVersion, 4);
   assert.equal(migrated.learnerProfile.locale, "en-US");
   assert.equal(migrated.moduleSelection.selectedModuleId, "algebra-foundations");
   assert.equal(migrated.moduleSelection.moduleMetadataById["algebra-foundations"].title, "Algebra Foundations");
@@ -76,7 +76,7 @@ test("migrateState upgrades schema v2 state into the richer learner model", () =
     },
   });
 
-  assert.equal(migrated.schemaVersion, 3);
+  assert.equal(migrated.schemaVersion, 4);
   assert.equal(migrated.moduleSelection.moduleMetadataById["algebra-foundations"].focus, "linear equations");
   assert.deepEqual(migrated.pedagogicalState.assessmentAttempts, []);
   assert.equal(migrated.runtimeSession.recentInteractionMemory[0].conceptId, "one-step-addition-equations");
@@ -108,7 +108,7 @@ test("new learner starts in the algebra diagnostic", () => {
   const state = createDefaultState();
   const decision = nextCurriculumDecision(state);
 
-  assert.equal(state.schemaVersion, 3);
+  assert.equal(state.schemaVersion, 4);
   assert.equal(state.moduleSelection.selectedModuleId, "algebra-foundations");
   assert.equal(state.moduleSelection.moduleMetadataById["algebra-foundations"].subject, "mathematics");
   assert.equal(decision.phase, "diagnostic");
