@@ -61,6 +61,7 @@ const saveProviderButton = document.querySelector("#save-provider-button");
 const cloudImageEnabledInput = document.querySelector("#cloud-image-enabled");
 const cloudVisionEnabledInput = document.querySelector("#cloud-vision-enabled");
 const encryptedExportEnabledInput = document.querySelector("#encrypted-export-enabled");
+const telemetryEnabledInput = document.querySelector("#telemetry-enabled");
 const adminPinEnabledInput = document.querySelector("#admin-pin-enabled");
 const adminPinInput = document.querySelector("#admin-pin-input");
 const savePinButton = document.querySelector("#save-pin-button");
@@ -469,15 +470,6 @@ const deriveConceptStatuses = () => {
   const recommendedConceptId =
     state.pedagogicalState.recommendedConceptId ??
     state.pedagogicalState.currentConceptId ??
-    ALGEBRA_CONCEPT_GRAPH[Math.max(
-      0,
-      Math.min(
-        ALGEBRA_CONCEPT_GRAPH.length - 1,
-        (state.pedagogicalState.domainStage?.reading ?? 0) +
-          (state.pedagogicalState.domainStage?.writing ?? 0) +
-          (state.pedagogicalState.domainStage?.numeracy ?? 0),
-      ),
-    )]?.id ??
     ALGEBRA_CONCEPT_GRAPH[0]?.id;
 
   return ALGEBRA_CONCEPT_GRAPH.map((concept, index) => {
@@ -492,10 +484,7 @@ const deriveConceptStatuses = () => {
 
     const prereqsMet = hasConceptMastery
       ? concept.prerequisites.every((prereq) => (masteryByConcept[prereq]?.score ?? 0) >= 1)
-      : index <=
-        (state.pedagogicalState.domainStage?.reading ?? 0) +
-          (state.pedagogicalState.domainStage?.writing ?? 0) +
-          (state.pedagogicalState.domainStage?.numeracy ?? 0);
+      : index === 0;
 
     return {
       ...concept,
@@ -890,6 +879,12 @@ const renderScene = (scene) => {
         role: "user",
         content: `read-respond-skip:${safeScene.scene.objectiveId}`,
       });
+      if (!isDiagnosticComplete()) {
+        state = advanceAssessment(state, {
+          recommendedConceptId: state.pedagogicalState.recommendedConceptId ?? currentDecision.conceptId,
+        });
+        setStatus("Skipped. Primer will continue the diagnostic.");
+      }
       persistState();
       await renderCurrentDecisionScene();
     });
@@ -938,6 +933,12 @@ const renderScene = (scene) => {
         role: "user",
         content: `math-input-skip:${safeScene.scene.objectiveId}`,
       });
+      if (!isDiagnosticComplete()) {
+        state = advanceAssessment(state, {
+          recommendedConceptId: state.pedagogicalState.recommendedConceptId ?? currentDecision.conceptId,
+        });
+        setStatus("Skipped. Primer will continue the diagnostic.");
+      }
       persistState();
       await renderCurrentDecisionScene();
     });
@@ -981,7 +982,7 @@ const renderCurrentDecisionScene = async () => {
   const localScene = createSceneFromDecision(decision);
   const hasProviderKey = typeof state.providerConfig?.apiKey === "string" && state.providerConfig.apiKey.length > 0;
 
-  if (state.consentAndSettings.cloudEnabled && decision.cloudEscalationAllowed && hasProviderKey) {
+  if (state.consentAndSettings.cloudEnabled && hasProviderKey) {
     setLoading("Checking scene");
     const relayResult = await requestDirectorScene({
       state,
@@ -1021,6 +1022,7 @@ const updateSettingsForm = () => {
   cloudImageEnabledInput.checked = state.consentAndSettings.cloudImageEnabled;
   cloudVisionEnabledInput.checked = state.consentAndSettings.cloudVisionEnabled;
   encryptedExportEnabledInput.checked = APP_CONFIG.features.encryptedExport;
+  telemetryEnabledInput.checked = state.consentAndSettings.telemetryEnabled;
   adminPinEnabledInput.checked = state.consentAndSettings.adminPinEnabled;
   adminPinInput.value = "";
   const quota = state.assetIndex.quotaEstimate?.quota ?? null;
@@ -1226,6 +1228,13 @@ cloudVisionEnabledInput?.addEventListener("change", () => {
   state = updateConsentSettings(state, { cloudVisionEnabled: cloudVisionEnabledInput.checked });
   persistState();
   updateSettingsForm();
+});
+
+telemetryEnabledInput?.addEventListener("change", () => {
+  state = updateConsentSettings(state, { telemetryEnabled: telemetryEnabledInput.checked });
+  persistState();
+  updateSettingsForm();
+  setStatus(telemetryEnabledInput.checked ? "Telemetry opt-in enabled." : "Telemetry opt-in disabled.");
 });
 
 adminPinEnabledInput?.addEventListener("change", () => {

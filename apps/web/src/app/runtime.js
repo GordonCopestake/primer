@@ -499,7 +499,6 @@ const buildDirectorRequest = (state, decision, latestInput) => ({
     moduleId: decision.moduleId,
     conceptId: decision.conceptId,
     phase: decision.phase,
-    literacyStage: decision.literacyStage ?? 0,
     objectiveId: decision.objectiveId,
     allowedSceneKinds: decision.allowedSceneKinds,
     allowedInteractionTypes: decision.allowedInteractionTypes,
