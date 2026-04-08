@@ -320,7 +320,7 @@ const createExportBundle = ({ state, scene, encrypted = false, exportedAt = new 
   manifest: {
     manifestType: "primer-export-manifest",
     formatVersion: EXPORT_FORMAT_VERSION,
-    schemaVersion: state?.schemaVersion ?? 2,
+    schemaVersion: state?.schemaVersion ?? 3,
     moduleId: state?.moduleSelection?.selectedModuleId ?? "algebra-foundations",
     exportedAt,
     encryption: encrypted ? ENCRYPTION_AES_GCM : "none",

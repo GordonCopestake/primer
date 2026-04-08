@@ -6,6 +6,7 @@ import {
   getLessonForConcept,
   getRecommendedConceptId,
 } from "./algebraModule.js";
+import { createAssessmentAttemptRecord, createEvidenceRecord } from "../../schemas/src/index.js";
 import { createDefaultState } from "./state.js";
 
 const DIAGNOSTIC_SCENE_KINDS = ["assessment", "fallback"];
@@ -148,6 +149,14 @@ const getDueReviewConceptId = (state) => {
   return (state.pedagogicalState.reviewSchedule ?? []).find((entry) => Date.parse(entry.reviewDueAt ?? "") <= now)?.conceptId ?? null;
 };
 
+const getRelatedInteractionIds = (state, conceptId) => {
+  const matchingEntries = (state.runtimeSession.recentInteractionMemory ?? []).filter(
+    (entry) => (conceptId ? entry.conceptId === conceptId : true),
+  );
+  const pool = matchingEntries.length > 0 ? matchingEntries : state.runtimeSession.recentInteractionMemory ?? [];
+  return pool.slice(-2).map((entry) => entry.interactionId).filter(Boolean);
+};
+
 const buildAttemptRecord = ({ conceptId, objectiveId, correct, input, inputType, phase }) => ({
   attemptId: `${objectiveId}:${Date.now()}`,
   conceptId,
@@ -285,6 +294,34 @@ export const advanceAssessment = (state, result = {}) => {
         },
       }
     : state.pedagogicalState.assessmentItems;
+  const assessmentAttempt =
+    currentItem
+      ? createAssessmentAttemptRecord({
+          attemptId: `${currentItem.id}:${Date.now()}`,
+          objectiveId: currentItem.id,
+          conceptId: currentItem.conceptId,
+          inputType: currentItem.inputType,
+          learnerResponse: result.learnerResponse ?? null,
+          result: typeof correct === "boolean" ? (correct ? "correct" : "needs-review") : "skipped",
+          misconceptionTag,
+          source: "diagnostic",
+          relatedInteractionIds: getRelatedInteractionIds(state, currentItem.conceptId),
+          recordedAt: new Date().toISOString(),
+        })
+      : null;
+  const diagnosticEvidence =
+    currentItem
+      ? createEvidenceRecord({
+          evidenceId: `diagnostic:${currentItem.id}:${Date.now()}`,
+          conceptId: currentItem.conceptId,
+          objectiveId: currentItem.id,
+          source: "diagnostic",
+          delta: correct === true ? 1 : correct === false ? -1 : 0,
+          misconceptionTags: misconceptionTag ? [misconceptionTag] : [],
+          relatedInteractionIds: getRelatedInteractionIds(state, currentItem.conceptId),
+          recordedAt: new Date().toISOString(),
+        })
+      : null;
 
   if (nextStep >= ALGEBRA_DIAGNOSTIC_ITEMS.length) {
     return recordAssessmentCompletion(
@@ -293,6 +330,12 @@ export const advanceAssessment = (state, result = {}) => {
         pedagogicalState: {
           ...state.pedagogicalState,
           assessmentItems: recordedAssessmentItems,
+          assessmentAttempts: assessmentAttempt
+            ? [...(state.pedagogicalState.assessmentAttempts ?? []), assessmentAttempt].slice(-40)
+            : state.pedagogicalState.assessmentAttempts,
+          evidenceLog: diagnosticEvidence
+            ? [...(state.pedagogicalState.evidenceLog ?? []), diagnosticEvidence].slice(-40)
+            : state.pedagogicalState.evidenceLog,
         },
       }),
       summarizeDiagnosticOutcome(recordedAssessmentItems),
@@ -313,6 +356,12 @@ export const advanceAssessment = (state, result = {}) => {
       currentObjectiveId: getDiagnosticItem(nextStep).id,
       recommendedConceptId,
       assessmentItems: recordedAssessmentItems,
+      assessmentAttempts: assessmentAttempt
+        ? [...(state.pedagogicalState.assessmentAttempts ?? []), assessmentAttempt].slice(-40)
+        : state.pedagogicalState.assessmentAttempts,
+      evidenceLog: diagnosticEvidence
+        ? [...(state.pedagogicalState.evidenceLog ?? []), diagnosticEvidence].slice(-40)
+        : state.pedagogicalState.evidenceLog,
       misconceptionsByConcept:
         misconceptionTag && currentItem?.conceptId
           ? {
@@ -409,26 +458,31 @@ export const applyMasteryEvidence = (state, conceptId, delta = 1) => {
           ...(state.pedagogicalState.attemptLog ?? []),
           {
             ...buildAttemptRecord({
-            conceptId,
-            objectiveId: state.pedagogicalState.currentObjectiveId ?? `concept.${conceptId}`,
+              conceptId,
+              objectiveId: state.pedagogicalState.currentObjectiveId ?? `concept.${conceptId}`,
             correct,
             input: delta,
             inputType: "engine-evidence",
-            phase: "tutoring",
+              phase: "tutoring",
             }),
+            relatedInteractionIds: getRelatedInteractionIds(state, conceptId),
             supportReason,
           },
         ].slice(-50),
         evidenceLog: [
           ...state.pedagogicalState.evidenceLog,
-          {
+          createEvidenceRecord({
+            evidenceId: `tutoring:${conceptId}:${Date.now()}`,
             conceptId,
+            objectiveId: state.pedagogicalState.currentObjectiveId ?? `concept.${conceptId}`,
+            lessonId,
             delta,
             misconceptionTags,
             recordedAt: now,
             source: "tutoring-loop",
+            relatedInteractionIds: getRelatedInteractionIds(state, conceptId),
             supportReason,
-          },
+          }),
         ].slice(-40),
       },
     }),

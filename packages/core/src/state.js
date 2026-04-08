@@ -1,11 +1,70 @@
-import { SCHEMA_VERSION, createStateShape } from "../../schemas/src/index.js";
-import { getInitialConceptId } from "./algebraModule.js";
+import {
+  SCHEMA_VERSION,
+  createModuleMetadata,
+  createRecentInteractionMemoryEntry,
+  createStateShape,
+} from "../../schemas/src/index.js";
+import { ALGEBRA_FOUNDATIONS_MODULE, getInitialConceptId } from "./algebraModule.js";
+
+const createDefaultModuleMetadataById = () => ({
+  [ALGEBRA_FOUNDATIONS_MODULE.id]: createModuleMetadata({
+    moduleId: ALGEBRA_FOUNDATIONS_MODULE.id,
+    title: ALGEBRA_FOUNDATIONS_MODULE.title,
+    subject: ALGEBRA_FOUNDATIONS_MODULE.subject,
+    focus: ALGEBRA_FOUNDATIONS_MODULE.focus,
+    description: ALGEBRA_FOUNDATIONS_MODULE.description,
+  }),
+});
+
+const normalizeModuleSelection = (moduleSelection = {}) => ({
+  selectedModuleId: ALGEBRA_FOUNDATIONS_MODULE.id,
+  availableModuleIds: [ALGEBRA_FOUNDATIONS_MODULE.id],
+  moduleMetadataById: {
+    ...createDefaultModuleMetadataById(),
+    ...(moduleSelection.moduleMetadataById ?? {}),
+  },
+  selectedAt: null,
+  ...moduleSelection,
+});
+
+const normalizeRecentInteractionMemory = (runtimeSession = {}, pedagogicalState = {}) => {
+  if (Array.isArray(runtimeSession.recentInteractionMemory) && runtimeSession.recentInteractionMemory.length > 0) {
+    return runtimeSession.recentInteractionMemory.slice(-12);
+  }
+
+  return (runtimeSession.recentTurns ?? []).slice(-8).map((turn, index) =>
+    createRecentInteractionMemoryEntry({
+      interactionId: `migrated-turn-${index}`,
+      role: turn?.role ?? "user",
+      content: turn?.content ?? "",
+      conceptId: pedagogicalState.currentConceptId ?? getInitialConceptId(),
+      objectiveId: pedagogicalState.currentObjectiveId ?? "diagnostic.variables",
+      recordedAt: null,
+    }),
+  );
+};
+
+const normalizeState = (rawState = {}) =>
+  createDefaultState({
+    ...rawState,
+    schemaVersion: SCHEMA_VERSION,
+    moduleSelection: normalizeModuleSelection(rawState.moduleSelection),
+    pedagogicalState: {
+      ...rawState.pedagogicalState,
+      assessmentAttempts: rawState.pedagogicalState?.assessmentAttempts ?? [],
+    },
+    runtimeSession: {
+      ...rawState.runtimeSession,
+      recentInteractionMemory: normalizeRecentInteractionMemory(rawState.runtimeSession, rawState.pedagogicalState ?? {}),
+    },
+  });
 
 export const createDefaultState = (overrides = {}) => {
   const initialConceptId = getInitialConceptId();
 
   return createStateShape({
     ...overrides,
+    moduleSelection: normalizeModuleSelection(overrides.moduleSelection),
     pedagogicalState: {
       currentConceptId: initialConceptId,
       recommendedConceptId: initialConceptId,
@@ -32,6 +91,7 @@ const migrateLegacyPedagogicalState = (rawState) => ({
   recentActivity: [],
   lessonRecords: {},
   assessmentItems: {},
+  assessmentAttempts: [],
   attemptLog: [],
   goals: [],
   milestones: createDefaultState().pedagogicalState.milestones,
@@ -43,22 +103,21 @@ export const migrateState = (rawState) => {
     return createDefaultState();
   }
 
-  if (!rawState.schemaVersion || rawState.schemaVersion < SCHEMA_VERSION) {
-    return createDefaultState({
+  if (!rawState.schemaVersion || rawState.schemaVersion < 2) {
+    const legacyPedagogicalState = migrateLegacyPedagogicalState(rawState);
+    return normalizeState({
       learnerProfile: {
         ...createDefaultState().learnerProfile,
         ...(rawState.learnerProfile ?? {}),
       },
-      moduleSelection: {
-        ...createDefaultState().moduleSelection,
-        ...(rawState.moduleSelection ?? {}),
-      },
+      moduleSelection: normalizeModuleSelection(rawState.moduleSelection),
       pedagogicalState: {
-        ...migrateLegacyPedagogicalState(rawState),
+        ...legacyPedagogicalState,
       },
       runtimeSession: {
         ...createDefaultState().runtimeSession,
         recentTurns: rawState.runtimeSession?.recentTurns ?? [],
+        recentInteractionMemory: normalizeRecentInteractionMemory(rawState.runtimeSession ?? {}, legacyPedagogicalState),
         runningSummary: rawState.runtimeSession?.runningSummary ?? null,
       },
       consentAndSettings: {
@@ -84,16 +143,25 @@ export const migrateState = (rawState) => {
     });
   }
 
-  return createDefaultState(rawState);
+  return normalizeState(rawState);
 };
 
 export const appendRecentTurn = (state, turn) => {
   const recentTurns = [...state.runtimeSession.recentTurns, turn].slice(-8);
+  const interactionEntry = createRecentInteractionMemoryEntry({
+    interactionId: `turn-${Date.now()}`,
+    role: turn?.role ?? "user",
+    content: turn?.content ?? "",
+    conceptId: state.pedagogicalState.currentConceptId ?? getInitialConceptId(),
+    objectiveId: state.pedagogicalState.currentObjectiveId ?? "diagnostic.variables",
+    recordedAt: new Date().toISOString(),
+  });
   return createDefaultState({
     ...state,
     runtimeSession: {
       ...state.runtimeSession,
       recentTurns,
+      recentInteractionMemory: [...(state.runtimeSession.recentInteractionMemory ?? []), interactionEntry].slice(-12),
     },
   });
 };

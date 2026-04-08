@@ -13,6 +13,7 @@ import {
   advanceAssessment,
   advanceTutoringSession,
   applyMasteryEvidence,
+  appendRecentTurn,
   createExportManifest,
   createDefaultState,
   createFallbackScene,
@@ -44,13 +45,40 @@ test("migrateState converts legacy prototype state into the algebra MVP shape", 
     },
   });
 
-  assert.equal(migrated.schemaVersion, 2);
+  assert.equal(migrated.schemaVersion, 3);
   assert.equal(migrated.learnerProfile.locale, "en-US");
   assert.equal(migrated.moduleSelection.selectedModuleId, "algebra-foundations");
+  assert.equal(migrated.moduleSelection.moduleMetadataById["algebra-foundations"].title, "Algebra Foundations");
   assert.equal(migrated.pedagogicalState.diagnosticStatus, "not-started");
   assert.equal(migrated.pedagogicalState.currentObjectiveId, "diagnostic.variables");
+  assert.deepEqual(migrated.pedagogicalState.assessmentAttempts, []);
   assert.equal(migrated.runtimeSession.recentTurns.length, 1);
+  assert.equal(migrated.runtimeSession.recentInteractionMemory.length, 1);
   assert.equal(migrated.consentAndSettings.soundEnabled, false);
+});
+
+test("migrateState upgrades schema v2 state into the richer learner model", () => {
+  const migrated = migrateState({
+    schemaVersion: 2,
+    moduleSelection: {
+      selectedModuleId: "algebra-foundations",
+    },
+    pedagogicalState: {
+      diagnosticStatus: "complete",
+      currentConceptId: "one-step-addition-equations",
+      currentObjectiveId: "concept.one-step-addition-equations",
+      recommendedConceptId: "one-step-addition-equations",
+      assessmentItems: {},
+    },
+    runtimeSession: {
+      recentTurns: [{ role: "assistant", content: "Try undoing the +5 first." }],
+    },
+  });
+
+  assert.equal(migrated.schemaVersion, 3);
+  assert.equal(migrated.moduleSelection.moduleMetadataById["algebra-foundations"].focus, "linear equations");
+  assert.deepEqual(migrated.pedagogicalState.assessmentAttempts, []);
+  assert.equal(migrated.runtimeSession.recentInteractionMemory[0].conceptId, "one-step-addition-equations");
 });
 
 test("detectCapabilities classifies accelerated tier only with richer features", () => {
@@ -79,13 +107,27 @@ test("new learner starts in the algebra diagnostic", () => {
   const state = createDefaultState();
   const decision = nextCurriculumDecision(state);
 
-  assert.equal(state.schemaVersion, 2);
+  assert.equal(state.schemaVersion, 3);
   assert.equal(state.moduleSelection.selectedModuleId, "algebra-foundations");
+  assert.equal(state.moduleSelection.moduleMetadataById["algebra-foundations"].subject, "mathematics");
   assert.equal(decision.phase, "diagnostic");
   assert.equal(decision.moduleId, ALGEBRA_FOUNDATIONS_MODULE.id);
   assert.equal(decision.objectiveId, "diagnostic.variables");
   assert.equal(state.pedagogicalState.currentObjectiveId, "diagnostic.variables");
   assert.equal(state.pedagogicalState.milestones.length >= 2, true);
+});
+
+test("diagnostic progress records assessment attempts and linked evidence", () => {
+  let state = createDefaultState();
+  state = appendRecentTurn(state, { role: "user", content: "I think the variable is the missing number." });
+  state = advanceAssessment(state, { correct: true, learnerResponse: "missing number" });
+
+  assert.equal(state.pedagogicalState.assessmentAttempts.length, 1);
+  assert.equal(state.pedagogicalState.assessmentAttempts[0].source, "diagnostic");
+  assert.equal(state.pedagogicalState.assessmentAttempts[0].conceptId, "variables-and-expressions");
+  assert.equal(state.pedagogicalState.evidenceLog.at(-1).source, "diagnostic");
+  assert.equal(state.pedagogicalState.evidenceLog.at(-1).objectiveId, "diagnostic.variables");
+  assert.equal(state.pedagogicalState.evidenceLog.at(-1).relatedInteractionIds.length > 0, true);
 });
 
 test("assessment advances through staged diagnostic checkpoints", () => {
@@ -402,17 +444,13 @@ test("invalid scene output is replaced by the safe fallback scene", () => {
 test("recent turns are bounded", () => {
   let state = createDefaultState();
   for (let index = 0; index < 10; index += 1) {
-    state = {
-      ...state,
-      runtimeSession: {
-        ...state.runtimeSession,
-        recentTurns: [...state.runtimeSession.recentTurns, { role: "user", content: `turn-${index}` }].slice(-8),
-      },
-    };
+    state = appendRecentTurn(state, { role: "user", content: `turn-${index}` });
   }
 
   assert.equal(state.runtimeSession.recentTurns.length, 8);
   assert.equal(state.runtimeSession.recentTurns[0].content, "turn-2");
+  assert.equal(state.runtimeSession.recentInteractionMemory.length, 10);
+  assert.equal(state.runtimeSession.recentInteractionMemory.at(-1).conceptId, "variables-and-expressions");
 });
 
 test("active scene syncs the pedagogical current objective", () => {

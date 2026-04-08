@@ -1,4 +1,14 @@
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
+
+export const createModuleMetadata = (overrides = {}) => ({
+  moduleId: "algebra-foundations",
+  title: "Algebra Foundations",
+  subject: "mathematics",
+  focus: "linear equations",
+  description: "A bounded algebra module covering variables, expressions, and linear equations.",
+  versionTag: "algebra-foundations-v1",
+  ...overrides,
+});
 
 export const createMasteryRecord = (overrides = {}) => ({
   score: 0,
@@ -7,6 +17,44 @@ export const createMasteryRecord = (overrides = {}) => ({
   lastPracticedAt: null,
   reviewDueAt: null,
   supportReason: null,
+  ...overrides,
+});
+
+export const createAssessmentAttemptRecord = (overrides = {}) => ({
+  attemptId: null,
+  objectiveId: null,
+  conceptId: null,
+  inputType: "unknown",
+  learnerResponse: null,
+  result: "pending",
+  misconceptionTag: null,
+  source: "diagnostic",
+  relatedInteractionIds: [],
+  recordedAt: null,
+  ...overrides,
+});
+
+export const createEvidenceRecord = (overrides = {}) => ({
+  evidenceId: null,
+  conceptId: null,
+  objectiveId: null,
+  lessonId: null,
+  source: "unknown",
+  delta: 0,
+  misconceptionTags: [],
+  supportReason: null,
+  relatedInteractionIds: [],
+  recordedAt: null,
+  ...overrides,
+});
+
+export const createRecentInteractionMemoryEntry = (overrides = {}) => ({
+  interactionId: null,
+  role: "user",
+  content: "",
+  conceptId: null,
+  objectiveId: null,
+  recordedAt: null,
   ...overrides,
 });
 
@@ -23,6 +71,9 @@ export const createStateShape = (overrides = {}) => ({
   moduleSelection: {
     selectedModuleId: "algebra-foundations",
     availableModuleIds: ["algebra-foundations"],
+    moduleMetadataById: {
+      "algebra-foundations": createModuleMetadata(),
+    },
     selectedAt: null,
     ...overrides.moduleSelection,
   },
@@ -44,6 +95,7 @@ export const createStateShape = (overrides = {}) => ({
     recentActivity: [],
     lessonRecords: {},
     assessmentItems: {},
+    assessmentAttempts: [],
     attemptLog: [],
     goals: [],
     milestones: [
@@ -64,6 +116,7 @@ export const createStateShape = (overrides = {}) => ({
     activeSceneId: null,
     lastScene: null,
     recentTurns: [],
+    recentInteractionMemory: [],
     runningSummary: null,
     pendingAssetJobs: [],
     ...overrides.runtimeSession,

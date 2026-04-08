@@ -34,6 +34,25 @@ The pluggable MVP contracts are now formalized in code and documented here:
 
 These cover the subject-pack, provider/model/storage adapter, validation plugin, telemetry sink, export manifest, and fixed UI registry boundaries called for by the spec.
 
+## Learner State Rules
+
+Learner state is now versioned at schema v3 and keeps:
+
+- selected module plus persisted module metadata
+- diagnostic records, assessment attempts, and tutoring attempts
+- concept-linked evidence and bounded recent interaction memory
+- review schedule, goals, milestones, provider settings, telemetry consent, and export metadata
+
+Migration rule:
+
+- older saved states are migrated forward when possible
+- legacy prototype state is normalized into the algebra MVP learner model
+
+Reset rule:
+
+- a learner reset clears progress and active tutoring state
+- local admin settings, device capability info, and provider configuration are preserved
+
 ## How To Run It
 
 Install nothing for the current test-only setup. The repo uses Node's built-in test runner.
