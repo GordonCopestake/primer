@@ -8,9 +8,18 @@ export const createStableError = (code, message, details = null) => ({
   },
 });
 
-export const validateDirectorRequest = (request) => {
+const ALLOWED_BOUNDED_INPUT_TYPES = new Set([
+  "transcript",
+  "tap-choice",
+  "trace-result",
+  "system-start",
+  "math-input",
+  "short-answer",
+]);
+
+const validateBoundedTutorRequest = (request) => {
   const errors = [];
-  const allowedInputTypes = new Set(["transcript", "tap-choice", "trace-result", "system-start"]);
+
   if (!request?.requestId) {
     errors.push("requestId is required.");
   }
@@ -20,7 +29,7 @@ export const validateDirectorRequest = (request) => {
   if (!request?.latestInput?.type || typeof request?.latestInput?.content !== "string") {
     errors.push("latestInput is required.");
   }
-  if (request?.latestInput?.type && !allowedInputTypes.has(request.latestInput.type)) {
+  if (request?.latestInput?.type && !ALLOWED_BOUNDED_INPUT_TYPES.has(request.latestInput.type)) {
     errors.push("latestInput.type must be a supported bounded input type.");
   }
   if (!request?.hardConstraints?.activeDomain || !request?.hardConstraints?.objectiveId) {
@@ -32,10 +41,32 @@ export const validateDirectorRequest = (request) => {
   if (!Array.isArray(request?.hardConstraints?.allowedInteractionTypes)) {
     errors.push("allowedInteractionTypes are required.");
   }
+
   return {
     ok: errors.length === 0,
     errors,
   };
+};
+
+export const validateDirectorRequest = validateBoundedTutorRequest;
+
+export const validateTutorRequest = (request) => {
+  const validation = validateBoundedTutorRequest(request);
+  if (!validation.ok) {
+    return validation;
+  }
+
+  if (!request?.hardConstraints?.moduleId) {
+    validation.ok = false;
+    validation.errors.push("hardConstraints.moduleId is required.");
+  }
+
+  if (!request?.hardConstraints?.conceptId) {
+    validation.ok = false;
+    validation.errors.push("hardConstraints.conceptId is required.");
+  }
+
+  return validation;
 };
 
 export const validateDirectorResponse = (response, hardConstraints) => {
@@ -56,9 +87,10 @@ export const validateDirectorResponse = (response, hardConstraints) => {
   });
 };
 
+export const validateTutorResponse = validateDirectorResponse;
+
 export const validateChatRequest = (request) => {
   const errors = [];
-  const allowedInputTypes = new Set(["transcript", "tap-choice", "trace-result", "system-start"]);
 
   if (!request?.requestId) {
     errors.push("requestId is required.");
@@ -69,7 +101,7 @@ export const validateChatRequest = (request) => {
   if (!request?.latestInput?.type || typeof request?.latestInput?.content !== "string") {
     errors.push("latestInput is required.");
   }
-  if (request?.latestInput?.type && !allowedInputTypes.has(request.latestInput.type)) {
+  if (request?.latestInput?.type && !ALLOWED_BOUNDED_INPUT_TYPES.has(request.latestInput.type)) {
     errors.push("latestInput.type must be a supported bounded input type.");
   }
   if (typeof request?.maxResponseChars !== "number" || request.maxResponseChars < 40 || request.maxResponseChars > 320) {

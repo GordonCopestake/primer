@@ -111,3 +111,33 @@ test("chat route returns bounded mixed-age-safe guidance", async () => {
   assert.ok(result.body.reply.text.length <= 140);
   assert.equal(result.body.suggestedNextScene.objectiveId, "reading.symbol-match.1");
 });
+
+test("director route can return an algebra math-input scene", async () => {
+  const result = await handleDirectorRoute({
+    requestId: "director-algebra-1",
+    learnerSummary: "Locale en-GB. Algebra module selected.",
+    runtimeSummary: "recent turn",
+    latestInput: {
+      type: "system-start",
+      content: "startup",
+    },
+    hardConstraints: {
+      activeDomain: "mathematics",
+      moduleId: "algebra-foundations",
+      conceptId: "two-step-equations",
+      literacyStage: 0,
+      objectiveId: "concept.two-step-equations",
+      phase: "tutoring",
+      allowedSceneKinds: ["lesson", "fallback"],
+      allowedInteractionTypes: ["math-input", "none"],
+      maxNarrationChars: 180,
+      imageGenerationAllowed: false,
+      locale: "en-GB",
+    },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.blueprint.scene.objectiveId, "concept.two-step-equations");
+  assert.equal(result.body.blueprint.interaction.type, "math-input");
+  assert.match(result.body.blueprint.interaction.expressionPrompt, /2x \+ 3 = 11/);
+});

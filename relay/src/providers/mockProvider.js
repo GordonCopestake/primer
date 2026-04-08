@@ -20,12 +20,45 @@ const createRepeatInteraction = () => ({
   phoneme: "m",
 });
 
+const createMathInputInteraction = (objectiveId) => {
+  if (objectiveId.includes("two-step-equations")) {
+    return {
+      type: "math-input",
+      expressionPrompt: "Solve 2x + 3 = 11.",
+      expectedExpression: "4",
+    };
+  }
+
+  if (objectiveId.includes("one-step-addition-equations")) {
+    return {
+      type: "math-input",
+      expressionPrompt: "Solve x + 5 = 12.",
+      expectedExpression: "7",
+    };
+  }
+
+  if (objectiveId.includes("evaluate-expressions")) {
+    return {
+      type: "math-input",
+      expressionPrompt: "Evaluate 2x + 1 when x = 4.",
+      expectedExpression: "9",
+    };
+  }
+
+  return {
+    type: "math-input",
+    expressionPrompt: "Solve x + 2 = 9.",
+    expectedExpression: "7",
+  };
+};
+
 const createNoneInteraction = () => ({
   type: "none",
 });
 
 const chooseInteraction = (request) => {
   const allowed = request.hardConstraints.allowedInteractionTypes;
+  const objectiveId = request.hardConstraints.objectiveId ?? "";
 
   if (request.latestInput.type === "trace-result" && allowed.includes("trace-symbol")) {
     return createTraceInteraction();
@@ -33,6 +66,10 @@ const chooseInteraction = (request) => {
 
   if (request.latestInput.type === "transcript" && allowed.includes("repeat-sound")) {
     return createRepeatInteraction();
+  }
+
+  if (allowed.includes("math-input")) {
+    return createMathInputInteraction(objectiveId);
   }
 
   if (allowed.includes("tap-choice")) {
@@ -55,6 +92,7 @@ export const PINNED_PROVIDER = "local-mock-v1";
 export const proposeSceneBlueprint = (request) => {
   const kind = request.hardConstraints.allowedSceneKinds[0] ?? "fallback";
   const interaction = chooseInteraction(request);
+  const phase = request.hardConstraints.phase ?? "tutoring";
 
   return {
     blueprint: {
@@ -64,11 +102,13 @@ export const proposeSceneBlueprint = (request) => {
         kind,
         objectiveId: request.hardConstraints.objectiveId,
         transition: kind === "assessment" ? "fade" : "slide",
-        tone: request.latestInput.type === "transcript" ? "encouraging" : "curious",
+        tone: request.latestInput.type === "transcript" ? "encouraging" : phase === "diagnostic" ? "focused" : "curious",
       },
       narration: {
         text:
-          interaction.type === "trace-symbol"
+          interaction.type === "math-input"
+            ? "Solve the equation carefully, then enter your answer."
+            : interaction.type === "trace-symbol"
             ? "Trace the large symbol, then continue when it feels steady."
             : interaction.type === "repeat-sound"
               ? "Listen for the sound and repeat it, or use the tap path."
@@ -80,14 +120,19 @@ export const proposeSceneBlueprint = (request) => {
       interaction,
       visualIntent: {
         type: "recipe",
-        recipeId: interaction.type === "trace-symbol" ? "symbol_trace_board" : "neutral_choice_board",
+        recipeId:
+          interaction.type === "trace-symbol"
+            ? "symbol_trace_board"
+            : interaction.type === "math-input"
+              ? "neutral_choice_board"
+              : "neutral_choice_board",
         vars: {
           locale: request.hardConstraints.locale,
           provider: PINNED_PROVIDER,
         },
       },
       evidence: {
-        observedSkill: request.hardConstraints.activeDomain,
+        observedSkill: request.hardConstraints.conceptId ?? request.hardConstraints.activeDomain,
         confidenceHint: 0.68,
       },
     },
