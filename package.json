@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "relay": "node relay/src/server.js"
+    "relay": "node relay/src/server.js",
+    "serve:web": "python3 -m http.server 4173"
   }
 }

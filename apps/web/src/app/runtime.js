@@ -1,401 +1,48 @@
 import {
-  ALGEBRA_DIAGNOSTIC_ITEMS,
   ALGEBRA_FOUNDATIONS_MODULE,
-  getRecommendedConceptId,
-} from "../../../../packages/core/src/algebraModule.js";
+  APP_CONFIG,
+  advanceAssessment as advanceAssessmentCore,
+  appendRecentTurn as appendRecentTurnCore,
+  applyMasteryEvidence as applyMasteryEvidenceCore,
+  createDefaultState as createDefaultStateCore,
+  createFallbackScene as createFallbackSceneCore,
+  detectCapabilities as detectCapabilitiesCore,
+  interpretScene as interpretSceneCore,
+  migrateState as migrateStateCore,
+  nextCurriculumDecision as nextCurriculumDecisionCore,
+  setActiveScene as setActiveSceneCore,
+  updateConsentSettings as updateConsentSettingsCore,
+} from "../../../../packages/core/src/index.js";
+import {
+  createStableError as createStableErrorSchema,
+  validateDirectorRequest as validateDirectorRequestSchema,
+  validateDirectorResponse as validateDirectorResponseSchema,
+  validateSceneBlueprint,
+} from "../../../../packages/schemas/src/index.js";
 
-const env = typeof process === "undefined" ? {} : process.env;
 const DIRECTOR_TIMEOUT_MS = 3_500;
 const IMAGE_TIMEOUT_MS = 2_500;
 const VISION_TIMEOUT_MS = 2_500;
-
-const APP_CONFIG = {
-  appMode: env.PRIMER_APP_MODE ?? "development",
-  cloudMode: env.PRIMER_CLOUD_MODE ?? "required",
-  relayBaseUrl: env.PRIMER_RELAY_BASE_URL ?? "",
-  capabilityMode: env.PRIMER_CAPABILITY_MODE ?? "auto",
-  features: {
-    cloudDirector: env.FEATURE_CLOUD_DIRECTOR !== "false",
-    cloudImage: env.FEATURE_CLOUD_IMAGE !== "false",
-    cloudVision: env.FEATURE_CLOUD_VISION === "true",
-    exportImport: env.FEATURE_EXPORT_IMPORT !== "false",
-    encryptedExport: env.FEATURE_ENCRYPTED_EXPORT === "true",
-    debugTools: env.FEATURE_DEBUG_TOOLS === "true",
-  },
-};
-
-const SCHEMA_VERSION = 2;
-const V1_INTERACTIONS = ["none", "tap-choice", "repeat-sound", "trace-symbol", "read-respond", "math-input"];
-const V1_SCENE_KINDS = ["assessment", "lesson", "practice", "review", "fallback"];
-const VALID_TRANSITIONS = new Set(["fade", "slide", "pan"]);
-const VALID_TONES = new Set(["calm", "encouraging", "celebratory", "focused", "curious"]);
-const SAFE_RECIPE_IDS = new Set(["ambient_safe_path", "neutral_choice_board", "symbol_trace_board"]);
 const ASSET_MANIFEST_VERSION = 1;
-
 const ALGEBRA_CONCEPT_GRAPH = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph;
 
-const createMasteryRecord = (overrides = {}) => ({
-  score: 0,
-  status: "available",
-  attempts: 0,
-  lastPracticedAt: null,
-  reviewDueAt: null,
-  ...overrides,
-});
-
-const createStateShape = (overrides = {}) => ({
-  schemaVersion: SCHEMA_VERSION,
-  learnerProfile: {
-    learnerId: "local-learner",
-    locale: "en-GB",
-    interests: [],
-    avatarSeed: null,
-    preferredModalities: ["audio", "visual", "interactive"],
-    ...overrides.learnerProfile,
-  },
-  moduleSelection: {
-    selectedModuleId: "algebra-foundations",
-    availableModuleIds: ["algebra-foundations"],
-    selectedAt: null,
-    ...overrides.moduleSelection,
-  },
-  pedagogicalState: {
-    diagnosticStatus: "not-started",
-    diagnosticStep: 0,
-    readiness: "unknown",
-    currentConceptId: "variables-and-expressions",
-    currentLessonId: null,
-    currentObjectiveId: "diagnostic.variables",
-    recommendedConceptId: "variables-and-expressions",
-    masteryByConcept: {},
-    misconceptionsByConcept: {},
-    evidenceLog: [],
-    reviewSchedule: [],
-    recentActivity: [],
-    lessonRecords: {},
-    assessmentItems: {},
-    attemptLog: [],
-    goals: [],
-    ...overrides.pedagogicalState,
-  },
-  runtimeSession: {
-    activeSceneId: null,
-    lastScene: null,
-    recentTurns: [],
-    runningSummary: null,
-    pendingAssetJobs: [],
-    ...overrides.runtimeSession,
-  },
-  consentAndSettings: {
-    cloudEnabled: true,
-    cloudImageEnabled: true,
-    cloudVisionEnabled: false,
-    adminPinEnabled: false,
-    adminPinHash: null,
-    adminUnlocked: false,
-    captionsEnabled: true,
-    soundEnabled: true,
-    storagePersistenceGranted: "unknown",
-    ...overrides.consentAndSettings,
-  },
-  providerConfig: {
-    providerName: "openrouter",
-    modelName: "",
-    endpointUrl: "",
-    apiKey: "",
-    configuredAt: null,
-    ...overrides.providerConfig,
-  },
-  capabilities: {
-    tier: "minimal",
-    webgpu: false,
-    opfs: false,
-    indexedDb: true,
-    localTTS: true,
-    localSTT: false,
-    microphone: false,
-    ...overrides.capabilities,
-  },
-  assetIndex: {
-    manifestVersion: ASSET_MANIFEST_VERSION,
-    byId: {},
-    quotaEstimate: null,
-    ...overrides.assetIndex,
-  },
-  exportMetadata: {
-    lastExportedAt: null,
-    lastImportedAt: null,
-    exportFormatVersion: 1,
-    ...overrides.exportMetadata,
-  },
-});
-
-const createDefaultState = (overrides = {}) => createStateShape(overrides);
-
-const migrateState = (rawState) => {
-  if (!rawState || typeof rawState !== "object") {
-    return createDefaultState();
-  }
-
-  if (!rawState.schemaVersion || rawState.schemaVersion < SCHEMA_VERSION) {
-    return createDefaultState({
-      ...rawState,
-      moduleSelection: {
-        ...createDefaultState().moduleSelection,
-        ...(rawState.moduleSelection ?? {}),
-      },
-      pedagogicalState: {
-        ...createDefaultState().pedagogicalState,
-        ...(rawState.pedagogicalState ?? {}),
-      },
-      runtimeSession: {
-        ...createDefaultState().runtimeSession,
-        ...(rawState.runtimeSession ?? {}),
-      },
-      consentAndSettings: {
-        ...createDefaultState().consentAndSettings,
-        ...(rawState.consentAndSettings ?? {}),
-      },
-      providerConfig: {
-        ...createDefaultState().providerConfig,
-        ...(rawState.providerConfig ?? {}),
-      },
-      capabilities: {
-        ...createDefaultState().capabilities,
-        ...(rawState.capabilities ?? {}),
-      },
-      assetIndex: {
-        ...createDefaultState().assetIndex,
-        ...(rawState.assetIndex ?? {}),
-      },
-      exportMetadata: {
-        ...createDefaultState().exportMetadata,
-        ...(rawState.exportMetadata ?? {}),
-      },
-    });
-  }
-
-  return createDefaultState(rawState);
-};
-
-const appendRecentTurn = (state, turn) => {
-  const recentTurns = [...state.runtimeSession.recentTurns, turn].slice(-8);
-  return createDefaultState({
-    ...state,
-    runtimeSession: {
-      ...state.runtimeSession,
-      recentTurns,
-    },
-  });
-};
-
-const setActiveScene = (state, scene) =>
-  createDefaultState({
-    ...state,
-    pedagogicalState: {
-      ...state.pedagogicalState,
-      currentObjectiveId: scene?.scene?.objectiveId ?? state.pedagogicalState.currentObjectiveId,
-      ...(typeof scene?.scene?.objectiveId === "string" && scene.scene.objectiveId.startsWith("concept.")
-        ? { currentConceptId: scene.scene.objectiveId.slice("concept.".length) }
-        : {}),
-    },
-    runtimeSession: {
-      ...state.runtimeSession,
-      activeSceneId: scene?.scene?.id ?? null,
-      lastScene: scene ?? null,
-    },
-  });
-
-const updateConsentSettings = (state, updates) =>
-  createDefaultState({
-    ...state,
-    consentAndSettings: {
-      ...state.consentAndSettings,
-      ...updates,
-    },
-  });
-
-const getDiagnosticItem = (step) =>
-  ALGEBRA_DIAGNOSTIC_ITEMS[Math.max(0, Math.min(step, ALGEBRA_DIAGNOSTIC_ITEMS.length - 1))];
-
-const makeDiagnosticDecision = (state, item) => ({
-  moduleId: ALGEBRA_FOUNDATIONS_MODULE.id,
-  activeDomain: "mathematics",
-  phase: "diagnostic",
-  conceptId: item.conceptId,
-  objectiveId: item.id,
-  prompt: item.prompt,
-  inputType: item.inputType,
-  allowedSceneKinds: ["assessment", "fallback"],
-  allowedInteractionTypes:
-    item.inputType === "read-respond"
-      ? ["read-respond", "none"]
-      : item.inputType === "tap-choice"
-        ? ["tap-choice", "none"]
-        : ["math-input", "none"],
-  cloudEscalationAllowed: false,
-  maxNarrationChars: 180,
-  maxPromptComplexity: 2,
-  recommendedConceptId: state.pedagogicalState.recommendedConceptId,
-});
-
-const makeConceptDecision = (state, conceptId) => {
-  const concept = ALGEBRA_CONCEPT_GRAPH.find((node) => node.id === conceptId);
-  return {
-    moduleId: ALGEBRA_FOUNDATIONS_MODULE.id,
-    activeDomain: "mathematics",
-    phase: "tutoring",
-    conceptId,
-    objectiveId: `concept.${conceptId}`,
-    prompt: concept?.description ?? "Continue with the next algebra concept.",
-    allowedSceneKinds: ["lesson", "practice", "review", "fallback"],
-    allowedInteractionTypes: ["math-input", "tap-choice", "read-respond", "none"],
-    cloudEscalationAllowed: APP_CONFIG.features.cloudDirector,
-    maxNarrationChars: 220,
-    maxPromptComplexity: 2,
-    recommendedConceptId: state.pedagogicalState.recommendedConceptId,
-  };
-};
-
-const nextCurriculumDecision = (state) => {
-  if (state.pedagogicalState.diagnosticStatus !== "complete") {
-    return makeDiagnosticDecision(state, getDiagnosticItem(state.pedagogicalState.diagnosticStep ?? 0));
-  }
-
-  const recommendedConceptId =
-    state.pedagogicalState.currentConceptId ??
-    state.pedagogicalState.recommendedConceptId ??
-    getRecommendedConceptId(state.pedagogicalState.masteryByConcept);
-
-  return makeConceptDecision(state, recommendedConceptId);
-};
-
-const recordAssessmentCompletion = (state, recommendedConceptId = "variables-and-expressions") =>
-  createDefaultState({
-    ...state,
-    pedagogicalState: {
-      ...state.pedagogicalState,
-      diagnosticStep: ALGEBRA_DIAGNOSTIC_ITEMS.length,
-      diagnosticStatus: "complete",
-      readiness: "ready",
-      currentConceptId: recommendedConceptId,
-      currentObjectiveId: `concept.${recommendedConceptId}`,
-      recommendedConceptId,
-      recentActivity: [
-        ...state.pedagogicalState.recentActivity,
-        {
-          type: "diagnostic-complete",
-          conceptId: recommendedConceptId,
-        },
-      ].slice(-10),
-    },
-  });
-
-const advanceAssessment = (state, result = {}) => {
-  const currentStep = state.pedagogicalState.diagnosticStep ?? 0;
-  const nextStep = currentStep + 1;
-  const recommendedConceptId =
-    result.recommendedConceptId ??
-    state.pedagogicalState.recommendedConceptId ??
-    "variables-and-expressions";
-
-  if (nextStep >= ALGEBRA_DIAGNOSTIC_ITEMS.length) {
-    return recordAssessmentCompletion(state, recommendedConceptId);
-  }
-
-  return createDefaultState({
-    ...state,
-    pedagogicalState: {
-      ...state.pedagogicalState,
-      diagnosticStatus: "in-progress",
-      diagnosticStep: nextStep,
-      currentObjectiveId: getDiagnosticItem(nextStep).id,
-      recommendedConceptId,
-      recentActivity: [
-        ...state.pedagogicalState.recentActivity,
-        {
-          type: "diagnostic-step-complete",
-          step: currentStep,
-        },
-      ].slice(-10),
-    },
-  });
-};
-
-const applyMasteryEvidence = (state, conceptId, delta = 1) => {
-  const currentRecord = state.pedagogicalState.masteryByConcept[conceptId] ?? {};
-  const nextScore = Math.max(0, (currentRecord.score ?? 0) + delta);
-  const nextMasteryByConcept = {
-    ...state.pedagogicalState.masteryByConcept,
-    [conceptId]: {
-      ...createMasteryRecord(currentRecord),
-      score: nextScore,
-      status: nextScore >= 1 ? "mastered" : "in-progress",
-      attempts: (currentRecord.attempts ?? 0) + 1,
-      lastPracticedAt: new Date().toISOString(),
-      reviewDueAt: null,
-    },
-  };
-  const recommendedConceptId = getRecommendedConceptId(nextMasteryByConcept);
-
-  return createDefaultState({
-    ...state,
-    pedagogicalState: {
-      ...state.pedagogicalState,
-      currentConceptId: recommendedConceptId,
-      currentObjectiveId: `concept.${recommendedConceptId}`,
-      recommendedConceptId,
-      masteryByConcept: nextMasteryByConcept,
-      evidenceLog: [
-        ...state.pedagogicalState.evidenceLog,
-        {
-          conceptId,
-          delta,
-          recordedAt: new Date().toISOString(),
-        },
-      ].slice(-40),
-      recentActivity: [
-        ...state.pedagogicalState.recentActivity,
-        {
-          type: "mastery-evidence",
-          conceptId,
-          delta,
-        },
-      ].slice(-10),
-    },
-  });
-};
-
-const createFallbackScene = (reason = "unknown") => ({
-  version: 1,
-  scene: {
-    id: `fallback.${reason}`,
-    kind: "fallback",
-    objectiveId: "fallback.safe-path",
-    transition: "fade",
-    tone: "calm",
-  },
-  narration: {
-    text: "Let’s continue another way.",
-    maxChars: 64,
-    estDurationMs: 1800,
-    bargeInAllowed: true,
-  },
-  visualIntent: {
-    type: "recipe",
-    recipeId: "ambient_safe_path",
-    vars: {
-      palette: "sand-and-sky",
-    },
-  },
-  interaction: {
-    type: "none",
-  },
-  evidence: {
-    observedSkill: "fallback-recovery",
-    confidenceHint: 1,
-  },
-});
+const createDefaultState = (overrides = {}) => createDefaultStateCore(overrides);
+const migrateState = (rawState) => migrateStateCore(rawState);
+const appendRecentTurn = (state, turn) => appendRecentTurnCore(state, turn);
+const nextCurriculumDecision = (state) => nextCurriculumDecisionCore(state);
+const advanceAssessment = (state, result = {}) => advanceAssessmentCore(state, result);
+const applyMasteryEvidence = (state, conceptId, delta = 1) => applyMasteryEvidenceCore(state, conceptId, delta);
+const setActiveScene = (state, scene) => setActiveSceneCore(state, scene);
+const updateConsentSettings = (state, updates) => updateConsentSettingsCore(state, updates);
+const detectCapabilities = (runtime) => detectCapabilitiesCore(runtime);
+const interpretScene = (blueprint, decision) => interpretSceneCore(blueprint, decision);
+const createFallbackScene = (reason = "unknown") => createFallbackSceneCore(reason);
+const createStableError = (code, message, details = null) => createStableErrorSchema(code, message, details);
+const validateDirectorRequest = (request) => validateDirectorRequestSchema(request);
+const validateDirectorResponse = (response, hardConstraints) =>
+  validateDirectorResponseSchema(response, hardConstraints);
+const getRelayBaseUrl = () =>
+  String(globalThis.process?.env?.PRIMER_RELAY_BASE_URL ?? APP_CONFIG.relayBaseUrl ?? "").trim();
 
 const createTapChoiceFallbackScene = (scene) => {
   if (scene?.interaction?.type !== "repeat-sound") {
@@ -443,20 +90,12 @@ const normalizeSceneForRuntime = (scene, runtimeState) => {
   return scene;
 };
 
-const createStableError = (code, message, details = null) => ({
-  error: {
-    code,
-    message,
-    ...(details ? { details } : {}),
-  },
-});
-
 const truncateText = (text, maxChars) => {
   if (typeof text !== "string") {
     return "";
   }
 
-  return text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars - 1))}…` : text;
+  return text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars - 1))}...` : text;
 };
 
 const createDefaultLearnerState = (capabilities, assetIndex = null) =>
@@ -481,6 +120,7 @@ const resetLearnerState = (state) => {
       cloudEnabled: state.consentAndSettings.cloudEnabled,
       cloudImageEnabled: state.consentAndSettings.cloudImageEnabled,
       cloudVisionEnabled: state.consentAndSettings.cloudVisionEnabled,
+      telemetryEnabled: state.consentAndSettings.telemetryEnabled,
       adminPinEnabled: state.consentAndSettings.adminPinEnabled,
       adminPinHash: state.consentAndSettings.adminPinHash,
       adminUnlocked: false,
@@ -491,6 +131,14 @@ const resetLearnerState = (state) => {
     providerConfig: state.providerConfig,
     assetIndex: state.assetIndex,
   });
+};
+
+const checksumFor = (seed) => {
+  let hash = 0;
+  for (const character of seed) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return `ck-${hash.toString(16).padStart(8, "0")}`;
 };
 
 const hashAdminPin = (pin) => checksumFor(`pin:${String(pin).trim()}`);
@@ -581,14 +229,6 @@ const decryptBackupPayload = (encodedText, passphrase) => {
     .join("");
 };
 
-const checksumFor = (seed) => {
-  let hash = 0;
-  for (const character of seed) {
-    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  }
-  return `ck-${hash.toString(16).padStart(8, "0")}`;
-};
-
 const createAssetRecord = ({
   id,
   kind,
@@ -636,14 +276,14 @@ const getBuiltInAssetManifest = (capabilities) => {
   };
 
   if (capabilities.tier !== "minimal") {
-    manifest["starter-phoneme-pack"] = createAssetRecord({
-      id: "starter-phoneme-pack",
+    manifest["starter-algebra-pack"] = createAssetRecord({
+      id: "starter-algebra-pack",
       kind: "lesson-assets",
       storage: capabilities.opfs ? "opfs" : "idb",
       version: "1.0.0",
       bytes: 220_000,
       installed: false,
-      label: "Starter phoneme pack",
+      label: "Starter algebra pack",
     });
   }
 
@@ -821,184 +461,19 @@ const getAssetInstallPlan = (state) => {
   };
 };
 
-const toConstraintDecision = (hardConstraints) => ({
-  activeDomain: hardConstraints.activeDomain,
-  phase: hardConstraints.phase,
-  moduleId: hardConstraints.moduleId,
-  conceptId: hardConstraints.conceptId,
-  objectiveId: hardConstraints.objectiveId,
-  allowedSceneKinds: hardConstraints.allowedSceneKinds,
-  allowedInteractionTypes: hardConstraints.allowedInteractionTypes,
-  maxNarrationChars: hardConstraints.maxNarrationChars,
-});
+const buildLearnerSummary = (state) => {
+  const masteredConcepts = Object.values(state.pedagogicalState.masteryByConcept ?? {}).filter(
+    (record) => (record?.score ?? 0) >= 1,
+  ).length;
 
-const validateSceneBlueprint = (blueprint, decision = null) => {
-  const errors = [];
-
-  if (!blueprint || blueprint.version !== 1) {
-    errors.push("Scene version must be 1.");
-  }
-
-  if (!blueprint?.scene?.id) {
-    errors.push("Scene id is required.");
-  }
-
-  if (!V1_SCENE_KINDS.includes(blueprint?.scene?.kind)) {
-    errors.push("Unsupported scene kind.");
-  }
-
-  if (!VALID_TRANSITIONS.has(blueprint?.scene?.transition)) {
-    errors.push("Unsupported transition.");
-  }
-
-  if (!VALID_TONES.has(blueprint?.scene?.tone)) {
-    errors.push("Unsupported tone.");
-  }
-
-  if (typeof blueprint?.narration?.text !== "string" || blueprint.narration.text.length === 0) {
-    errors.push("Narration text is required.");
-  }
-
-  if (typeof blueprint?.narration?.maxChars !== "number") {
-    errors.push("Narration budget is required.");
-  }
-
-  if (blueprint?.narration?.text?.length > blueprint?.narration?.maxChars) {
-    errors.push("Narration exceeds scene budget.");
-  }
-
-  const interactionType = blueprint?.interaction?.type;
-  if (!V1_INTERACTIONS.includes(interactionType)) {
-    errors.push("Unsupported interaction type.");
-  }
-
-  if (interactionType === "tap-choice") {
-    const options = blueprint?.interaction?.options;
-    if (!Array.isArray(options) || options.length === 0 || options.length > 4) {
-      errors.push("Tap choice must contain one to four options.");
-    }
-  }
-
-  if (interactionType === "trace-symbol" && !blueprint?.interaction?.target) {
-    errors.push("Trace symbol scenes require a target.");
-  }
-
-  if (interactionType === "repeat-sound" && !blueprint?.interaction?.phoneme) {
-    errors.push("Repeat sound scenes require a phoneme.");
-  }
-
-  if (interactionType === "read-respond") {
-    if (!blueprint?.interaction?.prompt || typeof blueprint.interaction.prompt !== "string") {
-      errors.push("Read/respond scenes require a prompt.");
-    }
-    if (
-      !Array.isArray(blueprint?.interaction?.expectedKeywords) ||
-      blueprint.interaction.expectedKeywords.length === 0
-    ) {
-      errors.push("Read/respond scenes require expected keywords.");
-    }
-  }
-
-  if (interactionType === "math-input") {
-    if (!blueprint?.interaction?.expressionPrompt || typeof blueprint.interaction.expressionPrompt !== "string") {
-      errors.push("Math input scenes require an expression prompt.");
-    }
-    if (!blueprint?.interaction?.expectedExpression || typeof blueprint.interaction.expectedExpression !== "string") {
-      errors.push("Math input scenes require an expected expression.");
-    }
-  }
-
-  const narrationText = blueprint?.narration?.text ?? "";
-  if (/[<>]/.test(narrationText)) {
-    errors.push("Raw HTML is not allowed.");
-  }
-
-  if (decision) {
-    if (blueprint?.scene?.objectiveId !== decision.objectiveId) {
-      errors.push("Scene objective is outside curriculum constraints.");
-    }
-
-    if (!decision.allowedSceneKinds.includes(blueprint?.scene?.kind)) {
-      errors.push("Scene kind is outside curriculum constraints.");
-    }
-
-    if (!decision.allowedInteractionTypes.includes(interactionType)) {
-      errors.push("Interaction type is outside curriculum constraints.");
-    }
-
-    if (narrationText.length > decision.maxNarrationChars) {
-      errors.push("Narration exceeds curriculum budget.");
-    }
-  }
-
-  if (blueprint?.visualIntent?.recipeId && !SAFE_RECIPE_IDS.has(blueprint.visualIntent.recipeId)) {
-    errors.push("Visual recipe is not allowed.");
-  }
-
-  return {
-    ok: errors.length === 0,
-    errors,
-  };
-};
-
-const interpretScene = (blueprint, decision) => {
-  const validation = validateSceneBlueprint(blueprint, decision);
-  if (!validation.ok) {
-    return {
-      ok: false,
-      errors: validation.errors,
-      blueprint: createFallbackScene("validation-failure"),
-    };
-  }
-
-  return {
-    ok: true,
-    errors: [],
-    blueprint,
-  };
-};
-
-const hasIndexedDb = (runtime) => Boolean(runtime?.indexedDB);
-const hasOpfs = (runtime) => Boolean(runtime?.navigator?.storage?.getDirectory);
-const hasSpeechSynthesis = (runtime) => Boolean(runtime?.speechSynthesis);
-const hasSpeechRecognition = (runtime) =>
-  Boolean(runtime?.SpeechRecognition || runtime?.webkitSpeechRecognition);
-const hasMicrophone = (runtime) => Boolean(runtime?.navigator?.mediaDevices?.getUserMedia);
-const hasWebGpu = (runtime) => Boolean(runtime?.navigator?.gpu);
-
-const detectCapabilities = (runtime) => {
-  const indexedDb = hasIndexedDb(runtime);
-  const opfs = hasOpfs(runtime);
-  const localTTS = hasSpeechSynthesis(runtime);
-  const localSTT = hasSpeechRecognition(runtime);
-  const microphone = hasMicrophone(runtime);
-  const webgpu = hasWebGpu(runtime);
-
-  let tier = "minimal";
-  if (indexedDb && localTTS && (localSTT || microphone)) {
-    tier = "standard-local";
-  }
-  if (tier === "standard-local" && webgpu && opfs) {
-    tier = "accelerated-local";
-  }
-
-  return {
-    tier,
-    webgpu,
-    opfs,
-    indexedDb,
-    localTTS,
-    localSTT,
-    microphone,
-  };
-};
-
-const buildLearnerSummary = (state) =>
-  truncateText(
-    `Locale ${state.learnerProfile.locale}. Module ${state.moduleSelection?.selectedModuleId ?? "algebra-foundations"}. ` +
-      `Diagnostic ${state.pedagogicalState.diagnosticStatus}. Concept ${state.pedagogicalState.currentConceptId}.`,
+  return truncateText(
+    `Locale ${state.learnerProfile.locale}. Module ${state.moduleSelection.selectedModuleId}. ` +
+      `Diagnostic ${state.pedagogicalState.diagnosticStatus}. ` +
+      `Current concept ${state.pedagogicalState.currentConceptId ?? "variables-and-expressions"}. ` +
+      `Mastered ${masteredConcepts} concepts.`,
     180,
   );
+};
 
 const buildRuntimeSummary = (state) =>
   state.runtimeSession.recentTurns.length > 0
@@ -1021,9 +496,10 @@ const buildDirectorRequest = (state, decision, latestInput) => ({
   latestInput,
   hardConstraints: {
     activeDomain: decision.activeDomain,
-    phase: decision.phase,
     moduleId: decision.moduleId,
     conceptId: decision.conceptId,
+    phase: decision.phase,
+    literacyStage: decision.literacyStage ?? 0,
     objectiveId: decision.objectiveId,
     allowedSceneKinds: decision.allowedSceneKinds,
     allowedInteractionTypes: decision.allowedInteractionTypes,
@@ -1033,73 +509,24 @@ const buildDirectorRequest = (state, decision, latestInput) => ({
   },
 });
 
-const validateDirectorRequest = (request) => {
-  const errors = [];
-  const allowedInputTypes = new Set(["transcript", "tap-choice", "trace-result", "system-start", "math-input", "short-answer"]);
-  if (!request?.requestId) {
-    errors.push("requestId is required.");
-  }
-  if (typeof request?.learnerSummary !== "string" || request.learnerSummary.length === 0) {
-    errors.push("learnerSummary is required.");
-  }
-  if (!request?.latestInput?.type || typeof request?.latestInput?.content !== "string") {
-    errors.push("latestInput is required.");
-  }
-  if (request?.latestInput?.type && !allowedInputTypes.has(request.latestInput.type)) {
-    errors.push("latestInput.type must be a supported bounded input type.");
-  }
-  if (!request?.hardConstraints?.activeDomain || !request?.hardConstraints?.objectiveId) {
-    errors.push("hardConstraints are required.");
-  }
-  if (!Array.isArray(request?.hardConstraints?.allowedSceneKinds)) {
-    errors.push("allowedSceneKinds are required.");
-  }
-  if (!Array.isArray(request?.hardConstraints?.allowedInteractionTypes)) {
-    errors.push("allowedInteractionTypes are required.");
-  }
-  if (!request?.hardConstraints?.moduleId) {
-    errors.push("hardConstraints.moduleId is required.");
-  }
-  if (!request?.hardConstraints?.conceptId) {
-    errors.push("hardConstraints.conceptId is required.");
-  }
-  return {
-    ok: errors.length === 0,
-    errors,
-  };
-};
-
-const validateDirectorResponse = (response, hardConstraints) => {
-  if (!response || typeof response !== "object" || !response.blueprint) {
-    return {
-      ok: false,
-      errors: ["Response must include blueprint."],
-    };
-  }
-
-  return validateSceneBlueprint(response.blueprint, toConstraintDecision(hardConstraints));
-};
-
 const createMockDirectorResponse = (request, localScene) => {
   const contentType = request.latestInput.type;
-  const mood = contentType === "transcript" ? "encouraging" : "curious";
   const blueprint = {
     ...localScene,
     scene: {
       ...localScene.scene,
-      tone: mood,
+      tone: contentType === "transcript" ? "encouraging" : localScene.scene.tone,
     },
     narration: {
       ...localScene.narration,
       text:
         contentType === "transcript"
-          ? "I heard you. Let’s keep going with one clear step."
+          ? "I heard you. Let's keep going with one clear algebra step."
           : localScene.narration.text,
     },
     visualIntent: {
       ...(localScene.visualIntent ?? { type: "recipe", recipeId: "neutral_choice_board", vars: {} }),
-      recipeId:
-        localScene.interaction?.type === "trace-symbol" ? "symbol_trace_board" : "neutral_choice_board",
+      recipeId: localScene.interaction?.type === "trace-symbol" ? "symbol_trace_board" : "neutral_choice_board",
     },
   };
 
@@ -1132,7 +559,7 @@ const requestDirectorScene = async ({ state, decision, latestInput, localScene, 
     };
   }
 
-  const relayBaseUrl = APP_CONFIG.relayBaseUrl?.trim();
+  const relayBaseUrl = getRelayBaseUrl();
   if (!relayBaseUrl) {
     return {
       ok: false,
@@ -1187,7 +614,7 @@ const buildImageRequest = (scene) => ({
 });
 
 const queueImageGeneration = async ({ scene, fetchImpl = fetch }) => {
-  const relayBaseUrl = APP_CONFIG.relayBaseUrl?.trim();
+  const relayBaseUrl = getRelayBaseUrl();
   if (!relayBaseUrl) {
     return {
       ok: false,
@@ -1289,7 +716,7 @@ const validateMathInputResponse = (input, expectedExpression) => {
 };
 
 const requestVisionInterpretation = async ({ traceDataUrl, decision, target, fetchImpl = fetch }) => {
-  const relayBaseUrl = APP_CONFIG.relayBaseUrl?.trim();
+  const relayBaseUrl = getRelayBaseUrl();
   if (!relayBaseUrl) {
     return {
       ok: false,
@@ -1360,47 +787,47 @@ export {
   ASSET_MANIFEST_VERSION,
   advanceAssessment,
   appendRecentTurn,
+  applyMasteryEvidence,
   buildDirectorRequest,
   clearAdminPin,
-  createStableError,
-  applyMasteryEvidence,
-  createDefaultState,
   createDefaultLearnerState,
-  deleteAssetRecord,
+  createDefaultState,
+  createFallbackScene,
+  createStableError,
+  createTapChoiceFallbackScene,
   decryptBackupPayload,
+  deleteAssetRecord,
+  detectCapabilities,
+  DIRECTOR_TIMEOUT_MS,
+  encryptBackupPayload,
   estimateInstalledAssetBytes,
   estimateStorage,
-  encryptBackupPayload,
   evictNonEssentialAssets,
-  createFallbackScene,
-  createTapChoiceFallbackScene,
-  DIRECTOR_TIMEOUT_MS,
-  detectCapabilities,
   getAssetInstallPlan,
   getBuiltInAssetManifest,
   hashAdminPin,
   hydrateAssetIndex,
   installAssetRecord,
   interpretScene,
-  lockAdmin,
   listInstalledAssets,
+  lockAdmin,
   migrateState,
   nextCurriculumDecision,
+  normalizeSceneForRuntime,
   queueImageGeneration,
   recoverSceneForRuntime,
-  resetLearnerState,
   requestDirectorScene,
   requestVisionInterpretation,
+  resetLearnerState,
   scoreTrace,
-  validateMathInputResponse,
-  setAdminPin,
   setActiveScene,
-  normalizeSceneForRuntime,
+  setAdminPin,
   unlockAdmin,
   updateAssetAccess,
-  updateQuotaEstimate,
   updateConsentSettings,
+  updateQuotaEstimate,
   validateDirectorRequest,
   validateDirectorResponse,
+  validateMathInputResponse,
   verifyAdminPin,
 };

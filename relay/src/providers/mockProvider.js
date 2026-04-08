@@ -141,6 +141,7 @@ export const proposeSceneBlueprint = (request) => {
 
 export const proposeChatReply = (request) => {
   const boundedInput = request.latestInput.content.trim();
+  const objectiveId = request.objectiveId ?? request.hardConstraints?.objectiveId ?? "concept.variables-and-expressions";
   const baseReply =
     boundedInput.length > 0
       ? `Great question. ${boundedInput} is a good step. Let's try one short example together.`
@@ -155,7 +156,7 @@ export const proposeChatReply = (request) => {
       bargeInAllowed: true,
     },
     suggestedNextScene: {
-      objectiveId: request.objectiveId ?? "baseline.observe-sound.0",
+      objectiveId,
     },
   };
 };

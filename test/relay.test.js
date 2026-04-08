@@ -9,26 +9,29 @@ import { handleVisionRoute } from "../relay/src/routes/vision.js";
 test("director route validates, redacts, and returns a bounded scene", async () => {
   const result = await handleDirectorRoute({
     requestId: "director-1",
-    learnerSummary: "Locale en-GB. Literacy stage 1.",
+    learnerSummary: "Locale en-GB. Algebra module selected. Current concept variables-and-expressions.",
     runtimeSummary: "recent turn",
     latestInput: {
-      type: "tap-choice",
-      content: "reading.symbol-match.1:map",
+      type: "math-input",
+      content: "x = 7",
     },
     hardConstraints: {
-      activeDomain: "reading",
-      literacyStage: 1,
-      objectiveId: "reading.symbol-match.1",
+      activeDomain: "mathematics",
+      moduleId: "algebra-foundations",
+      conceptId: "one-step-addition-equations",
+      phase: "tutoring",
+      objectiveId: "concept.one-step-addition-equations",
       allowedSceneKinds: ["lesson", "fallback"],
-      allowedInteractionTypes: ["tap-choice", "none"],
-      maxNarrationChars: 120,
+      allowedInteractionTypes: ["math-input", "none"],
+      maxNarrationChars: 180,
       imageGenerationAllowed: false,
       locale: "en-GB",
     },
   });
 
   assert.equal(result.status, 200);
-  assert.equal(result.body.blueprint.scene.objectiveId, "reading.symbol-match.1");
+  assert.equal(result.body.blueprint.scene.objectiveId, "concept.one-step-addition-equations");
+  assert.equal(result.body.blueprint.interaction.type, "math-input");
   assert.match(result.headers["x-primer-provider"], /local-mock/);
 });
 
@@ -38,16 +41,18 @@ test("director route blocks mixed-age-unsafe content", async () => {
     learnerSummary: "Locale en-GB.",
     runtimeSummary: "graphic violence",
     latestInput: {
-      type: "tap-choice",
-      content: "reading.symbol-match.1:map",
+      type: "math-input",
+      content: "x = 7",
     },
     hardConstraints: {
-      activeDomain: "reading",
-      literacyStage: 1,
-      objectiveId: "reading.symbol-match.1",
+      activeDomain: "mathematics",
+      moduleId: "algebra-foundations",
+      conceptId: "one-step-addition-equations",
+      phase: "tutoring",
+      objectiveId: "concept.one-step-addition-equations",
       allowedSceneKinds: ["lesson", "fallback"],
-      allowedInteractionTypes: ["tap-choice", "none"],
-      maxNarrationChars: 120,
+      allowedInteractionTypes: ["math-input", "none"],
+      maxNarrationChars: 180,
       imageGenerationAllowed: false,
       locale: "en-GB",
     },
@@ -64,7 +69,7 @@ test("image route queues first and serves ready on subsequent request", async ()
     vars: {
       palette: "sand-and-sky",
     },
-    cacheKey: "reading:sand-and-sky",
+    cacheKey: "algebra:sand-and-sky",
   };
 
   const queued = await handleImageRoute(request);
@@ -82,9 +87,9 @@ test("vision route returns advisory evidence only", async () => {
     imageBase64: "ZmFrZQ==",
     task: "complex-symbol-check",
     context: {
-      target: "M",
+      target: "x",
       learnerStage: 2,
-      domain: "writing",
+      domain: "mathematics",
     },
   });
 
@@ -96,20 +101,20 @@ test("vision route returns advisory evidence only", async () => {
 test("chat route returns bounded mixed-age-safe guidance", async () => {
   const result = await handleChatRoute({
     requestId: "chat-1",
-    learnerSummary: "Locale en-GB. Literacy stage 1.",
-    runtimeSummary: "Learner asked for an example.",
+    learnerSummary: "Locale en-GB. Algebra module selected.",
+    runtimeSummary: "Learner asked for a worked example.",
     latestInput: {
       type: "transcript",
-      content: "How do I match this sound?",
+      content: "How do I solve 2x + 3 = 11?",
     },
-    objectiveId: "reading.symbol-match.1",
+    objectiveId: "concept.two-step-equations",
     maxResponseChars: 140,
   });
 
   assert.equal(result.status, 200);
   assert.match(result.body.reply.text, /great question/i);
   assert.ok(result.body.reply.text.length <= 140);
-  assert.equal(result.body.suggestedNextScene.objectiveId, "reading.symbol-match.1");
+  assert.equal(result.body.suggestedNextScene.objectiveId, "concept.two-step-equations");
 });
 
 test("director route can return an algebra math-input scene", async () => {
@@ -125,7 +130,6 @@ test("director route can return an algebra math-input scene", async () => {
       activeDomain: "mathematics",
       moduleId: "algebra-foundations",
       conceptId: "two-step-equations",
-      literacyStage: 0,
       objectiveId: "concept.two-step-equations",
       phase: "tutoring",
       allowedSceneKinds: ["lesson", "fallback"],

@@ -21,19 +21,21 @@ test("stable relay errors preserve code, message, and details", () => {
 test("director request validator accepts the bounded request shape", () => {
   const result = validateDirectorRequest({
     requestId: "director-1",
-    learnerSummary: "Learner is at stage 1.",
+    learnerSummary: "Learner is working in the algebra foundations module.",
     runtimeSummary: null,
     latestInput: {
-      type: "tap-choice",
-      content: "reading.symbol-match.1:map",
+      type: "math-input",
+      content: "x = 7",
     },
     hardConstraints: {
-      activeDomain: "reading",
-      literacyStage: 1,
-      objectiveId: "reading.symbol-match.1",
+      activeDomain: "mathematics",
+      moduleId: "algebra-foundations",
+      conceptId: "one-step-addition-equations",
+      phase: "tutoring",
+      objectiveId: "concept.one-step-addition-equations",
       allowedSceneKinds: ["lesson", "fallback"],
-      allowedInteractionTypes: ["tap-choice", "none"],
-      maxNarrationChars: 120,
+      allowedInteractionTypes: ["math-input", "none"],
+      maxNarrationChars: 180,
       imageGenerationAllowed: false,
       locale: "en-GB",
     },
@@ -46,19 +48,21 @@ test("director request validator accepts the bounded request shape", () => {
 test("director request validator rejects unsupported latest input types", () => {
   const result = validateDirectorRequest({
     requestId: "director-1",
-    learnerSummary: "Learner is at stage 1.",
+    learnerSummary: "Learner is working in the algebra foundations module.",
     runtimeSummary: null,
     latestInput: {
       type: "freeform",
       content: "something",
     },
     hardConstraints: {
-      activeDomain: "reading",
-      literacyStage: 1,
-      objectiveId: "reading.symbol-match.1",
+      activeDomain: "mathematics",
+      moduleId: "algebra-foundations",
+      conceptId: "one-step-addition-equations",
+      phase: "tutoring",
+      objectiveId: "concept.one-step-addition-equations",
       allowedSceneKinds: ["lesson", "fallback"],
-      allowedInteractionTypes: ["tap-choice", "none"],
-      maxNarrationChars: 120,
+      allowedInteractionTypes: ["math-input", "none"],
+      maxNarrationChars: 180,
       imageGenerationAllowed: false,
       locale: "en-GB",
     },
@@ -135,7 +139,7 @@ test("director response validator rejects HTML in narration", () => {
         scene: {
           id: "scene_bad",
           kind: "lesson",
-          objectiveId: "reading.symbol-match.1",
+          objectiveId: "concept.one-step-addition-equations",
           transition: "fade",
           tone: "curious",
         },
@@ -157,12 +161,14 @@ test("director response validator rejects HTML in narration", () => {
       },
     },
     {
-      activeDomain: "reading",
-      literacyStage: 1,
-      objectiveId: "reading.symbol-match.1",
+      activeDomain: "mathematics",
+      moduleId: "algebra-foundations",
+      conceptId: "one-step-addition-equations",
+      phase: "tutoring",
+      objectiveId: "concept.one-step-addition-equations",
       allowedSceneKinds: ["lesson", "fallback"],
       allowedInteractionTypes: ["tap-choice", "none"],
-      maxNarrationChars: 120,
+      maxNarrationChars: 180,
     },
   );
 
@@ -178,7 +184,7 @@ test("director response validator rejects objective drift and unsafe recipes", (
         scene: {
           id: "scene_wrong_objective",
           kind: "lesson",
-          objectiveId: "reading.symbol-match.99",
+          objectiveId: "concept.wrong-concept",
           transition: "fade",
           tone: "curious",
         },
@@ -200,12 +206,14 @@ test("director response validator rejects objective drift and unsafe recipes", (
       },
     },
     {
-      activeDomain: "reading",
-      literacyStage: 1,
-      objectiveId: "reading.symbol-match.1",
+      activeDomain: "mathematics",
+      moduleId: "algebra-foundations",
+      conceptId: "one-step-addition-equations",
+      phase: "tutoring",
+      objectiveId: "concept.one-step-addition-equations",
       allowedSceneKinds: ["lesson", "fallback"],
       allowedInteractionTypes: ["tap-choice", "none"],
-      maxNarrationChars: 120,
+      maxNarrationChars: 180,
     },
   );
 
@@ -222,7 +230,7 @@ test("director response validator accepts read/respond interaction when constrai
         scene: {
           id: "scene_read_respond",
           kind: "lesson",
-          objectiveId: "reading.symbol-match.3",
+          objectiveId: "concept.variables-and-expressions",
           transition: "fade",
           tone: "encouraging",
         },
@@ -245,12 +253,14 @@ test("director response validator accepts read/respond interaction when constrai
       },
     },
     {
-      activeDomain: "reading",
-      literacyStage: 3,
-      objectiveId: "reading.symbol-match.3",
+      activeDomain: "mathematics",
+      moduleId: "algebra-foundations",
+      conceptId: "variables-and-expressions",
+      phase: "diagnostic",
+      objectiveId: "concept.variables-and-expressions",
       allowedSceneKinds: ["lesson", "fallback"],
       allowedInteractionTypes: ["read-respond", "none"],
-      maxNarrationChars: 120,
+      maxNarrationChars: 180,
     },
   );
 
@@ -338,6 +348,24 @@ test("mock director can propose a bounded scene when relay is set to mock", asyn
   process.env.PRIMER_RELAY_BASE_URL = "mock";
   const mockedRuntime = await import(new URL(`../apps/web/src/app/runtime.js?mock=${Date.now()}`, import.meta.url));
   const state = mockedRuntime.createDefaultState({
+    moduleSelection: {
+      selectedModuleId: "algebra-foundations",
+    },
+    pedagogicalState: {
+      diagnosticStatus: "complete",
+      currentConceptId: "one-step-addition-equations",
+      currentObjectiveId: "concept.one-step-addition-equations",
+      recommendedConceptId: "one-step-addition-equations",
+      masteryByConcept: {},
+      misconceptionsByConcept: {},
+      evidenceLog: [],
+      reviewSchedule: [],
+      recentActivity: [],
+      lessonRecords: {},
+      assessmentItems: {},
+      attemptLog: [],
+      goals: [],
+    },
     consentAndSettings: {
       cloudEnabled: true,
       cloudImageEnabled: true,
@@ -348,15 +376,15 @@ test("mock director can propose a bounded scene when relay is set to mock", asyn
   const localScene = {
     version: 1,
     scene: {
-      id: "scene_assessment",
-      kind: "assessment",
+      id: "scene_lesson_one_step_addition",
+      kind: "lesson",
       objectiveId: decision.objectiveId,
-      transition: "fade",
-      tone: "calm",
+      transition: "slide",
+      tone: "encouraging",
     },
     narration: {
-      text: "Choose the sound that matches.",
-      maxChars: 90,
+      text: "Solve the short algebra prompt.",
+      maxChars: 180,
       estDurationMs: 1200,
       bargeInAllowed: true,
     },
@@ -366,14 +394,12 @@ test("mock director can propose a bounded scene when relay is set to mock", asyn
       vars: {},
     },
     interaction: {
-      type: "tap-choice",
-      options: [
-        { id: "a", audioLabel: "A" },
-        { id: "b", audioLabel: "B" },
-      ],
+      type: "math-input",
+      expressionPrompt: "Solve x + 5 = 12.",
+      expectedExpression: "7",
     },
     evidence: {
-      observedSkill: "audio-choice",
+      observedSkill: "one-step-addition-equations",
       confidenceHint: 0.7,
     },
   };
@@ -390,6 +416,7 @@ test("mock director can propose a bounded scene when relay is set to mock", asyn
 
   assert.equal(result.ok, true);
   assert.equal(result.blueprint.scene.kind, "assessment");
+  assert.equal(result.blueprint.interaction.type, "math-input");
 });
 
 test("relay request failure returns a stable error without throwing", async () => {
@@ -621,8 +648,9 @@ test("reset learner state clears progress but preserves local admin and capabili
   );
 
   state = runtimeModule.resetLearnerState(state);
-  assert.equal(state.pedagogicalState.assessmentStatus, "not-started");
-  assert.equal(state.pedagogicalState.literacyStage, 0);
+  assert.equal(state.pedagogicalState.diagnosticStatus, "not-started");
+  assert.equal(state.pedagogicalState.currentConceptId, "variables-and-expressions");
+  assert.equal(state.moduleSelection.selectedModuleId, "algebra-foundations");
   assert.equal(state.capabilities.tier, "standard-local");
   assert.equal(state.consentAndSettings.cloudEnabled, true);
   assert.equal(state.consentAndSettings.adminPinEnabled, true);

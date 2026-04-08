@@ -15,6 +15,7 @@ const ALLOWED_BOUNDED_INPUT_TYPES = new Set([
   "system-start",
   "math-input",
   "short-answer",
+  "short-explanation",
 ]);
 
 const validateBoundedTutorRequest = (request) => {
@@ -34,6 +35,24 @@ const validateBoundedTutorRequest = (request) => {
   }
   if (!request?.hardConstraints?.activeDomain || !request?.hardConstraints?.objectiveId) {
     errors.push("hardConstraints are required.");
+  }
+  if (
+    request?.hardConstraints?.phase &&
+    !["diagnostic", "tutoring", "review"].includes(request.hardConstraints.phase)
+  ) {
+    errors.push("hardConstraints.phase must be a supported tutor phase.");
+  }
+  if (
+    request?.hardConstraints?.moduleId !== undefined &&
+    typeof request.hardConstraints.moduleId !== "string"
+  ) {
+    errors.push("hardConstraints.moduleId must be a string when present.");
+  }
+  if (
+    request?.hardConstraints?.conceptId !== undefined &&
+    typeof request.hardConstraints.conceptId !== "string"
+  ) {
+    errors.push("hardConstraints.conceptId must be a string when present.");
   }
   if (!Array.isArray(request?.hardConstraints?.allowedSceneKinds)) {
     errors.push("allowedSceneKinds are required.");
