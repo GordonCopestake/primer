@@ -1,12 +1,12 @@
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
-export const masteryBucket = () => ({
-  phonemes: {},
-  graphemes: {},
-  vocabularyThemes: {},
-  numeracyConcepts: {},
-  mathConcepts: {},
-  scienceConcepts: {},
+export const createMasteryRecord = (overrides = {}) => ({
+  score: 0,
+  status: "available",
+  attempts: 0,
+  lastPracticedAt: null,
+  reviewDueAt: null,
+  ...overrides,
 });
 
 export const createStateShape = (overrides = {}) => ({
@@ -19,20 +19,29 @@ export const createStateShape = (overrides = {}) => ({
     preferredModalities: ["audio", "visual", "interactive"],
     ...overrides.learnerProfile,
   },
+  moduleSelection: {
+    selectedModuleId: "algebra-foundations",
+    availableModuleIds: ["algebra-foundations"],
+    selectedAt: null,
+    ...overrides.moduleSelection,
+  },
   pedagogicalState: {
-    literacyStage: 0,
-    assessmentStep: 0,
-    domainStage: {
-      reading: 0,
-      writing: 0,
-      numeracy: 0,
-      mathematics: 0,
-      science: 0,
-      physics: 0,
-    },
-    currentObjectiveId: "baseline.observe-sound.0",
-    assessmentStatus: "not-started",
-    mastery: masteryBucket(),
+    diagnosticStatus: "not-started",
+    diagnosticStep: 0,
+    readiness: "unknown",
+    currentConceptId: "variables-and-expressions",
+    currentLessonId: null,
+    currentObjectiveId: "diagnostic.variables",
+    recommendedConceptId: "variables-and-expressions",
+    masteryByConcept: {},
+    misconceptionsByConcept: {},
+    evidenceLog: [],
+    reviewSchedule: [],
+    recentActivity: [],
+    lessonRecords: {},
+    assessmentItems: {},
+    attemptLog: [],
+    goals: [],
     ...overrides.pedagogicalState,
   },
   runtimeSession: {
@@ -47,6 +56,7 @@ export const createStateShape = (overrides = {}) => ({
     cloudEnabled: true,
     cloudImageEnabled: true,
     cloudVisionEnabled: false,
+    telemetryEnabled: false,
     adminPinEnabled: false,
     adminPinHash: null,
     adminUnlocked: false,
@@ -78,5 +88,11 @@ export const createStateShape = (overrides = {}) => ({
     byId: {},
     quotaEstimate: null,
     ...overrides.assetIndex,
+  },
+  exportMetadata: {
+    lastExportedAt: null,
+    lastImportedAt: null,
+    exportFormatVersion: 1,
+    ...overrides.exportMetadata,
   },
 });

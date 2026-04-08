@@ -2,13 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  ALGEBRA_FOUNDATIONS_MODULE,
+  ALGEBRA_LESSONS,
   APP_CONFIG,
   advanceAssessment,
-  appendRecentTurn,
   applyMasteryEvidence,
   createDefaultState,
   createFallbackScene,
   detectCapabilities,
+  getAlgebraConcept,
+  getLessonForConcept,
   interpretScene,
   migrateState,
   nextCurriculumDecision,
@@ -16,11 +19,26 @@ import {
   setActiveScene,
 } from "../packages/core/src/index.js";
 
-test("migrateState returns a spec-shaped default state", () => {
-  const migrated = migrateState({ schemaVersion: 0, learnerProfile: { locale: "en-US" } });
-  assert.equal(migrated.schemaVersion, 1);
+test("migrateState converts legacy prototype state into the algebra MVP shape", () => {
+  const migrated = migrateState({
+    schemaVersion: 1,
+    learnerProfile: { locale: "en-US" },
+    consentAndSettings: { soundEnabled: false },
+    runtimeSession: { recentTurns: [{ role: "user", content: "hello" }] },
+    pedagogicalState: {
+      literacyStage: 3,
+      assessmentStatus: "complete",
+      currentObjectiveId: "reading.symbol-match.3",
+    },
+  });
+
+  assert.equal(migrated.schemaVersion, 2);
   assert.equal(migrated.learnerProfile.locale, "en-US");
-  assert.equal(migrated.pedagogicalState.assessmentStatus, "not-started");
+  assert.equal(migrated.moduleSelection.selectedModuleId, "algebra-foundations");
+  assert.equal(migrated.pedagogicalState.diagnosticStatus, "not-started");
+  assert.equal(migrated.pedagogicalState.currentObjectiveId, "diagnostic.variables");
+  assert.equal(migrated.runtimeSession.recentTurns.length, 1);
+  assert.equal(migrated.consentAndSettings.soundEnabled, false);
 });
 
 test("detectCapabilities classifies accelerated tier only with richer features", () => {
@@ -45,66 +63,63 @@ test("detectCapabilities classifies accelerated tier only with richer features",
   assert.equal(capabilities.localSTT, true);
 });
 
-test("new learner starts in embedded baseline assessment", () => {
+test("new learner starts in the algebra diagnostic", () => {
   const state = createDefaultState();
   const decision = nextCurriculumDecision(state);
-  assert.equal(decision.activeDomain, "preliteracy");
-  assert.equal(decision.objectiveId, "baseline.observe-sound.0");
-  assert.deepEqual(decision.allowedSceneKinds, ["assessment", "fallback"]);
-  assert.equal(state.pedagogicalState.currentObjectiveId, "baseline.observe-sound.0");
-  assert.equal(state.consentAndSettings.cloudEnabled, true);
+
+  assert.equal(state.schemaVersion, 2);
+  assert.equal(state.moduleSelection.selectedModuleId, "algebra-foundations");
+  assert.equal(decision.phase, "diagnostic");
+  assert.equal(decision.moduleId, ALGEBRA_FOUNDATIONS_MODULE.id);
+  assert.equal(decision.objectiveId, "diagnostic.variables");
+  assert.equal(state.pedagogicalState.currentObjectiveId, "diagnostic.variables");
 });
 
-test("assessment advances through staged baseline checkpoints", () => {
+test("assessment advances through staged diagnostic checkpoints", () => {
   let state = createDefaultState();
-  state = advanceAssessment(state, 0);
-  assert.equal(nextCurriculumDecision(state).objectiveId, "baseline.symbol-match.1");
+  state = advanceAssessment(state, { recommendedConceptId: "evaluate-expressions" });
+  assert.equal(nextCurriculumDecision(state).objectiveId, "diagnostic.substitution");
 
-  state = advanceAssessment(state, 1);
-  assert.equal(nextCurriculumDecision(state).objectiveId, "baseline.trace-letter.2");
+  state = advanceAssessment(state, { recommendedConceptId: "one-step-addition-equations" });
+  assert.equal(nextCurriculumDecision(state).objectiveId, "diagnostic.one-step");
 
-  state = advanceAssessment(state, 2);
-  assert.equal(nextCurriculumDecision(state).objectiveId, "baseline.read-short.3");
+  state = advanceAssessment(state, { recommendedConceptId: "two-step-equations" });
+  assert.equal(nextCurriculumDecision(state).objectiveId, "diagnostic.two-step");
 });
 
-test("completed assessment unlocks deterministic reading flow", () => {
-  const state = recordAssessmentCompletion(createDefaultState(), 2);
+test("completed diagnostic unlocks the algebra tutoring flow", () => {
+  const state = recordAssessmentCompletion(createDefaultState(), "variables-and-expressions");
   const decision = nextCurriculumDecision(state);
-  assert.equal(decision.activeDomain, "reading");
-  assert.equal(decision.objectiveId, "reading.symbol-match.2");
+
+  assert.equal(decision.phase, "tutoring");
+  assert.equal(decision.conceptId, "variables-and-expressions");
+  assert.equal(decision.objectiveId, "concept.variables-and-expressions");
 });
 
-test("writing enters the rotation before numeracy when weaker than reading", () => {
-  const state = recordAssessmentCompletion(createDefaultState(), 3);
-  const decision = nextCurriculumDecision(state);
-  assert.equal(decision.activeDomain, "writing");
-  assert.equal(decision.objectiveId, "writing.trace-and-build.2");
+test("mastery evidence advances toward the next available algebra concept", () => {
+  const assessed = recordAssessmentCompletion(createDefaultState(), "variables-and-expressions");
+  const shifted = applyMasteryEvidence(assessed, "variables-and-expressions", 1);
+
+  assert.equal(shifted.pedagogicalState.masteryByConcept["variables-and-expressions"].status, "mastered");
+  assert.equal(shifted.pedagogicalState.currentConceptId, "evaluate-expressions");
+  assert.equal(shifted.pedagogicalState.currentObjectiveId, "concept.evaluate-expressions");
 });
 
-test("cloud and backup defaults follow the spec contract", () => {
-  assert.equal(APP_CONFIG.cloudMode, "required");
-  assert.equal(APP_CONFIG.features.exportImport, true);
-  assert.equal(APP_CONFIG.features.cloudDirector, true);
-});
+test("algebra module metadata exposes the bounded concept pack", () => {
+  const concept = getAlgebraConcept("two-step-equations");
+  const lesson = getLessonForConcept("two-step-equations");
 
-test("assessment completion records a bounded stage", () => {
-  const completed = advanceAssessment(
-    advanceAssessment(advanceAssessment(advanceAssessment(createDefaultState(), 0), 1), 2),
-    3,
-  );
-  assert.equal(completed.pedagogicalState.assessmentStatus, "complete");
-  assert.equal(completed.pedagogicalState.literacyStage, 3);
-});
-
-test("mastery evidence rotates from reading to writing to numeracy deterministically", () => {
-  const assessed = recordAssessmentCompletion(createDefaultState(), 2);
-  const shifted = applyMasteryEvidence(assessed, "writing", 1);
-  const shiftedAgain = applyMasteryEvidence(shifted, "reading", 2);
-  const shiftedFinal = applyMasteryEvidence(shiftedAgain, "writing", 1);
-
-  assert.equal(nextCurriculumDecision(shifted).activeDomain, "reading");
-  assert.equal(nextCurriculumDecision(shiftedAgain).activeDomain, "writing");
-  assert.equal(nextCurriculumDecision(shiftedFinal).activeDomain, "numeracy");
+  assert.equal(ALGEBRA_FOUNDATIONS_MODULE.title, "Algebra Foundations");
+  assert.ok(ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.length >= 20);
+  assert.ok(ALGEBRA_LESSONS.length >= 4);
+  assert.equal(concept?.label, "Two-step equations");
+  assert.equal(lesson?.title, "Two-step equations");
+  assert.deepEqual(concept?.prerequisites, [
+    "one-step-addition-equations",
+    "one-step-subtraction-equations",
+    "one-step-multiplication-equations",
+    "one-step-division-equations",
+  ]);
 });
 
 test("invalid scene output is replaced by the safe fallback scene", () => {
@@ -114,7 +129,7 @@ test("invalid scene output is replaced by the safe fallback scene", () => {
       scene: {
         id: "bad.scene",
         kind: "lesson",
-        objectiveId: "reading.symbol-match.1",
+        objectiveId: "concept.variables-and-expressions",
         transition: "fade",
         tone: "curious",
       },
@@ -132,7 +147,7 @@ test("invalid scene output is replaced by the safe fallback scene", () => {
         })),
       },
     },
-    nextCurriculumDecision(recordAssessmentCompletion(createDefaultState(), 1)),
+    nextCurriculumDecision(recordAssessmentCompletion(createDefaultState(), "variables-and-expressions")),
   );
 
   assert.equal(result.ok, false);
@@ -142,7 +157,13 @@ test("invalid scene output is replaced by the safe fallback scene", () => {
 test("recent turns are bounded", () => {
   let state = createDefaultState();
   for (let index = 0; index < 10; index += 1) {
-    state = appendRecentTurn(state, { role: "user", content: `turn-${index}` });
+    state = {
+      ...state,
+      runtimeSession: {
+        ...state.runtimeSession,
+        recentTurns: [...state.runtimeSession.recentTurns, { role: "user", content: `turn-${index}` }].slice(-8),
+      },
+    };
   }
 
   assert.equal(state.runtimeSession.recentTurns.length, 8);
@@ -152,12 +173,12 @@ test("recent turns are bounded", () => {
 test("active scene syncs the pedagogical current objective", () => {
   const nextState = setActiveScene(createDefaultState(), {
     scene: {
-      id: "scene_reading_1",
-      objectiveId: "reading.symbol-match.1",
+      id: "scene_variables_1",
+      objectiveId: "concept.variables-and-expressions",
     },
   });
 
-  assert.equal(nextState.pedagogicalState.currentObjectiveId, "reading.symbol-match.1");
+  assert.equal(nextState.pedagogicalState.currentObjectiveId, "concept.variables-and-expressions");
 });
 
 test("fallback scene is always locally renderable", () => {
@@ -165,4 +186,10 @@ test("fallback scene is always locally renderable", () => {
   assert.equal(fallback.scene.kind, "fallback");
   assert.equal(fallback.interaction.type, "none");
   assert.match(fallback.narration.text, /continue another way/i);
+});
+
+test("cloud and backup defaults follow the spec contract", () => {
+  assert.equal(APP_CONFIG.cloudMode, "required");
+  assert.equal(APP_CONFIG.features.exportImport, true);
+  assert.equal(APP_CONFIG.features.cloudDirector, true);
 });

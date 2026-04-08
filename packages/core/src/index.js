@@ -1,3 +1,4 @@
+export * from "./algebraModule.js";
 export * from "./capability.js";
 export * from "./config.js";
 export * from "./curriculumEngine.js";

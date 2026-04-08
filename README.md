@@ -6,14 +6,14 @@ The current implementation focuses on runtime foundations:
 
 - static web shell with installable PWA assets and offline shell caching
 - local learner-state persistence with safe scene restore
-- deterministic baseline assessment and bounded progression helpers
+- shared algebra module data and bounded diagnostic/tutoring progression helpers
 - capability detection plus browser-native TTS/STT hooks where supported
 - local settings/admin entry point with export/import backup
 - safe fallback scene and strict scene validation/interpreter guards
 
 ## Current Progress vs New PM Spec
 
-Primer presents bounded learning scenes inside a fixed local shell. A learner starts in a deterministic baseline assessment, then progresses through simple reading, writing, and numeracy scenes. The app stores learner state locally, restores the last safe scene after reload, and exposes local settings and backup controls.
+Primer presents bounded learning scenes inside a fixed local shell. The current refactor is moving the shared model from a literacy prototype to an algebra foundations MVP with a diagnostic, concept graph, and mastery records. The app stores learner state locally, restores the last safe scene after reload, and exposes local settings and backup controls.
 
 Primer follows the spec posture: cloud AI with local learner storage and no required login.
 
