@@ -170,15 +170,18 @@ test("incorrect evidence records misconceptions and prioritizes due review", () 
 test("algebra module metadata exposes the bounded concept pack", () => {
   const concept = getAlgebraConcept("two-step-equations");
   const lesson = getLessonForConcept("two-step-equations");
+  const wordProblemLesson = getLessonForConcept("solve-word-problems");
 
   assert.equal(ALGEBRA_FOUNDATIONS_MODULE.title, "Algebra Foundations");
   assert.ok(ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.length >= 20);
-  assert.ok(ALGEBRA_LESSONS.length >= 4);
+  assert.ok(ALGEBRA_LESSONS.length >= 10);
   assert.equal(concept?.label, "Two-step equations");
   assert.equal(lesson?.title, "Two-step equations");
   assert.match(lesson?.hint ?? "", /constant|coefficient|undo/i);
   assert.match(lesson?.remediation ?? "", /add 2|divide by 3|mistake/i);
   assert.match(lesson?.successFeedback ?? "", /correct|stable order/i);
+  assert.equal(wordProblemLesson?.title, "Solve and interpret");
+  assert.match(wordProblemLesson?.remediation ?? "", /context|original sentence/i);
   assert.deepEqual(concept?.prerequisites, [
     "one-step-addition-equations",
     "one-step-subtraction-equations",
