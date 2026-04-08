@@ -12,8 +12,6 @@ export const CONCEPT_NODE_STATES = [
 export const V1_INTERACTIONS = [
   "none",
   "tap-choice",
-  "repeat-sound",
-  "trace-symbol",
   "read-respond",
   "math-input",
 ];

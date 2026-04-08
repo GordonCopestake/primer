@@ -2,7 +2,7 @@ import { V1_INTERACTIONS, V1_SCENE_KINDS } from "./curriculum.js";
 
 const VALID_TRANSITIONS = new Set(["fade", "slide", "pan"]);
 const VALID_TONES = new Set(["calm", "encouraging", "celebratory", "focused", "curious"]);
-const SAFE_RECIPE_IDS = new Set(["ambient_safe_path", "neutral_choice_board", "symbol_trace_board"]);
+const SAFE_RECIPE_IDS = new Set(["ambient_safe_path", "neutral_choice_board"]);
 
 export const validateSceneBlueprint = (blueprint, decision = null) => {
   const errors = [];
@@ -49,14 +49,6 @@ export const validateSceneBlueprint = (blueprint, decision = null) => {
     if (!Array.isArray(options) || options.length === 0 || options.length > 4) {
       errors.push("Tap choice must contain one to four options.");
     }
-  }
-
-  if (interactionType === "trace-symbol" && !blueprint?.interaction?.target) {
-    errors.push("Trace symbol scenes require a target.");
-  }
-
-  if (interactionType === "repeat-sound" && !blueprint?.interaction?.phoneme) {
-    errors.push("Repeat sound scenes require a phoneme.");
   }
 
   if (interactionType === "read-respond") {

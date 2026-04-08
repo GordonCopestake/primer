@@ -10,16 +10,6 @@ const createTapChoiceInteraction = () => ({
   })),
 });
 
-const createTraceInteraction = () => ({
-  type: "trace-symbol",
-  target: "M",
-});
-
-const createRepeatInteraction = () => ({
-  type: "repeat-sound",
-  phoneme: "m",
-});
-
 const createMathInputInteraction = (objectiveId) => {
   if (objectiveId.includes("two-step-equations")) {
     return {
@@ -60,28 +50,12 @@ const chooseInteraction = (request) => {
   const allowed = request.hardConstraints.allowedInteractionTypes;
   const objectiveId = request.hardConstraints.objectiveId ?? "";
 
-  if (request.latestInput.type === "trace-result" && allowed.includes("trace-symbol")) {
-    return createTraceInteraction();
-  }
-
-  if (request.latestInput.type === "transcript" && allowed.includes("repeat-sound")) {
-    return createRepeatInteraction();
-  }
-
   if (allowed.includes("math-input")) {
     return createMathInputInteraction(objectiveId);
   }
 
   if (allowed.includes("tap-choice")) {
     return createTapChoiceInteraction();
-  }
-
-  if (allowed.includes("trace-symbol")) {
-    return createTraceInteraction();
-  }
-
-  if (allowed.includes("repeat-sound")) {
-    return createRepeatInteraction();
   }
 
   return createNoneInteraction();
@@ -108,11 +82,7 @@ export const proposeSceneBlueprint = (request) => {
         text:
           interaction.type === "math-input"
             ? "Solve the equation carefully, then enter your answer."
-            : interaction.type === "trace-symbol"
-            ? "Trace the large symbol, then continue when it feels steady."
-            : interaction.type === "repeat-sound"
-              ? "Listen for the sound and repeat it, or use the tap path."
-              : "Choose one clear option to continue.",
+            : "Choose one clear algebra option to continue.",
         maxChars: request.hardConstraints.maxNarrationChars,
         estDurationMs: 1800,
         bargeInAllowed: true,
@@ -120,12 +90,7 @@ export const proposeSceneBlueprint = (request) => {
       interaction,
       visualIntent: {
         type: "recipe",
-        recipeId:
-          interaction.type === "trace-symbol"
-            ? "symbol_trace_board"
-            : interaction.type === "math-input"
-              ? "neutral_choice_board"
-              : "neutral_choice_board",
+        recipeId: "neutral_choice_board",
         vars: {
           locale: request.hardConstraints.locale,
           provider: PINNED_PROVIDER,

@@ -14,13 +14,13 @@ import {
   nextCurriculumDecision as nextCurriculumDecisionCore,
   setActiveScene as setActiveSceneCore,
   updateConsentSettings as updateConsentSettingsCore,
-} from "../shared/core.js";
+} from "../../../../packages/core/src/index.js";
 import {
   createStableError as createStableErrorSchema,
   validateDirectorRequest as validateDirectorRequestSchema,
   validateDirectorResponse as validateDirectorResponseSchema,
   validateSceneBlueprint,
-} from "../shared/schemas.js";
+} from "../../../../packages/schemas/src/index.js";
 
 const DIRECTOR_TIMEOUT_MS = 3_500;
 const IMAGE_TIMEOUT_MS = 2_500;
@@ -53,47 +53,9 @@ const validateDirectorResponse = (response, hardConstraints) =>
 const getRelayBaseUrl = () =>
   String(globalThis.process?.env?.PRIMER_RELAY_BASE_URL ?? APP_CONFIG.relayBaseUrl ?? "").trim();
 
-const createTapChoiceFallbackScene = (scene) => {
-  if (scene?.interaction?.type !== "repeat-sound") {
-    return scene;
-  }
-
-  const phoneme = String(scene.interaction.phoneme || "").trim().toLowerCase();
-  const symbol = phoneme ? phoneme[0].toUpperCase() : "M";
-  const distractors = ["S", "T", "L"].filter((option) => option !== symbol).slice(0, 2);
-
-  return {
-    ...scene,
-    narration: {
-      ...scene.narration,
-      text: `Use the tap path. Choose the letter for the sound ${symbol}.`,
-      maxChars: Math.max(scene.narration?.maxChars ?? 0, 64),
-    },
-    interaction: {
-      type: "tap-choice",
-      options: [
-        { id: symbol, label: symbol, audioLabel: `Letter ${symbol}`, correct: true },
-        ...distractors.map((option) => ({
-          id: option,
-          label: option,
-          audioLabel: `Letter ${option}`,
-          correct: false,
-        })),
-      ],
-    },
-  };
-};
-
 const normalizeSceneForRuntime = (scene, runtimeState) => {
   if (!scene) {
     return createFallbackScene("scene-missing");
-  }
-
-  if (
-    scene.interaction?.type === "repeat-sound" &&
-    (!runtimeState?.consentAndSettings?.soundEnabled || !runtimeState?.capabilities?.localTTS)
-  ) {
-    return createTapChoiceFallbackScene(scene);
   }
 
   return scene;
@@ -679,7 +641,7 @@ const createMockDirectorResponse = (request, localScene) => {
     },
     visualIntent: {
       ...(localScene.visualIntent ?? { type: "recipe", recipeId: "neutral_choice_board", vars: {} }),
-      recipeId: localScene.interaction?.type === "trace-symbol" ? "symbol_trace_board" : "neutral_choice_board",
+      recipeId: "neutral_choice_board",
     },
   };
 
@@ -1035,7 +997,6 @@ export {
   createDefaultState,
   createFallbackScene,
   createStableError,
-  createTapChoiceFallbackScene,
   decryptBackupPayload,
   deleteAssetRecord,
   detectCapabilities,

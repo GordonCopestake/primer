@@ -315,48 +315,42 @@ test("short text validator accepts bounded textual responses", () => {
   assert.equal(result.reason, "short-text");
 });
 
-test("repeat-sound scenes fall back to a tap path when local audio is unavailable", () => {
-  const state = runtimeModule.createDefaultState({
-    capabilities: {
-      localTTS: false,
+test("scene normalization preserves bounded algebra interactions unchanged", () => {
+  const scene = {
+    version: 1,
+    scene: {
+      id: "scene_order_of_operations",
+      kind: "assessment",
+      objectiveId: "diagnostic.order-of-operations",
+      transition: "fade",
+      tone: "focused",
     },
-  });
-
-  const normalized = runtimeModule.normalizeSceneForRuntime(
-    {
-      version: 1,
-      scene: {
-        id: "scene_repeat_sound",
-        kind: "lesson",
-        objectiveId: "reading.symbol-match.1",
-        transition: "fade",
-        tone: "curious",
-      },
-      narration: {
-        text: "Repeat the sound m.",
-        maxChars: 90,
-        estDurationMs: 1200,
-        bargeInAllowed: true,
-      },
-      interaction: {
-        type: "repeat-sound",
-        phoneme: "m",
-      },
-      visualIntent: {
-        type: "recipe",
-        recipeId: "neutral_choice_board",
-        vars: {},
-      },
-      evidence: {
-        observedSkill: "repeat-sound",
-        confidenceHint: 0.6,
-      },
+    narration: {
+      text: "Diagnostic check: Order of operations.",
+      maxChars: 90,
+      estDurationMs: 1200,
+      bargeInAllowed: true,
     },
-    state,
-  );
+    interaction: {
+      type: "tap-choice",
+      options: [
+        { id: "14", label: "14", audioLabel: "14", correct: true },
+        { id: "20", label: "20", audioLabel: "20", correct: false },
+      ],
+    },
+    visualIntent: {
+      type: "recipe",
+      recipeId: "neutral_choice_board",
+      vars: {},
+    },
+    evidence: {
+      observedSkill: "order-of-operations",
+      confidenceHint: 0.6,
+    },
+  };
 
-  assert.equal(normalized.interaction.type, "tap-choice");
-  assert.equal(normalized.interaction.options[0].id, "M");
+  const normalized = runtimeModule.normalizeSceneForRuntime(scene, runtimeModule.createDefaultState());
+  assert.deepEqual(normalized, scene);
 });
 
 test("mock director can propose a bounded scene when relay is set to mock", async () => {
@@ -644,16 +638,10 @@ test("reset learner state clears progress but preserves local admin and capabili
         tier: "standard-local",
       },
       pedagogicalState: {
-        literacyStage: 3,
-        assessmentStatus: "complete",
-        domainStage: {
-          reading: 3,
-          writing: 2,
-          numeracy: 2,
-          mathematics: 0,
-          science: 0,
-          physics: 0,
-        },
+        diagnosticStatus: "complete",
+        currentConceptId: "two-step-equations",
+        currentObjectiveId: "concept.two-step-equations",
+        recommendedConceptId: "two-step-equations",
       },
       consentAndSettings: {
         cloudEnabled: true,

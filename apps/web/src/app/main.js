@@ -1066,48 +1066,6 @@ const renderScene = (scene) => {
     )
     .join("");
 
-  const traceMarkup =
-    interactionType === "trace-symbol"
-      ? `
-        <div class="trace-stage">
-          <div class="trace-board">
-            <div class="trace-guide">${safeScene.interaction.target}</div>
-            <canvas class="trace-canvas" id="trace-canvas"></canvas>
-          </div>
-          <p class="trace-hint">Trace over the large ${safeScene.interaction.target}. When the shape feels clear, tap Continue.</p>
-          <div class="trace-actions">
-            <button type="button" class="choice-button" id="trace-clear-button">Clear</button>
-            <button
-              type="button"
-              class="choice-button"
-              id="trace-continue-button"
-              data-trace-action="continue"
-              disabled
-            >
-              Continue
-            </button>
-            <button type="button" class="choice-button" data-choice-id="skip" data-correct="false">
-              Skip for now
-            </button>
-          </div>
-        </div>
-      `
-      : "";
-
-  const repeatMarkup =
-    interactionType === "repeat-sound"
-      ? `
-        <div class="choice-grid">
-          <button type="button" class="choice-button" id="repeat-audio-button">
-            Play "${safeScene.interaction.phoneme}" again
-          </button>
-          <button type="button" class="choice-button" id="repeat-tap-path-button">
-            Use tap path
-          </button>
-        </div>
-      `
-      : "";
-
   const continueMarkup =
     interactionType === "none"
       ? `
@@ -1157,7 +1115,7 @@ const renderScene = (scene) => {
       ${
         interactionType === "tap-choice"
           ? `<div class="choice-grid">${choiceMarkup}</div>`
-          : traceMarkup || repeatMarkup || readRespondMarkup || mathInputMarkup || continueMarkup
+          : readRespondMarkup || mathInputMarkup || continueMarkup
       }
       ${
         state.consentAndSettings.captionsEnabled
@@ -1199,117 +1157,6 @@ const renderScene = (scene) => {
       await renderCurrentDecisionScene();
     });
   });
-
-  if (interactionType === "trace-symbol") {
-    const canvas = sceneRoot.querySelector("#trace-canvas");
-    const continueButton = sceneRoot.querySelector("#trace-continue-button");
-    const clearButton = sceneRoot.querySelector("#trace-clear-button");
-    const skipButton = [...sceneRoot.querySelectorAll("[data-choice-id='skip']")][0];
-    const pad = createTracePad(canvas, (ready) => {
-      if (continueButton) {
-        continueButton.disabled = !ready;
-      }
-    });
-    activeTracePad = pad ?? null;
-
-    continueButton?.addEventListener("click", async (event) => {
-      event.preventDefault();
-      const traceMetrics = pad?.getTraceMetrics();
-      const traceScore = scoreTrace(traceMetrics?.points ?? [], traceMetrics?.bounds);
-      const masteryTarget = currentDecision.conceptId ?? currentDecision.activeDomain;
-      latestInput = {
-        type: "trace-result",
-        content: `confidence:${traceScore.confidence}`,
-      };
-
-      if (traceScore.success) {
-        state = appendRecentTurn(state, {
-          role: "user",
-          content: `trace:${safeScene.interaction.target}:local:${traceScore.confidence}`,
-        });
-        if (!isDiagnosticComplete()) {
-          state = advanceAssessment(state, { recommendedConceptId: currentDecision.conceptId });
-        } else {
-          state = applyMasteryEvidence(state, masteryTarget, 1);
-        }
-        persistState();
-        setStatus(`Trace accepted locally (${traceScore.confidence}).`);
-        await renderCurrentDecisionScene();
-        return;
-      }
-
-      if (
-        traceScore.ambiguous &&
-        state.consentAndSettings.cloudEnabled &&
-        state.consentAndSettings.cloudVisionEnabled &&
-        APP_CONFIG.features.cloudVision
-      ) {
-        setLoading("Checking trace");
-        const relayResult = await requestVisionInterpretation({
-          traceDataUrl: traceMetrics?.dataUrl ?? "",
-          decision: currentDecision,
-          target: safeScene.interaction.target,
-        });
-        setLoading("Idle");
-
-        if (relayResult.ok && relayResult.response.success) {
-          state = appendRecentTurn(state, {
-            role: "user",
-            content: `trace:${safeScene.interaction.target}:vision:${relayResult.response.confidence}`,
-          });
-          if (!isDiagnosticComplete()) {
-            state = advanceAssessment(state, { recommendedConceptId: currentDecision.conceptId });
-          } else {
-            state = applyMasteryEvidence(state, masteryTarget, 1);
-          }
-          persistState();
-          setStatus(relayResult.response.feedbackAudio || "Trace accepted after review.");
-          await renderCurrentDecisionScene();
-          return;
-        }
-      }
-
-      setStatus(
-        traceScore.ambiguous
-          ? "Trace was close. Try one clearer stroke before continuing."
-          : "Trace needs a larger, clearer shape before continuing.",
-      );
-    });
-
-    clearButton?.addEventListener("click", () => {
-      pad?.clear();
-      setStatus("Trace cleared.");
-    });
-
-    skipButton?.addEventListener("click", () => {
-      latestInput = {
-        type: "trace-result",
-        content: "skipped",
-      };
-    });
-  }
-
-  if (interactionType === "repeat-sound") {
-    const repeatAudioButton = sceneRoot.querySelector("#repeat-audio-button");
-    const tapPathButton = sceneRoot.querySelector("#repeat-tap-path-button");
-
-    repeatAudioButton?.addEventListener("click", () => {
-      latestInput = {
-        type: "system-start",
-        content: `repeat:${safeScene.interaction.phoneme}`,
-      };
-      speakText(safeScene.interaction.phoneme, `Repeated "${safeScene.interaction.phoneme}".`);
-    });
-
-    tapPathButton?.addEventListener("click", () => {
-      latestInput = {
-        type: "tap-choice",
-        content: `${safeScene.scene.objectiveId}:tap-path`,
-      };
-      renderScene(normalizeSceneForRuntime(safeScene, updateConsentSettings(state, { soundEnabled: false })));
-      setStatus("Tap path opened for this step.");
-    });
-  }
 
   if (interactionType === "none") {
     sceneRoot.querySelector("#continue-scene-button")?.addEventListener("click", async () => {
@@ -1512,9 +1359,9 @@ const renderCurrentDecisionScene = async () => {
       return;
     }
 
-    setStatus("Relay unavailable. Continuing in local deterministic mode.");
+    setStatus("Relay unavailable. Full cloud tutoring needs a configured relay, so Primer is using the bounded local fallback.");
   } else if (state.consentAndSettings.cloudEnabled && !hasProviderKey) {
-    setStatus("Cloud assist is enabled, but no API key is configured. Using local deterministic mode.");
+    setStatus("Cloud assist is enabled, but no BYO API key is configured. Primer is using the bounded local fallback.");
   }
 
   renderScene(localScene);
@@ -1544,6 +1391,7 @@ const updateSettingsForm = () => {
   storageIndicator.textContent =
     `Storage persistence: ${state.consentAndSettings.storagePersistenceGranted}. ` +
     `Relay: ${APP_CONFIG.relayBaseUrl || "disabled"}. Provider: ${state.providerConfig?.providerName || "unset"}. ` +
+    `Cloud tutoring requires a relay plus your own provider key. ` +
     (quota ? `Usage ${Math.round((usage ?? 0) / 1024)} KB of ${Math.round(quota / 1024)} KB.` : "Usage estimate unavailable.");
   assetIndicator.textContent =
     `Assets: ${installedAssets.length} installed, ${Math.round(installedBytes / 1024)} KB local.`;

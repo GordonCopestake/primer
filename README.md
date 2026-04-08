@@ -15,12 +15,14 @@ The current implementation focuses on the bounded algebra MVP foundation:
 
 Primer now targets one bounded algebra foundations module. The shared core, relay contract, and browser runtime are aligned around a local-first learner state, a short diagnostic, a concept graph, and deterministic math-input scenes. The browser also presents a first-run module selection step before starting tutoring.
 
-Primer follows the spec posture: cloud AI with local learner storage and no required login.
+Primer follows the Chunk 1 spec posture: web-first delivery, no required login, BYO API key only, online AI routed through the relay for the full MVP tutoring path, and local learner storage by default.
 
 - progression and persistence stay on-device
 - learner state is stored locally
 - the shell can be installed as a PWA
+- hosted credentials are not part of the MVP; provider/API key details are user-supplied
 - cloud director/chat/image/vision routes are available through the relay
+- relay-backed cloud tutoring is the primary MVP path; local deterministic mode remains a bounded fallback for recovery and testing
 - encrypted exports use AES-GCM with passphrase-derived keys; older XOR exports remain importable for compatibility only
 
 ## Architecture Contracts

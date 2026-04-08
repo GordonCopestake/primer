@@ -32,9 +32,8 @@ test("migrateState converts legacy prototype state into the algebra MVP shape", 
     consentAndSettings: { soundEnabled: false },
     runtimeSession: { recentTurns: [{ role: "user", content: "hello" }] },
     pedagogicalState: {
-      literacyStage: 3,
       assessmentStatus: "complete",
-      currentObjectiveId: "reading.symbol-match.3",
+      currentObjectiveId: "legacy.objective",
     },
   });
 

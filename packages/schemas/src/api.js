@@ -98,7 +98,6 @@ export const validateDirectorResponse = (response, hardConstraints) => {
 
   return validateSceneBlueprint(response.blueprint, {
     activeDomain: hardConstraints.activeDomain,
-    literacyStage: hardConstraints.literacyStage,
     objectiveId: hardConstraints.objectiveId,
     allowedSceneKinds: hardConstraints.allowedSceneKinds,
     allowedInteractionTypes: hardConstraints.allowedInteractionTypes,
