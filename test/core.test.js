@@ -186,6 +186,13 @@ test("algebra module metadata exposes the bounded concept pack", () => {
   assert.match(wordProblemLesson?.remediation ?? "", /context|original sentence/i);
   assert.deepEqual(getLessonForConcept("solution-checking")?.choiceOptions, ["yes", "no"]);
   assert.ok(getLessonForConcept("inverse-operations")?.choiceOptions?.includes("divide by 5"));
+  assert.deepEqual(getLessonForConcept("variables-and-expressions")?.choiceOptions, ["x + 2", "2x", "x - 2", "2 - x"]);
+  assert.deepEqual(getLessonForConcept("translate-word-problems")?.choiceOptions, [
+    "x - 7 = 9",
+    "7 - x = 9",
+    "x + 7 = 9",
+    "9 - 7 = x",
+  ]);
   assert.deepEqual(concept?.prerequisites, [
     "one-step-addition-equations",
     "one-step-subtraction-equations",
