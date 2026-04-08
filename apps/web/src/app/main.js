@@ -113,6 +113,23 @@ const getRecentActivityItems = () =>
     .map((item) => String(item).trim())
     .filter(Boolean);
 
+const getLessonExpectedResponse = (lesson, conceptId) => {
+  if (lesson?.expectedResponse) {
+    return lesson.expectedResponse;
+  }
+
+  if (conceptId === "variables-and-expressions") {
+    return "7";
+  }
+  if (conceptId === "evaluate-expressions") {
+    return "13";
+  }
+  if (conceptId === "one-step-addition-equations") {
+    return "7";
+  }
+  return "4";
+};
+
 const getConceptStateLabel = (conceptId) =>
   deriveConceptStatuses().find((concept) => concept.id === conceptId)?.state ?? "locked";
 
@@ -590,14 +607,7 @@ const createSceneFromDecision = (decision) => {
             : decision.conceptId === "one-step-addition-equations"
               ? "Solve x + 4 = 11."
               : "Solve 2x + 3 = 11."),
-      expectedExpression:
-        decision.conceptId === "variables-and-expressions"
-          ? "7"
-          : decision.conceptId === "evaluate-expressions"
-            ? "13"
-            : decision.conceptId === "one-step-addition-equations"
-              ? "7"
-              : "4",
+      expectedExpression: getLessonExpectedResponse(lesson, decision.conceptId),
     },
     evidence: {
       observedSkill: decision.conceptId,
