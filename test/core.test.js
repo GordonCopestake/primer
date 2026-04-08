@@ -176,6 +176,9 @@ test("algebra module metadata exposes the bounded concept pack", () => {
   assert.ok(ALGEBRA_LESSONS.length >= 4);
   assert.equal(concept?.label, "Two-step equations");
   assert.equal(lesson?.title, "Two-step equations");
+  assert.match(lesson?.hint ?? "", /constant|coefficient|undo/i);
+  assert.match(lesson?.remediation ?? "", /add 2|divide by 3|mistake/i);
+  assert.match(lesson?.successFeedback ?? "", /correct|stable order/i);
   assert.deepEqual(concept?.prerequisites, [
     "one-step-addition-equations",
     "one-step-subtraction-equations",

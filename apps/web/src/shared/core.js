@@ -214,6 +214,9 @@ export const ALGEBRA_LESSONS = [
     objective: "Introduce variables as placeholders and read simple expressions.",
     workedExample: "If x means 4, then x + 3 means 7.",
     prompt: "Write x + 2 for a number that is two more than x.",
+    hint: "Name the unknown first, then describe how the expression changes it.",
+    remediation: "A variable stands for a value that can change. Read x + 2 as 'two more than x', not as a single joined symbol.",
+    successFeedback: "You treated the variable like a number placeholder, which is exactly the right start.",
   },
   {
     id: "lesson.evaluate-expressions",
@@ -223,6 +226,9 @@ export const ALGEBRA_LESSONS = [
     objective: "Replace a variable with a value and simplify.",
     workedExample: "When x = 4, 2x + 1 = 9.",
     prompt: "Evaluate 3x - 2 when x = 5.",
+    hint: "Substitute the given value everywhere the variable appears before simplifying.",
+    remediation: "Write the value in place of x first: 3(5) - 2. Then simplify in order instead of mixing substitution and arithmetic together.",
+    successFeedback: "The substitution and simplification both held together cleanly.",
   },
   {
     id: "lesson.one-step-equations",
@@ -232,6 +238,9 @@ export const ALGEBRA_LESSONS = [
     objective: "Solve x + a = b using inverse operations.",
     workedExample: "x + 5 = 12 becomes x = 7.",
     prompt: "Solve x + 4 = 11.",
+    hint: "Ask which operation is happening to x, then undo that exact operation on both sides.",
+    remediation: "In x + 4 = 11, the variable has 4 added to it. Subtract 4 from both sides before checking the result in the original equation.",
+    successFeedback: "You used the inverse operation and isolated the variable correctly.",
   },
   {
     id: "lesson.two-step-equations",
@@ -241,6 +250,9 @@ export const ALGEBRA_LESSONS = [
     objective: "Solve equations that need two inverse operations.",
     workedExample: "2x + 3 = 11 becomes 2x = 8, then x = 4.",
     prompt: "Solve 3x - 2 = 13.",
+    hint: "Undo the constant first, then undo the coefficient.",
+    remediation: "Treat 3x - 2 = 13 as two operations on x. Add 2 first to isolate 3x, then divide by 3. Reversing the order usually causes the mistake here.",
+    successFeedback: "You reversed the operations in a stable order and arrived at the correct value.",
   },
 ];
 

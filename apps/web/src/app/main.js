@@ -517,7 +517,9 @@ const createSceneFromDecision = (decision) => {
         tone: "celebratory",
       },
       narration: {
-        text: `That step checked out. Primer is ready to move from ${conceptLabel} to the next recommended concept.`,
+        text:
+          lesson?.successFeedback ??
+          `That step checked out. Primer is ready to move from ${conceptLabel} to the next recommended concept.`,
         maxChars: 220,
         estDurationMs: 2000,
         bargeInAllowed: true,
@@ -544,7 +546,9 @@ const createSceneFromDecision = (decision) => {
         tone: "curious",
       },
       narration: {
-        text: `Primer spotted a misconception in ${conceptLabel}. Review the worked step, then try another bounded attempt.`,
+        text:
+          lesson?.remediation ??
+          `Primer spotted a misconception in ${conceptLabel}. Review the worked step, then try another bounded attempt.`,
         maxChars: 220,
         estDurationMs: 2200,
         bargeInAllowed: true,
@@ -569,15 +573,15 @@ const createSceneFromDecision = (decision) => {
       transition: "slide",
       tone: "encouraging",
     },
-      narration: {
+    narration: {
       text: `Next concept: ${conceptLabel}. Solve one bounded algebra step and Primer will update your mastery map.`,
       maxChars: 220,
       estDurationMs: 2400,
       bargeInAllowed: true,
     },
     visualIntent: fallbackScene.visualIntent,
-      interaction: {
-        type: "math-input",
+    interaction: {
+      type: "math-input",
       expressionPrompt: lesson?.prompt ??
         (decision.conceptId === "variables-and-expressions"
           ? "If x = 4, what is x + 3?"
