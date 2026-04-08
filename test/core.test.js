@@ -138,6 +138,22 @@ test("diagnostic completion can derive readiness, prerequisite gaps, and placeme
   assert.equal(nextCurriculumDecision(state).conceptId, "order-of-operations");
 });
 
+test("placement-driven tutoring decisions expose prerequisite and misconception context", () => {
+  let state = createDefaultState();
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "variables-and-expressions" });
+  state = advanceAssessment(state, { correct: false, recommendedConceptId: "variables-and-expressions" });
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "evaluate-expressions" });
+  state = advanceAssessment(state, { correct: false, recommendedConceptId: "one-step-addition-equations" });
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "two-step-equations" });
+
+  const decision = nextCurriculumDecision(state);
+  assert.equal(decision.conceptId, "order-of-operations");
+  assert.equal(decision.isPlacementConcept, true);
+  assert.deepEqual(decision.prerequisiteGaps, ["order-of-operations", "one-step-addition-equations"]);
+  assert.deepEqual(decision.matchingMisconceptions, ["left-to-right-only"]);
+  assert.equal(decision.readiness, "developing");
+});
+
 test("mastery evidence advances toward the next available algebra concept", () => {
   const assessed = recordAssessmentCompletion(createDefaultState(), "variables-and-expressions");
   const shifted = applyMasteryEvidence(assessed, "variables-and-expressions", 1);

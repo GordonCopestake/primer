@@ -144,6 +144,25 @@ const getLessonChoiceOptions = (lesson) =>
 const getConceptStateLabel = (conceptId) =>
   deriveConceptStatuses().find((concept) => concept.id === conceptId)?.state ?? "locked";
 
+const formatConceptLabel = (conceptId) =>
+  ALGEBRA_CONCEPT_GRAPH.find((concept) => concept.id === conceptId)?.label ?? conceptId;
+
+const formatPlacementSupportText = (decision) => {
+  const gapLabels = (decision?.prerequisiteGaps ?? []).map(formatConceptLabel);
+  const misconceptionLabels = (decision?.matchingMisconceptions ?? []).map((tag) => tag.replaceAll("-", " "));
+  const segments = [];
+
+  if (decision?.isPlacementConcept && gapLabels.length > 0) {
+    segments.push(`Primer placed you here to strengthen ${gapLabels[0]}.`);
+  }
+
+  if (misconceptionLabels.length > 0) {
+    segments.push(`Watch for ${misconceptionLabels.join(" and ")} as you work.`);
+  }
+
+  return segments.join(" ");
+};
+
 const syncReducedMotionPreference = () => {
   const prefersReducedMotion = Boolean(reducedMotionQuery?.matches);
   document.documentElement.dataset.reducedMotion = prefersReducedMotion ? "reduce" : "no-preference";
@@ -511,6 +530,7 @@ const createSceneFromDecision = (decision) => {
   const sessionPhase = decision.sessionPhase ?? "learner-attempt";
 
   if (sessionPhase === "explain") {
+    const placementSupport = formatPlacementSupportText(decision);
     return {
       version: 1,
       scene: {
@@ -521,7 +541,10 @@ const createSceneFromDecision = (decision) => {
         tone: "encouraging",
       },
       narration: {
-        text: lesson?.objective ?? `Primer is introducing ${conceptLabel}.`,
+        text:
+          [lesson?.objective ?? `Primer is introducing ${conceptLabel}.`, placementSupport]
+            .filter(Boolean)
+            .join(" "),
         maxChars: 220,
         estDurationMs: 2200,
         bargeInAllowed: true,
@@ -594,6 +617,11 @@ const createSceneFromDecision = (decision) => {
   }
 
   if (sessionPhase === "remediation") {
+    const placementSupport = decision?.matchingMisconceptions?.length
+      ? `This matches the earlier ${decision.matchingMisconceptions
+          .map((tag) => tag.replaceAll("-", " "))
+          .join(" and ")} pattern from your diagnostic, so Primer is slowing the step down.`
+      : "";
     return {
       version: 1,
       scene: {
@@ -605,8 +633,13 @@ const createSceneFromDecision = (decision) => {
       },
       narration: {
         text:
-          lesson?.remediation ??
-          `Primer spotted a misconception in ${conceptLabel}. Review the worked step, then try another bounded attempt.`,
+          [
+            lesson?.remediation ??
+              `Primer spotted a misconception in ${conceptLabel}. Review the worked step, then try another bounded attempt.`,
+            placementSupport,
+          ]
+            .filter(Boolean)
+            .join(" "),
         maxChars: 220,
         estDurationMs: 2200,
         bargeInAllowed: true,
@@ -820,6 +853,14 @@ const renderConceptDetailView = (conceptId) => {
 
   const dependents = ALGEBRA_CONCEPT_GRAPH.filter((entry) => entry.prerequisites.includes(concept.id));
   const lessonReady = isDiagnosticComplete() && getConceptStateLabel(concept.id) !== "locked";
+  const prerequisiteGaps = state.pedagogicalState.prerequisiteGaps ?? [];
+  const likelyMisconceptions = state.pedagogicalState.likelyMisconceptions ?? [];
+  const matchingMisconceptions = likelyMisconceptions.filter((tag) => concept.misconceptionTags.includes(tag));
+  const placementReason = prerequisiteGaps.includes(concept.id)
+    ? "Diagnostic placement flagged this concept as a prerequisite gap."
+    : state.pedagogicalState.recommendedConceptId === concept.id
+      ? "This is the current recommended starting concept."
+      : "No special diagnostic placement note for this concept.";
 
   sceneRoot.innerHTML = `
     <div class="scene-body">
@@ -845,6 +886,18 @@ const renderConceptDetailView = (conceptId) => {
         <section class="detail-card">
           <h3>Common misconceptions</h3>
           <p class="helper">${concept.misconceptionTags.join(", ")}</p>
+        </section>
+        <section class="detail-card">
+          <h3>Placement note</h3>
+          <p class="helper">${placementReason}</p>
+        </section>
+        <section class="detail-card">
+          <h3>Focus signals</h3>
+          <p class="helper">${
+            matchingMisconceptions.length
+              ? matchingMisconceptions.map((tag) => tag.replaceAll("-", " ")).join(", ")
+              : "No matching diagnostic misconception signals for this concept."
+          }</p>
         </section>
       </div>
       <div class="trace-actions">

@@ -38,6 +38,10 @@ const makeConceptDecision = (state, conceptId) => {
   const lesson = getLessonForConcept(conceptId);
   const lessonRecord = state.pedagogicalState.lessonRecords?.[`lesson.${conceptId}`] ?? {};
   const sessionPhase = lessonRecord.sessionPhase ?? DEFAULT_SESSION_PHASE;
+  const prerequisiteGaps = state.pedagogicalState.prerequisiteGaps ?? [];
+  const likelyMisconceptions = state.pedagogicalState.likelyMisconceptions ?? [];
+  const conceptMisconceptions = concept?.misconceptionTags ?? [];
+  const matchingMisconceptions = likelyMisconceptions.filter((tag) => conceptMisconceptions.includes(tag));
 
   return {
     moduleId: ALGEBRA_FOUNDATIONS_MODULE.id,
@@ -54,6 +58,11 @@ const makeConceptDecision = (state, conceptId) => {
       sessionPhase === "learner-attempt" ? ["math-input", "tap-choice", "read-respond", "none"] : ["none"],
     maxNarrationChars: 220,
     recommendedConceptId: state.pedagogicalState.recommendedConceptId,
+    readiness: state.pedagogicalState.readiness,
+    prerequisiteGaps,
+    likelyMisconceptions,
+    isPlacementConcept: prerequisiteGaps.includes(conceptId),
+    matchingMisconceptions,
   };
 };
 
