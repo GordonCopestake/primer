@@ -295,8 +295,14 @@ test("math input validator accepts equivalent numeric answers", () => {
   assert.match(result.feedback, /checks out|equivalent/i);
 });
 
+test("math input validator accepts equivalent symbolic answers", () => {
+  const result = runtimeModule.validateMathInputResponse("(x + 1) + 2", "x + 3");
+  assert.equal(result.correct, true);
+  assert.equal(result.mode, "expression");
+});
+
 test("math input validator rejects malformed expressions", () => {
-  const result = runtimeModule.validateMathInputResponse("alert(1)", "4");
+  const result = runtimeModule.validateMathInputResponse("2**x", "4");
   assert.equal(result.correct, false);
   assert.equal(result.reason, "syntax");
   assert.match(result.feedback, /could not be parsed|check symbols/i);
@@ -307,6 +313,18 @@ test("math input validator returns concept-aware remediation for incorrect algeb
   assert.equal(result.correct, false);
   assert.equal(result.reason, "conceptual");
   assert.match(result.feedback, /inverse operation|check the result/i);
+});
+
+test("math input validator flags mismatched equation form", () => {
+  const result = runtimeModule.validateMathInputResponse("x + 4", "x = 4");
+  assert.equal(result.correct, false);
+  assert.equal(result.reason, "equation-form");
+});
+
+test("math input validator rejects unsupported variables safely", () => {
+  const result = runtimeModule.validateMathInputResponse("y + 2", "x + 2");
+  assert.equal(result.correct, false);
+  assert.equal(result.reason, "unsupported-variable");
 });
 
 test("short text validator accepts bounded textual responses", () => {

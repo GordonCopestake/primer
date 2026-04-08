@@ -8,12 +8,14 @@ import {
   createDefaultState as createDefaultStateCore,
   createFallbackScene as createFallbackSceneCore,
   detectCapabilities as detectCapabilitiesCore,
+  getMathValidationFeedbackMessage as getMathFeedbackMessageCore,
   interpretScene as interpretSceneCore,
   getLessonForConcept as getLessonForConceptCore,
   migrateState as migrateStateCore,
   nextCurriculumDecision as nextCurriculumDecisionCore,
   setActiveScene as setActiveSceneCore,
   updateConsentSettings as updateConsentSettingsCore,
+  validateMathResponse as validateMathResponseCore,
 } from "../../../../packages/core/src/index.js";
 import {
   createStableError as createStableErrorSchema,
@@ -50,6 +52,10 @@ const createStableError = (code, message, details = null) => createStableErrorSc
 const validateDirectorRequest = (request) => validateDirectorRequestSchema(request);
 const validateDirectorResponse = (response, hardConstraints) =>
   validateDirectorResponseSchema(response, hardConstraints);
+const getMathFeedbackMessage = (validation, conceptId = "algebra") =>
+  getMathFeedbackMessageCore(validation, conceptId);
+const validateMathInputResponse = (input, expectedExpression, conceptId = null) =>
+  validateMathResponseCore(input, expectedExpression, conceptId);
 const getRelayBaseUrl = () =>
   String(globalThis.process?.env?.PRIMER_RELAY_BASE_URL ?? APP_CONFIG.relayBaseUrl ?? "").trim();
 
@@ -792,96 +798,6 @@ const scoreTrace = (points, bounds) => {
     confidence,
     ambiguous: confidence >= 0.45 && confidence < 0.72,
   };
-};
-
-const getMathFeedbackMessage = (validation, conceptId = "algebra") => {
-  if (validation.correct) {
-    return validation.mode === "numeric"
-      ? "That answer checks out numerically."
-      : "That expression is equivalent to the expected result.";
-  }
-
-  if (validation.reason === "syntax") {
-    return "The response could not be parsed as safe algebra. Check symbols, operators, and equation format.";
-  }
-
-  if (validation.reason === "equation-form") {
-    return "Keep the equality sign and isolate the value or expression you want to show.";
-  }
-
-  const conceptMessages = {
-    "variables-and-expressions": "Focus on what the variable stands for before combining anything.",
-    "evaluate-expressions": "Substitute the given value first, then simplify in order.",
-    "one-step-addition-equations": "Undo the addition with the inverse operation, then check the result.",
-    "two-step-equations": "Reverse the operations one step at a time instead of jumping straight to the answer.",
-  };
-
-  return conceptMessages[conceptId] ?? "Try the next step more carefully and check each operation.";
-};
-
-const classifyConceptualMathError = (inputRhs, expectedRhs) => {
-  if (inputRhs.includes("=") || expectedRhs.includes("=")) {
-    return "equation-form";
-  }
-
-  return "conceptual";
-};
-
-const validateMathInputResponse = (input, expectedExpression, conceptId = null) => {
-  const normalizedInput = String(input ?? "").trim();
-  const normalizedExpected = String(expectedExpression ?? "").trim();
-  const safePattern = /^[0-9xX+\-*/().\s=]+$/;
-
-  if (!normalizedInput || !safePattern.test(normalizedInput)) {
-    return {
-      correct: false,
-      reason: "syntax",
-      feedback: getMathFeedbackMessage({ correct: false, reason: "syntax" }, conceptId ?? "algebra"),
-    };
-  }
-
-  const inputRhs = normalizedInput.includes("=") ? normalizedInput.split("=").pop().trim() : normalizedInput;
-  const expectedRhs = normalizedExpected.includes("=")
-    ? normalizedExpected.split("=").pop().trim()
-    : normalizedExpected;
-
-  const asNumber = Number(inputRhs);
-  const expectedNumber = Number(expectedRhs);
-  if (Number.isFinite(asNumber) && Number.isFinite(expectedNumber)) {
-    const correct = Math.abs(asNumber - expectedNumber) <= 1e-6;
-    const reason = correct ? "numeric" : classifyConceptualMathError(inputRhs, expectedRhs);
-    return {
-      correct,
-      reason,
-      mode: "numeric",
-      feedback: getMathFeedbackMessage({ correct, reason, mode: "numeric" }, conceptId ?? "algebra"),
-    };
-  }
-
-  try {
-    const toEvaluator = (expr) => Function("x", `"use strict"; return (${expr});`);
-    const leftEval = toEvaluator(inputRhs);
-    const rightEval = toEvaluator(expectedRhs);
-    const checkpoints = [-3, -1, 0, 1, 2, 4];
-    const equivalent = checkpoints.every((x) => {
-      const left = leftEval(x);
-      const right = rightEval(x);
-      return Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) <= 1e-6;
-    });
-    const reason = equivalent ? "expression" : classifyConceptualMathError(inputRhs, expectedRhs);
-    return {
-      correct: equivalent,
-      reason,
-      mode: "expression",
-      feedback: getMathFeedbackMessage({ correct: equivalent, reason, mode: "expression" }, conceptId ?? "algebra"),
-    };
-  } catch {
-    return {
-      correct: false,
-      reason: "syntax",
-      feedback: getMathFeedbackMessage({ correct: false, reason: "syntax" }, conceptId ?? "algebra"),
-    };
-  }
 };
 
 const validateShortTextResponse = (input, expectedResponse) => {

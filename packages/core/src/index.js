@@ -5,5 +5,6 @@ export * from "./contracts.js";
 export * from "./curriculumEngine.js";
 export * from "./fallback.js";
 export * from "./interpreter.js";
+export * from "./mathValidation.js";
 export * from "./privacy.js";
 export * from "./state.js";

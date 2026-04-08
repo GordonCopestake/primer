@@ -10,6 +10,7 @@ import {
   ADAPTER_CONTRACTS,
   ALGEBRA_SUBJECT_PACK,
   ALGEBRA_VALIDATION_CONSTRAINTS,
+  MATH_VALIDATION_PLUGIN,
   advanceAssessment,
   advanceTutoringSession,
   applyMasteryEvidence,
@@ -511,6 +512,7 @@ test("formal adapter contracts expose the spec extension points", () => {
     }).ok,
     true,
   );
+  assert.equal(validateContractImplementation("validationPlugin", MATH_VALIDATION_PLUGIN).ok, true);
 });
 
 test("export manifests are versioned and validate required metadata", () => {
