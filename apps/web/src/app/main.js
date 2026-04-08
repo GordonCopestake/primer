@@ -90,23 +90,6 @@ let latestInput = {
 };
 let activeTracePad = null;
 let orbState = "idle";
-let lastLessonScene = null;
-
-const algebraConceptGraph = [
-  { id: "arith.recap", label: "Arithmetic recap", prerequisites: [] },
-  { id: "arith.negative", label: "Negative numbers", prerequisites: ["arith.recap"] },
-  { id: "arith.order", label: "Order of operations", prerequisites: ["arith.recap"] },
-  { id: "alg.variables", label: "Variables and symbols", prerequisites: ["arith.order"] },
-  { id: "alg.expressions", label: "Algebraic expressions", prerequisites: ["alg.variables"] },
-  { id: "alg.simplify", label: "Simplifying expressions", prerequisites: ["alg.expressions"] },
-  { id: "alg.inverse", label: "Inverse operations", prerequisites: ["alg.simplify"] },
-  { id: "alg.balance", label: "Balancing equations", prerequisites: ["alg.inverse"] },
-  { id: "alg.onestep", label: "One-step equations", prerequisites: ["alg.balance"] },
-  { id: "alg.twostep", label: "Two-step equations", prerequisites: ["alg.onestep"] },
-  { id: "alg.bothsides", label: "Variables on both sides", prerequisites: ["alg.twostep"] },
-  { id: "alg.check", label: "Checking solutions", prerequisites: ["alg.bothsides"] },
-  { id: "alg.word", label: "Word problems", prerequisites: ["alg.check"] },
-];
 
 const setOrbState = (nextState) => {
   orbState = nextState;
@@ -718,19 +701,6 @@ const renderScene = (scene) => {
       `
       : "";
 
-  const mathInputMarkup =
-    interactionType === "math-input"
-      ? `
-        <div class="trace-stage">
-          <p class="trace-hint">${safeScene.interaction.expressionPrompt}</p>
-          <input id="math-input-field" class="response-input" type="text" inputmode="text" />
-          <div class="trace-actions">
-            <button type="button" class="choice-button" id="math-submit-button">Check answer</button>
-          </div>
-        </div>
-      `
-      : "";
-
   sceneRoot.innerHTML = `
     <div class="scene-body">
       <div class="scene-meta">
@@ -741,7 +711,7 @@ const renderScene = (scene) => {
       ${
         interactionType === "tap-choice"
           ? `<div class="choice-grid">${choiceMarkup}</div>`
-          : traceMarkup || repeatMarkup || readRespondMarkup || mathInputMarkup || continueMarkup
+          : traceMarkup || repeatMarkup || readRespondMarkup || continueMarkup
       }
       ${
         state.consentAndSettings.captionsEnabled
@@ -939,33 +909,6 @@ const renderScene = (scene) => {
         content: `read-respond-skip:${safeScene.scene.objectiveId}`,
       });
       persistState();
-      await renderCurrentDecisionScene();
-    });
-  }
-
-  if (interactionType === "math-input") {
-    const input = sceneRoot.querySelector("#math-input-field");
-    const submit = sceneRoot.querySelector("#math-submit-button");
-    submit?.addEventListener("click", async () => {
-      const learnerInput = String(input?.value ?? "").trim();
-      const validation = validateMathInputResponse(learnerInput, safeScene.interaction.expectedExpression);
-      latestInput = {
-        type: "transcript",
-        content: `math:${learnerInput || "empty"}`,
-      };
-      state = appendRecentTurn(state, {
-        role: "user",
-        content: `math-input:${safeScene.scene.objectiveId}:${learnerInput || "empty"}`,
-      });
-      state = applyMasteryEvidence(state, currentDecision.activeDomain, validation.correct ? 1 : 0);
-      persistState();
-      setStatus(
-        validation.correct
-          ? "Correct. Nice algebra step."
-          : validation.reason === "syntax"
-            ? "That input could not be parsed. Try a simpler expression or number."
-            : "Not quite yet. Try the inverse-operation hint and check again.",
-      );
       await renderCurrentDecisionScene();
     });
   }

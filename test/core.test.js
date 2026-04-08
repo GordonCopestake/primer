@@ -52,8 +52,7 @@ test("new learner starts in embedded baseline assessment", () => {
   assert.equal(decision.objectiveId, "baseline.observe-sound.0");
   assert.deepEqual(decision.allowedSceneKinds, ["assessment", "fallback"]);
   assert.equal(state.pedagogicalState.currentObjectiveId, "baseline.observe-sound.0");
-  assert.equal(state.consentAndSettings.cloudEnabled, false);
-  assert.equal(state.providerConfig.providerName, "openrouter");
+  assert.equal(state.consentAndSettings.cloudEnabled, true);
 });
 
 test("assessment advances through staged baseline checkpoints", () => {
@@ -82,10 +81,10 @@ test("writing enters the rotation before numeracy when weaker than reading", () 
   assert.equal(decision.objectiveId, "writing.trace-and-build.2");
 });
 
-test("cloud and backup defaults follow the BYO spec contract", () => {
-  assert.equal(APP_CONFIG.cloudMode, "byok");
-  assert.equal(APP_CONFIG.features.cloudDirector, false);
+test("cloud and backup defaults follow the spec contract", () => {
+  assert.equal(APP_CONFIG.cloudMode, "required");
   assert.equal(APP_CONFIG.features.exportImport, true);
+  assert.equal(APP_CONFIG.features.cloudDirector, true);
 });
 
 test("assessment completion records a bounded stage", () => {

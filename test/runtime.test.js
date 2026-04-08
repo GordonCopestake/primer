@@ -257,49 +257,6 @@ test("director response validator accepts read/respond interaction when constrai
   assert.equal(result.ok, true);
 });
 
-test("director response validator accepts math-input interaction when constrained", () => {
-  const result = validateDirectorResponse(
-    {
-      blueprint: {
-        version: 1,
-        scene: {
-          id: "scene_math_input",
-          kind: "practice",
-          objectiveId: "numeracy.more-less.2",
-          transition: "fade",
-          tone: "focused",
-        },
-        narration: {
-          text: "Solve for x and enter your answer.",
-          maxChars: 120,
-          estDurationMs: 1200,
-          bargeInAllowed: true,
-        },
-        interaction: {
-          type: "math-input",
-          expressionPrompt: "2x + 3 = 11",
-          expectedExpression: "4",
-        },
-        visualIntent: {
-          type: "recipe",
-          recipeId: "neutral_choice_board",
-          vars: {},
-        },
-      },
-    },
-    {
-      activeDomain: "numeracy",
-      literacyStage: 2,
-      objectiveId: "numeracy.more-less.2",
-      allowedSceneKinds: ["practice", "fallback"],
-      allowedInteractionTypes: ["math-input", "tap-choice", "none"],
-      maxNarrationChars: 120,
-    },
-  );
-
-  assert.equal(result.ok, true);
-});
-
 test("local trace scoring accepts broad, deliberate strokes", () => {
   const points = [
     { x: 10, y: 10 },

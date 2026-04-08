@@ -71,15 +71,6 @@ export const validateSceneBlueprint = (blueprint, decision = null) => {
     }
   }
 
-  if (interactionType === "math-input") {
-    if (!blueprint?.interaction?.expressionPrompt || typeof blueprint.interaction.expressionPrompt !== "string") {
-      errors.push("Math input scenes require an expressionPrompt.");
-    }
-    if (!blueprint?.interaction?.expectedExpression || typeof blueprint.interaction.expectedExpression !== "string") {
-      errors.push("Math input scenes require an expectedExpression.");
-    }
-  }
-
   const narrationText = blueprint?.narration?.text ?? "";
   if (/[<>]/.test(narrationText)) {
     errors.push("Raw HTML is not allowed.");

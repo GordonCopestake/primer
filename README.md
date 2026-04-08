@@ -13,25 +13,14 @@ The current implementation focuses on runtime foundations:
 
 ## Current Progress vs New PM Spec
 
-The PM handover spec (`spec.md`) pivots the product toward a bounded BYO-key maths tutor with a concept graph. The current codebase has partial alignment and known gaps.
+Primer presents bounded learning scenes inside a fixed local shell. A learner starts in a deterministic baseline assessment, then progresses through simple reading, writing, and numeracy scenes. The app stores learner state locally, restores the last safe scene after reload, and exposes local settings and backup controls.
 
-### Implemented alignment
+Primer follows the spec posture: cloud AI with local learner storage and no required login.
 
-- no-login local usage with local persistence
-- local export/import support
-- bounded scene/runtime validation and moderation
-- relay stubs for director/chat/image/vision
-- basic adaptive flow scaffolding
-
-### Not yet implemented (major gaps)
-
-- dedicated provider onboarding flow with robust BYO-key UX
-- bounded algebra concept graph (20-30 concepts) and tech-tree dashboard
-- dedicated maths expression input + symbolic equivalence validation
-- structured misconception taxonomy + review scheduler model
-- opt-in telemetry preferences surface and pipeline
-
-The next milestones should prioritize the dedicated maths input + symbolic validator, richer concept-detail interactions, and explicit telemetry consent flows.
+- progression and persistence stay on-device
+- learner state is stored locally
+- the shell can be installed as a PWA
+- cloud director/chat/image/vision routes are available through the relay
 
 ## How To Run It
 
