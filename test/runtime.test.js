@@ -664,7 +664,7 @@ test("recovered scenes fall back safely when persisted scene is malformed", () =
       scene: {
         id: "broken",
         kind: "lesson",
-        objectiveId: "reading.symbol-match.1",
+        objectiveId: "concept.variables-and-expressions",
         transition: "fade",
         tone: "curious",
       },

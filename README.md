@@ -31,12 +31,17 @@ The pluggable MVP contracts are now formalized in code and documented here:
 
 - [`packages/core/src/contracts.js`](/home/gordon/source/primer/packages/core/src/contracts.js)
 - [`docs/contracts.md`](/home/gordon/source/primer/docs/contracts.md)
+- [`docs/subject-pack-schema.md`](/home/gordon/source/primer/docs/subject-pack-schema.md)
+- [`docs/learner-state-schema.md`](/home/gordon/source/primer/docs/learner-state-schema.md)
+- [`docs/validator-contract.md`](/home/gordon/source/primer/docs/validator-contract.md)
+- [`docs/provider-adapters.md`](/home/gordon/source/primer/docs/provider-adapters.md)
+- [`docs/telemetry-schema.md`](/home/gordon/source/primer/docs/telemetry-schema.md)
 
 These cover the subject-pack, provider/model/storage adapter, validation plugin, telemetry sink, export manifest, and fixed UI registry boundaries called for by the spec.
 
 ## Learner State Rules
 
-Learner state is now versioned at schema v4 and keeps:
+Learner state is now versioned at schema v5 and keeps:
 
 - selected module plus persisted module metadata
 - diagnostic records, assessment attempts, and tutoring attempts
