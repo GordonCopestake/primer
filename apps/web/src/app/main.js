@@ -85,6 +85,7 @@ const recognitionCtor = globalThis.SpeechRecognition || globalThis.webkitSpeechR
 let recognition = null;
 let currentDecision = null;
 let currentScene = null;
+let lastLessonScene = null;
 let latestInput = {
   type: "system-start",
   content: "startup",
@@ -311,43 +312,54 @@ const persistScene = (scene) => {
   writeStorage(SCENE_KEY, JSON.stringify(scene));
 };
 
+const selectModule = (moduleId) => {
+  state = createDefaultState({
+    ...state,
+    moduleSelection: {
+      ...state.moduleSelection,
+      selectedModuleId: moduleId,
+      selectedAt: state.moduleSelection.selectedAt ?? new Date().toISOString(),
+    },
+  });
+  persistState();
+};
+
+const renderModuleSelectionView = () => {
+  sceneRoot.innerHTML = `
+    <div class="scene-body">
+      <div class="scene-meta">
+        <span>setup</span>
+        <span>module selection</span>
+      </div>
+      <h2>Choose your starting module</h2>
+      <p class="helper">The MVP currently ships one bounded maths module with a concept map, short diagnostic, and local progress tracking.</p>
+      <div class="choice-grid">
+        <button type="button" class="choice-button" id="select-algebra-module">
+          Algebra foundations
+        </button>
+      </div>
+    </div>
+  `;
+
+  sceneRoot.querySelector("#select-algebra-module")?.addEventListener("click", async () => {
+    selectModule("algebra-foundations");
+    setStatus("Algebra foundations selected.");
+    await renderCurrentDecisionScene();
+  });
+};
+
 const createSceneFromDecision = (decision) => {
   const fallbackScene = createFallbackScene("decision");
 
-  if (decision?.moduleId === "algebra-foundations") {
-    const conceptLabel =
-      ALGEBRA_CONCEPT_GRAPH.find((concept) => concept.id === decision.conceptId)?.label ?? "algebra concept";
+  if (decision?.moduleId !== "algebra-foundations") {
+    return createFallbackScene("decision-miss");
+  }
 
-    if (decision.phase === "diagnostic") {
-      if (decision.inputType === "read-respond") {
-        return {
-          version: 1,
-          scene: {
-            id: `scene_${decision.objectiveId.replaceAll(".", "_")}`,
-            kind: "assessment",
-            objectiveId: decision.objectiveId,
-            transition: "fade",
-            tone: "focused",
-          },
-          narration: {
-            text: "Start with a short algebra diagnostic so Primer can place your first concept.",
-            maxChars: 180,
-            estDurationMs: 2200,
-            bargeInAllowed: true,
-          },
-          visualIntent: fallbackScene.visualIntent,
-          interaction: {
-            type: "read-respond",
-            prompt: decision.prompt,
-            expectedKeywords: ["unknown", "number", "value", "variable"],
-          },
-          evidence: {
-            observedSkill: decision.conceptId,
-            confidenceHint: 0.5,
-          },
-        };
-      }
+  const conceptLabel =
+    ALGEBRA_CONCEPT_GRAPH.find((concept) => concept.id === decision.conceptId)?.label ?? "algebra concept";
 
+  if (decision.phase === "diagnostic") {
+    if (decision.inputType === "short-explanation") {
       return {
         version: 1,
         scene: {
@@ -358,21 +370,16 @@ const createSceneFromDecision = (decision) => {
           tone: "focused",
         },
         narration: {
-          text: `Diagnostic check: ${conceptLabel}.`,
+          text: "Start with a short algebra diagnostic so Primer can place your first concept.",
           maxChars: 180,
-          estDurationMs: 1800,
+          estDurationMs: 2200,
           bargeInAllowed: true,
         },
         visualIntent: fallbackScene.visualIntent,
         interaction: {
-          type: "math-input",
-          expressionPrompt: decision.prompt,
-          expectedExpression:
-            decision.objectiveId === "diagnostic.substitution"
-              ? "9"
-              : decision.objectiveId === "diagnostic.one-step"
-                ? "7"
-                : "4",
+          type: "read-respond",
+          prompt: decision.prompt,
+          expectedKeywords: ["unknown", "number", "value", "variable"],
         },
         evidence: {
           observedSkill: decision.conceptId,
@@ -384,251 +391,76 @@ const createSceneFromDecision = (decision) => {
     return {
       version: 1,
       scene: {
-        id: `scene_${decision.conceptId.replaceAll("-", "_")}`,
-        kind: "lesson",
-        objectiveId: decision.objectiveId,
-        transition: "slide",
-        tone: "encouraging",
-      },
-      narration: {
-        text: `Next concept: ${conceptLabel}. Solve one bounded algebra step and Primer will update your mastery map.`,
-        maxChars: 220,
-        estDurationMs: 2400,
-        bargeInAllowed: true,
-      },
-      visualIntent: fallbackScene.visualIntent,
-      interaction: {
-        type: "math-input",
-        expressionPrompt:
-          decision.conceptId === "variables-and-expressions"
-            ? "If x = 4, what is x + 3?"
-            : decision.conceptId === "evaluate-expressions"
-              ? "Evaluate 3x - 2 when x = 5."
-              : decision.conceptId === "one-step-addition-equations"
-                ? "Solve x + 4 = 11."
-                : "Solve 2x + 3 = 11.",
-        expectedExpression:
-          decision.conceptId === "variables-and-expressions"
-            ? "7"
-            : decision.conceptId === "evaluate-expressions"
-              ? "13"
-              : decision.conceptId === "one-step-addition-equations"
-                ? "7"
-                : "4",
-      },
-      evidence: {
-        observedSkill: decision.conceptId,
-        confidenceHint: 0.68,
-      },
-    };
-  }
-
-  const byObjective = {
-    "baseline.observe-sound.0": {
-      scene: {
-        id: "scene_baseline_observe_sound_0",
-        kind: "assessment",
-        objectiveId: decision.objectiveId,
-        transition: "fade",
-        tone: "calm",
-      },
-      narration: {
-        text: "Tap the sound that feels longest. We are checking where to begin.",
-        maxChars: 90,
-        estDurationMs: 2800,
-        bargeInAllowed: true,
-      },
-      interaction: {
-        type: "tap-choice",
-        options: [
-          { id: "rain", label: "Soft rain", audioLabel: "Soft rain", correct: false },
-          { id: "bell", label: "Bell bell bell", audioLabel: "Bell bell bell", correct: true },
-        ],
-      },
-    },
-    "baseline.symbol-match.1": {
-      scene: {
-        id: "scene_baseline_symbol_match_1",
+        id: `scene_${decision.objectiveId.replaceAll(".", "_")}`,
         kind: "assessment",
         objectiveId: decision.objectiveId,
         transition: "fade",
         tone: "focused",
       },
       narration: {
-        text: "Choose the letter A. This helps place the next reading step.",
-        maxChars: 96,
-        estDurationMs: 2500,
-        bargeInAllowed: true,
-      },
-      interaction: {
-        type: "tap-choice",
-        options: [
-          { id: "A", label: "A", audioLabel: "Letter A", correct: true },
-          { id: "M", label: "M", audioLabel: "Letter M", correct: false },
-          { id: "S", label: "S", audioLabel: "Letter S", correct: false },
-        ],
-      },
-    },
-    "baseline.trace-letter.2": {
-      scene: {
-        id: "scene_baseline_trace_letter_2",
-        kind: "assessment",
-        objectiveId: decision.objectiveId,
-        transition: "slide",
-        tone: "focused",
-      },
-      narration: {
-        text: "Trace the curve and line for B, then continue when it feels steady.",
-        maxChars: 104,
-        estDurationMs: 2600,
-        bargeInAllowed: true,
-      },
-      interaction: {
-        type: "trace-symbol",
-        target: "B",
-      },
-    },
-    "baseline.read-short.3": {
-      scene: {
-        id: "scene_baseline_read_short_3",
-        kind: "assessment",
-        objectiveId: decision.objectiveId,
-        transition: "fade",
-        tone: "curious",
-      },
-      narration: {
-        text: "Pick the short sentence that matches a bright sky.",
-        maxChars: 120,
-        estDurationMs: 2500,
-        bargeInAllowed: true,
-      },
-      interaction: {
-        type: "tap-choice",
-        options: [
-          { id: "blue", label: "The sky is blue.", audioLabel: "The sky is blue.", correct: true },
-          { id: "night", label: "The cave is dark.", audioLabel: "The cave is dark.", correct: false },
-        ],
-      },
-    },
-  };
-
-  if (byObjective[decision.objectiveId]) {
-    return {
-      version: 1,
-      visualIntent: fallbackScene.visualIntent,
-      evidence: fallbackScene.evidence,
-      ...byObjective[decision.objectiveId],
-    };
-  }
-
-  if (decision.activeDomain === "reading") {
-    return {
-      version: 1,
-      scene: {
-        id: `scene_${decision.objectiveId.replaceAll(".", "_")}`,
-        kind: "lesson",
-        objectiveId: decision.objectiveId,
-        transition: "slide",
-        tone: "encouraging",
-      },
-      narration: {
-        text:
-          decision.literacyStage >= 3
-            ? "Choose the sentence that matches the picture in your mind: a calm map."
-            : "Match the symbol that starts the sound you hear: M.",
-        maxChars: 120,
-        estDurationMs: 2400,
-        bargeInAllowed: true,
-      },
-      visualIntent: fallbackScene.visualIntent,
-      interaction:
-        decision.literacyStage >= 3
-          ? {
-              type: "read-respond",
-              prompt: "Read: The map is on the table. Type one key word you heard.",
-              expectedKeywords: ["map", "table"],
-            }
-          : decision.literacyStage >= 2
-          ? {
-              type: "tap-choice",
-              options: [
-                { id: "map", label: "Map", audioLabel: "Map", correct: true },
-                { id: "sun", label: "Sun", audioLabel: "Sun", correct: false },
-                { id: "tree", label: "Tree", audioLabel: "Tree", correct: false },
-              ],
-            }
-          : {
-              type: "repeat-sound",
-              phoneme: "m",
-            },
-      evidence: fallbackScene.evidence,
-    };
-  }
-
-  if (decision.activeDomain === "writing") {
-    return {
-      version: 1,
-      scene: {
-        id: `scene_${decision.objectiveId.replaceAll(".", "_")}`,
-        kind: "practice",
-        objectiveId: decision.objectiveId,
-        transition: "slide",
-        tone: "focused",
-      },
-      narration: {
-        text: "Trace the letter M, then tap continue when the strokes feel clear.",
-        maxChars: 110,
-        estDurationMs: 2200,
-        bargeInAllowed: true,
-      },
-      visualIntent: fallbackScene.visualIntent,
-      interaction: {
-        type: "trace-symbol",
-        target: "M",
-      },
-      evidence: fallbackScene.evidence,
-    };
-  }
-
-  if (decision.activeDomain === "numeracy") {
-    return {
-      version: 1,
-      scene: {
-        id: `scene_${decision.objectiveId.replaceAll(".", "_")}`,
-        kind: "practice",
-        objectiveId: decision.objectiveId,
-        transition: "fade",
-        tone: "curious",
-      },
-      narration: {
-        text: "Which group has more dots?",
-        maxChars: 120,
+        text: `Diagnostic check: ${conceptLabel}.`,
+        maxChars: 180,
         estDurationMs: 1800,
         bargeInAllowed: true,
       },
       visualIntent: fallbackScene.visualIntent,
       interaction: {
-        type:
-          decision.literacyStage >= 2
-            ? "math-input"
-            : "tap-choice",
-        ...(decision.literacyStage >= 2
-          ? {
-              expressionPrompt: "Solve for x: 2x + 3 = 11",
-              expectedExpression: "4",
-            }
-          : {
-              options: [
-                { id: "two", label: "••", audioLabel: "Two dots", correct: false },
-                { id: "four", label: "••••", audioLabel: "Four dots", correct: true },
-              ],
-            }),
+        type: "math-input",
+        expressionPrompt: decision.prompt,
+        expectedExpression:
+          decision.objectiveId === "diagnostic.substitution"
+            ? "9"
+            : decision.objectiveId === "diagnostic.one-step"
+              ? "7"
+              : "4",
       },
-      evidence: fallbackScene.evidence,
+      evidence: {
+        observedSkill: decision.conceptId,
+        confidenceHint: 0.5,
+      },
     };
   }
 
-  return createFallbackScene("decision-miss");
+  return {
+    version: 1,
+    scene: {
+      id: `scene_${decision.conceptId.replaceAll("-", "_")}`,
+      kind: "lesson",
+      objectiveId: decision.objectiveId,
+      transition: "slide",
+      tone: "encouraging",
+    },
+    narration: {
+      text: `Next concept: ${conceptLabel}. Solve one bounded algebra step and Primer will update your mastery map.`,
+      maxChars: 220,
+      estDurationMs: 2400,
+      bargeInAllowed: true,
+    },
+    visualIntent: fallbackScene.visualIntent,
+    interaction: {
+      type: "math-input",
+      expressionPrompt:
+        decision.conceptId === "variables-and-expressions"
+          ? "If x = 4, what is x + 3?"
+          : decision.conceptId === "evaluate-expressions"
+            ? "Evaluate 3x - 2 when x = 5."
+            : decision.conceptId === "one-step-addition-equations"
+              ? "Solve x + 4 = 11."
+              : "Solve 2x + 3 = 11.",
+      expectedExpression:
+        decision.conceptId === "variables-and-expressions"
+          ? "7"
+          : decision.conceptId === "evaluate-expressions"
+            ? "13"
+            : decision.conceptId === "one-step-addition-equations"
+              ? "7"
+              : "4",
+    },
+    evidence: {
+      observedSkill: decision.conceptId,
+      confidenceHint: 0.68,
+    },
+  };
 };
 
 const deriveConceptStatuses = () => {
@@ -1575,7 +1407,10 @@ syncStorageStatus().catch((error) => {
 setOrbState(state.consentAndSettings.soundEnabled ? "idle" : "muted");
 
 const restoredScene = hydrateScene();
-if (restoredScene) {
+if (!state.moduleSelection?.selectedAt) {
+  setStatus("Choose a module to begin.");
+  renderModuleSelectionView();
+} else if (restoredScene) {
   setStatus("Restored the last safe scene.");
   renderScene(recoverSceneForRuntime(restoredScene, state));
 } else {
