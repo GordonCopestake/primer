@@ -4,7 +4,7 @@ import {
   validateDirectorRequest,
   validateDirectorResponse,
 } from "../../../packages/schemas/src/index.js";
-import { PINNED_PROVIDER, proposeSceneBlueprint } from "../providers/mockProvider.js";
+import { MOCK_PROVIDER_ADAPTER, PINNED_PROVIDER } from "../providers/mockProvider.js";
 
 const jsonResponse = (status, body) => ({
   status,
@@ -38,7 +38,7 @@ export const handleDirectorRoute = async (requestBody) => {
     );
   }
 
-  const response = proposeSceneBlueprint(minimizedRequest);
+  const response = MOCK_PROVIDER_ADAPTER.sendTutorTurn(minimizedRequest);
   const responseValidation = validateDirectorResponse(response, minimizedRequest.hardConstraints);
   if (!responseValidation.ok) {
     return jsonResponse(

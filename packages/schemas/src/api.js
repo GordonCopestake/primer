@@ -60,6 +60,24 @@ const validateBoundedTutorRequest = (request) => {
   if (!Array.isArray(request?.hardConstraints?.allowedInteractionTypes)) {
     errors.push("allowedInteractionTypes are required.");
   }
+  if (
+    request?.hardConstraints?.tutoringContext !== undefined &&
+    (typeof request.hardConstraints.tutoringContext !== "object" || request.hardConstraints.tutoringContext === null)
+  ) {
+    errors.push("hardConstraints.tutoringContext must be an object when present.");
+  }
+  if (
+    request?.hardConstraints?.tutoringContext?.choiceOptions !== undefined &&
+    !Array.isArray(request.hardConstraints.tutoringContext.choiceOptions)
+  ) {
+    errors.push("hardConstraints.tutoringContext.choiceOptions must be an array when present.");
+  }
+  if (
+    request?.hardConstraints?.tutoringContext?.responseType !== undefined &&
+    !["math-input", "multiple-choice", "short-text"].includes(request.hardConstraints.tutoringContext.responseType)
+  ) {
+    errors.push("hardConstraints.tutoringContext.responseType must be a supported bounded response type when present.");
+  }
 
   return {
     ok: errors.length === 0,

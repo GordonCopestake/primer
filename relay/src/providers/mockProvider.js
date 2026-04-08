@@ -1,16 +1,28 @@
-const optionPool = ["Map", "Sun", "Tree", "Stone"];
-
-const createTapChoiceInteraction = () => ({
+const createTapChoiceInteraction = (request) => {
+  const authoredOptions = request.hardConstraints?.tutoringContext?.choiceOptions ?? [];
+  const expectedResponse = request.hardConstraints?.tutoringContext?.expectedResponse ?? null;
+  const options = authoredOptions.length > 0 ? authoredOptions : ["7", "5", "9", "4"];
+  return {
   type: "tap-choice",
-  options: optionPool.slice(0, 3).map((label, index) => ({
-    id: label.toLowerCase(),
+  options: options.slice(0, 4).map((label, index) => ({
+    id: String(label).toLowerCase(),
     label,
-    audioLabel: label,
-    correct: index === 0,
+    audioLabel: String(label),
+    correct: expectedResponse ? String(label) === String(expectedResponse) : index === 0,
   })),
-});
+  };
+};
 
-const createMathInputInteraction = (objectiveId) => {
+const createMathInputInteraction = (request, objectiveId) => {
+  const tutoringContext = request.hardConstraints?.tutoringContext ?? {};
+  if (tutoringContext.expectedExpression) {
+    return {
+      type: "math-input",
+      expressionPrompt: tutoringContext.prompt ?? "Solve the bounded algebra step.",
+      expectedExpression: tutoringContext.expectedExpression,
+    };
+  }
+
   if (objectiveId.includes("two-step-equations")) {
     return {
       type: "math-input",
@@ -42,6 +54,12 @@ const createMathInputInteraction = (objectiveId) => {
   };
 };
 
+const createReadRespondInteraction = (request) => ({
+  type: "read-respond",
+  prompt: request.hardConstraints?.tutoringContext?.prompt ?? "Give a short answer.",
+  expectedKeywords: request.hardConstraints?.tutoringContext?.expectedKeywords ?? [],
+});
+
 const createNoneInteraction = () => ({
   type: "none",
 });
@@ -49,13 +67,43 @@ const createNoneInteraction = () => ({
 const chooseInteraction = (request) => {
   const allowed = request.hardConstraints.allowedInteractionTypes;
   const objectiveId = request.hardConstraints.objectiveId ?? "";
+  const tutoringContext = request.hardConstraints?.tutoringContext ?? {};
+  const preferredResponseType = tutoringContext.responseType ?? null;
+
+  if (preferredResponseType === "multiple-choice" && allowed.includes("tap-choice")) {
+    return createTapChoiceInteraction(request);
+  }
+
+  if (preferredResponseType === "math-input" && allowed.includes("math-input")) {
+    return createMathInputInteraction(request, objectiveId);
+  }
+
+  if (preferredResponseType === "short-text" && allowed.includes("read-respond")) {
+    return createReadRespondInteraction(request);
+  }
+
+  if (allowed.includes("tap-choice") && tutoringContext.choiceOptions?.length > 0) {
+    return createTapChoiceInteraction(request);
+  }
+
+  if (allowed.includes("math-input") && tutoringContext.expectedExpression) {
+    return createMathInputInteraction(request, objectiveId);
+  }
+
+  if (allowed.includes("read-respond") && tutoringContext.expectedKeywords?.length > 0) {
+    return createReadRespondInteraction(request);
+  }
 
   if (allowed.includes("math-input")) {
-    return createMathInputInteraction(objectiveId);
+    return createMathInputInteraction(request, objectiveId);
   }
 
   if (allowed.includes("tap-choice")) {
-    return createTapChoiceInteraction();
+    return createTapChoiceInteraction(request);
+  }
+
+  if (allowed.includes("read-respond")) {
+    return createReadRespondInteraction(request);
   }
 
   return createNoneInteraction();
@@ -67,6 +115,7 @@ export const proposeSceneBlueprint = (request) => {
   const kind = request.hardConstraints.allowedSceneKinds[0] ?? "fallback";
   const interaction = chooseInteraction(request);
   const phase = request.hardConstraints.phase ?? "tutoring";
+  const tutoringContext = request.hardConstraints.tutoringContext ?? {};
 
   return {
     blueprint: {
@@ -80,9 +129,12 @@ export const proposeSceneBlueprint = (request) => {
       },
       narration: {
         text:
-          interaction.type === "math-input"
+          tutoringContext.sceneHint ??
+          (interaction.type === "math-input"
             ? "Solve the equation carefully, then enter your answer."
-            : "Choose one clear algebra option to continue.",
+            : interaction.type === "read-respond"
+              ? "Give one short algebra explanation to continue."
+              : "Choose one clear algebra option to continue."),
         maxChars: request.hardConstraints.maxNarrationChars,
         estDurationMs: 1800,
         bargeInAllowed: true,
@@ -125,3 +177,13 @@ export const proposeChatReply = (request) => {
     },
   };
 };
+
+export const MOCK_PROVIDER_ADAPTER = Object.freeze({
+  providerId: PINNED_PROVIDER,
+  sendTutorTurn(request) {
+    return proposeSceneBlueprint(request);
+  },
+  sendChatTurn(request) {
+    return proposeChatReply(request);
+  },
+});

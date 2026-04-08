@@ -4,7 +4,7 @@ import {
   validateChatRequest,
   validateChatResponse,
 } from "../../../packages/schemas/src/index.js";
-import { PINNED_PROVIDER, proposeChatReply } from "../providers/mockProvider.js";
+import { MOCK_PROVIDER_ADAPTER, PINNED_PROVIDER } from "../providers/mockProvider.js";
 
 const jsonResponse = (status, body) => ({
   status,
@@ -38,7 +38,7 @@ export const handleChatRoute = async (requestBody) => {
     );
   }
 
-  const response = proposeChatReply(minimizedRequest);
+  const response = MOCK_PROVIDER_ADAPTER.sendChatTurn(minimizedRequest);
   const responseValidation = validateChatResponse(response, minimizedRequest.maxResponseChars);
   if (!responseValidation.ok) {
     return jsonResponse(
