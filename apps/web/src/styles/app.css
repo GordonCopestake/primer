@@ -154,11 +154,32 @@ h3 {
   gap: 12px;
 }
 
+.setup-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
 .detail-card {
   padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.88);
+}
+
+.screen-form {
+  display: grid;
+  gap: 14px;
+}
+
+.screen-form .setting-row {
+  display: grid;
+  gap: 8px;
+  align-items: start;
+}
+
+.screen-form .setting-row span {
+  font-weight: 600;
 }
 
 .trace-stage {

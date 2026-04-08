@@ -50,6 +50,7 @@ const statusIndicator = document.querySelector("#status-indicator");
 const loadingIndicator = document.querySelector("#loading-indicator");
 const listenButton = document.querySelector("#listen-button");
 const replayButton = document.querySelector("#replay-button");
+const setupViewButton = document.querySelector("#setup-view-button");
 const conceptMapButton = document.querySelector("#concept-map-button");
 const resumeViewButton = document.querySelector("#resume-view-button");
 const importExportViewButton = document.querySelector("#import-export-view-button");
@@ -400,6 +401,7 @@ const selectModule = (moduleId) => {
 };
 
 const renderModuleSelectionView = () => {
+  activeView = "module-selection";
   sceneRoot.innerHTML = `
     <div class="scene-body">
       <div class="scene-meta">
@@ -420,6 +422,110 @@ const renderModuleSelectionView = () => {
     selectModule("algebra-foundations");
     setStatus("Algebra foundations selected.");
     await renderCurrentDecisionScene();
+  });
+};
+
+const renderProviderConfigurationView = () => {
+  activeView = "provider-config";
+  sceneRoot.innerHTML = `
+    <div class="scene-body">
+      <div class="scene-meta">
+        <span>setup</span>
+        <span>provider configuration</span>
+      </div>
+      <h2>Bring your own provider</h2>
+      <p class="helper">Save your provider details locally. Full cloud tutoring still requires a relay, but no hosted Primer credentials are used.</p>
+      <form id="provider-screen-form" class="screen-form">
+        <label class="setting-row">
+          <span>Provider</span>
+          <input id="provider-screen-name" class="response-input" type="text" value="${state.providerConfig?.providerName ?? "openrouter"}" />
+        </label>
+        <label class="setting-row">
+          <span>Model</span>
+          <input id="provider-screen-model" class="response-input" type="text" value="${state.providerConfig?.modelName ?? ""}" />
+        </label>
+        <label class="setting-row">
+          <span>Endpoint URL</span>
+          <input id="provider-screen-endpoint" class="response-input" type="url" value="${state.providerConfig?.endpointUrl ?? ""}" />
+        </label>
+        <label class="setting-row">
+          <span>API Key</span>
+          <input id="provider-screen-key" class="response-input" type="password" value="${state.providerConfig?.apiKey ?? ""}" />
+        </label>
+        <div class="trace-actions">
+          <button id="provider-screen-save" type="submit" class="choice-button">Save provider</button>
+          <button id="provider-screen-settings" type="button" class="choice-button">Open full settings</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  sceneRoot.querySelector("#provider-screen-form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    updateProviderConfig({
+      providerName: sceneRoot.querySelector("#provider-screen-name")?.value.trim() || "openrouter",
+      modelName: sceneRoot.querySelector("#provider-screen-model")?.value.trim() || "",
+      endpointUrl: sceneRoot.querySelector("#provider-screen-endpoint")?.value.trim() || "",
+      apiKey: sceneRoot.querySelector("#provider-screen-key")?.value.trim() || "",
+      configuredAt: new Date().toISOString(),
+    });
+    persistState();
+    updateSettingsForm();
+    renderProviderConfigurationView();
+    setStatus("Provider settings saved locally.");
+  });
+
+  sceneRoot.querySelector("#provider-screen-settings")?.addEventListener("click", () => {
+    updateSettingsForm();
+    settingsDialog?.showModal();
+  });
+};
+
+const renderLandingSetupView = () => {
+  activeView = "setup";
+  const providerConfigured = Boolean(state.providerConfig?.apiKey);
+  const moduleSelected = Boolean(state.moduleSelection?.selectedAt);
+  sceneRoot.innerHTML = `
+    <div class="scene-body">
+      <div class="scene-meta">
+        <span>landing</span>
+        <span>setup</span>
+      </div>
+      <h2>Primer setup</h2>
+      <p class="helper">Start with one bounded algebra module, local-first progress, and a relay-backed optional cloud path.</p>
+      <div class="setup-grid">
+        <section class="detail-card">
+          <h3>Provider status</h3>
+          <p class="helper">${providerConfigured ? "Provider key saved locally." : "No provider key saved yet."}</p>
+        </section>
+        <section class="detail-card">
+          <h3>Module status</h3>
+          <p class="helper">${moduleSelected ? "Algebra foundations selected." : "No starting module chosen yet."}</p>
+        </section>
+        <section class="detail-card">
+          <h3>Storage mode</h3>
+          <p class="helper">Learner state stays local by default and resumes from the last safe scene when possible.</p>
+        </section>
+      </div>
+      <div class="trace-actions">
+        <button id="setup-provider-button" type="button" class="choice-button">Provider configuration</button>
+        <button id="setup-module-button" type="button" class="choice-button">${moduleSelected ? "Review module choice" : "Choose module"}</button>
+        <button id="setup-start-button" type="button" class="choice-button" ${moduleSelected ? "" : "disabled"}>Open tutor</button>
+      </div>
+    </div>
+  `;
+
+  sceneRoot.querySelector("#setup-provider-button")?.addEventListener("click", () => {
+    renderProviderConfigurationView();
+  });
+  sceneRoot.querySelector("#setup-module-button")?.addEventListener("click", () => {
+    renderModuleSelectionView();
+  });
+  sceneRoot.querySelector("#setup-start-button")?.addEventListener("click", () => {
+    renderCurrentDecisionScene().catch((error) => {
+      console.error("Tutor launch failed", error);
+      renderScene(createFallbackScene("setup-launch"));
+    });
   });
 };
 
@@ -811,6 +917,9 @@ const renderConceptMapView = () => {
   const recentActivity = getRecentActivityItems()
     .map((item) => `<li>${item}</li>`)
     .join("");
+  const goals = (state.pedagogicalState.goals ?? [])
+    .map((goal) => `<li>${goal.label}: ${goal.status}</li>`)
+    .join("");
   const prerequisiteGaps = state.pedagogicalState.prerequisiteGaps ?? [];
   const diagnosticSummary = state.pedagogicalState.diagnosticSummary;
 
@@ -848,6 +957,14 @@ const renderConceptMapView = () => {
             recentActivity
               ? `<ul class="helper">${recentActivity}</ul>`
               : `<p class="helper">No recent interactions yet. The next lesson will start the log.</p>`
+          }
+        </section>
+        <section class="detail-card">
+          <h3>Learner goals</h3>
+          ${
+            goals
+              ? `<ul class="helper">${goals}</ul>`
+              : `<p class="helper">No active goals yet. Primer will create one after diagnostic placement.</p>`
           }
         </section>
       </div>
@@ -1535,6 +1652,11 @@ fallbackButton?.addEventListener("click", () => {
   renderScene(createFallbackScene("manual"));
 });
 
+setupViewButton?.addEventListener("click", () => {
+  stopAudioAndInput();
+  renderLandingSetupView();
+});
+
 conceptMapButton?.addEventListener("click", () => {
   stopAudioAndInput();
   renderConceptMapView();
@@ -1895,8 +2017,8 @@ setOrbState(state.consentAndSettings.soundEnabled ? "idle" : "muted");
 
 const restoredScene = hydrateScene();
 if (!state.moduleSelection?.selectedAt) {
-  setStatus("Choose a module to begin.");
-  renderModuleSelectionView();
+  setStatus("Complete setup to begin.");
+  renderLandingSetupView();
 } else if (restoredScene) {
   setStatus("Restored the last safe scene.");
   renderScene(recoverSceneForRuntime(restoredScene, state));
