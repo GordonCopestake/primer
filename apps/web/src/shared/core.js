@@ -762,6 +762,12 @@ const makeConceptDecision = (state, conceptId) => {
     likelyMisconceptions,
     isPlacementConcept: prerequisiteGaps.includes(conceptId),
     matchingMisconceptions,
+    supportLevel:
+      prerequisiteGaps.includes(conceptId) && matchingMisconceptions.length > 0
+        ? "targeted-remediation"
+        : prerequisiteGaps.includes(conceptId)
+          ? "placement-review"
+          : "standard",
   };
 };
 
@@ -1106,15 +1112,31 @@ export const advanceTutoringSession = (state, conceptId, action = "continue") =>
   const lessonRecord = state.pedagogicalState.lessonRecords?.[lessonId] ?? {};
   const sessionPhase = lessonRecord.sessionPhase ?? DEFAULT_SESSION_PHASE;
   const recommendedConceptId = state.pedagogicalState.recommendedConceptId ?? conceptId;
+  const concept = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.find((item) => item.id === conceptId);
+  const prerequisiteGaps = state.pedagogicalState.prerequisiteGaps ?? [];
+  const likelyMisconceptions = state.pedagogicalState.likelyMisconceptions ?? [];
+  const conceptMisconceptions = concept?.misconceptionTags ?? [];
+  const matchingMisconceptions = likelyMisconceptions.filter((tag) => conceptMisconceptions.includes(tag));
+  const shouldInsertTargetedRemediation =
+    prerequisiteGaps.includes(conceptId) &&
+    matchingMisconceptions.length > 0 &&
+    sessionPhase === "worked-example" &&
+    lessonRecord.supportPlanApplied !== true;
 
   let nextConceptId = conceptId;
   let nextSessionPhase = sessionPhase;
+  let supportPlanApplied = lessonRecord.supportPlanApplied === true;
 
   if (action === "continue") {
     if (sessionPhase === "explain") {
       nextSessionPhase = "worked-example";
     } else if (sessionPhase === "worked-example") {
-      nextSessionPhase = "learner-attempt";
+      if (shouldInsertTargetedRemediation) {
+        nextSessionPhase = "remediation";
+        supportPlanApplied = true;
+      } else {
+        nextSessionPhase = "learner-attempt";
+      }
     } else if (sessionPhase === "feedback") {
       nextConceptId = recommendedConceptId;
       nextSessionPhase = "explain";
@@ -1144,6 +1166,7 @@ export const advanceTutoringSession = (state, conceptId, action = "continue") =>
           status: lessonRecord.status ?? "in-progress",
           sessionPhase:
             nextConceptId === conceptId ? nextSessionPhase : state.pedagogicalState.lessonRecords?.[lessonId]?.sessionPhase ?? sessionPhase,
+          supportPlanApplied,
           lastUpdatedAt: new Date().toISOString(),
         },
         ...(nextConceptId !== conceptId
@@ -1153,6 +1176,7 @@ export const advanceTutoringSession = (state, conceptId, action = "continue") =>
                 conceptId: nextConceptId,
                 status: "in-progress",
                 sessionPhase: "explain",
+                supportPlanApplied: false,
                 lastUpdatedAt: new Date().toISOString(),
               },
             }

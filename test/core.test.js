@@ -154,6 +154,31 @@ test("placement-driven tutoring decisions expose prerequisite and misconception 
   assert.equal(decision.readiness, "developing");
 });
 
+test("placement concepts with matching misconception signals insert remediation before learner attempt", () => {
+  let state = createDefaultState();
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "variables-and-expressions" });
+  state = advanceAssessment(state, { correct: false, recommendedConceptId: "variables-and-expressions" });
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "evaluate-expressions" });
+  state = advanceAssessment(state, { correct: false, recommendedConceptId: "one-step-addition-equations" });
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "two-step-equations" });
+
+  let decision = nextCurriculumDecision(state);
+  assert.equal(decision.supportLevel, "targeted-remediation");
+  assert.equal(decision.sessionPhase, "explain");
+
+  state = advanceTutoringSession(state, "order-of-operations", "continue");
+  decision = nextCurriculumDecision(state);
+  assert.equal(decision.sessionPhase, "worked-example");
+
+  state = advanceTutoringSession(state, "order-of-operations", "continue");
+  decision = nextCurriculumDecision(state);
+  assert.equal(decision.sessionPhase, "remediation");
+
+  state = advanceTutoringSession(state, "order-of-operations", "continue");
+  decision = nextCurriculumDecision(state);
+  assert.equal(decision.sessionPhase, "learner-attempt");
+});
+
 test("mastery evidence advances toward the next available algebra concept", () => {
   const assessed = recordAssessmentCompletion(createDefaultState(), "variables-and-expressions");
   const shifted = applyMasteryEvidence(assessed, "variables-and-expressions", 1);
