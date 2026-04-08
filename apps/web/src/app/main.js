@@ -17,6 +17,7 @@ import {
   estimateInstalledAssetBytes,
   estimateStorage,
   encryptBackupPayload,
+  deriveConceptStatuses,
   evictNonEssentialAssets,
   getAssetInstallPlan,
   hydrateAssetIndex,
@@ -150,7 +151,7 @@ const getLessonChoiceOptions = (lesson) =>
   }));
 
 const getConceptStateLabel = (conceptId) =>
-  deriveConceptStatuses().find((concept) => concept.id === conceptId)?.state ?? "locked";
+  deriveConceptStatuses(state).find((concept) => concept.id === conceptId)?.state ?? "locked";
 
 const formatConceptLabel = (conceptId) =>
   ALGEBRA_CONCEPT_GRAPH.find((concept) => concept.id === conceptId)?.label ?? conceptId;
@@ -871,50 +872,12 @@ const createSceneFromDecision = (decision) => {
   };
 };
 
-const deriveConceptStatuses = () => {
-  const masteryByConcept = state.pedagogicalState.masteryByConcept ?? {};
-  const hasConceptMastery = Object.keys(masteryByConcept).length > 0;
-  const dueReviewConceptIds = new Set(
-    (state.pedagogicalState.reviewSchedule ?? [])
-      .filter((entry) => Date.parse(entry.reviewDueAt ?? "") <= Date.now())
-      .map((entry) => entry.conceptId),
-  );
-  const recommendedConceptId =
-    state.pedagogicalState.recommendedConceptId ??
-    state.pedagogicalState.currentConceptId ??
-    ALGEBRA_CONCEPT_GRAPH[0]?.id;
-
-  return ALGEBRA_CONCEPT_GRAPH.map((concept, index) => {
-    const mastery = masteryByConcept[concept.id];
-    if (dueReviewConceptIds.has(concept.id)) {
-      return { ...concept, state: "review due" };
-    }
-
-    if ((mastery?.score ?? 0) >= 1) {
-      return { ...concept, state: "mastered" };
-    }
-
-    if (concept.id === recommendedConceptId) {
-      return { ...concept, state: "recommended next" };
-    }
-
-    const prereqsMet = hasConceptMastery
-      ? concept.prerequisites.every((prereq) => (masteryByConcept[prereq]?.score ?? 0) >= 1)
-      : index === 0;
-
-    return {
-      ...concept,
-      state: prereqsMet ? "available" : "locked",
-    };
-  });
-};
-
 const isDiagnosticComplete = () =>
   (state.pedagogicalState.diagnosticStatus ?? state.pedagogicalState.assessmentStatus) === "complete";
 
 const renderConceptMapView = () => {
   activeView = "concept-map";
-  const nodes = deriveConceptStatuses();
+  const nodes = deriveConceptStatuses(state);
   const rows = nodes
     .map(
       (node) => `

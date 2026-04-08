@@ -217,6 +217,58 @@ export const nextCurriculumDecision = (state) => {
   return makeConceptDecision(state, recommendedConceptId);
 };
 
+export const deriveConceptStatuses = (state) => {
+  const masteryByConcept = state.pedagogicalState.masteryByConcept ?? {};
+  const lessonRecords = state.pedagogicalState.lessonRecords ?? {};
+  const hasLearningState = Object.keys(masteryByConcept).length > 0 || Object.keys(lessonRecords).length > 0;
+  const dueReviewConceptIds = new Set(
+    (state.pedagogicalState.reviewSchedule ?? [])
+      .filter((entry) => Date.parse(entry.reviewDueAt ?? "") <= Date.now())
+      .map((entry) => entry.conceptId),
+  );
+  const recommendedConceptId =
+    state.pedagogicalState.recommendedConceptId ??
+    state.pedagogicalState.currentConceptId ??
+    ALGEBRA_FOUNDATIONS_MODULE.conceptGraph[0]?.id;
+  const currentConceptId = state.pedagogicalState.currentConceptId ?? null;
+
+  return ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.map((concept, index) => {
+    const mastery = masteryByConcept[concept.id] ?? {};
+    const lessonRecord = lessonRecords[`lesson.${concept.id}`] ?? {};
+    const masteryStatus = mastery.status ?? null;
+    const lessonStatus = lessonRecord.status ?? null;
+
+    if (dueReviewConceptIds.has(concept.id)) {
+      return { ...concept, state: "review due" };
+    }
+
+    if ((mastery.score ?? 0) >= 1 || masteryStatus === "mastered") {
+      return { ...concept, state: "mastered" };
+    }
+
+    if (
+      masteryStatus === "in-progress" ||
+      lessonStatus === "in-progress" ||
+      (concept.id === currentConceptId && ((mastery.attempts ?? 0) > 0 || lessonStatus === "in-progress"))
+    ) {
+      return { ...concept, state: "in progress" };
+    }
+
+    if (concept.id === recommendedConceptId) {
+      return { ...concept, state: "recommended next" };
+    }
+
+    const prereqsMet = hasLearningState
+      ? concept.prerequisites.every((prereq) => (masteryByConcept[prereq]?.score ?? 0) >= 1)
+      : index === 0;
+
+    return {
+      ...concept,
+      state: prereqsMet ? "available" : "locked",
+    };
+  });
+};
+
 export const recordAssessmentCompletion = (state, placement = getInitialConceptId()) => {
   const diagnosticSummary =
     typeof placement === "string"

@@ -20,6 +20,7 @@ import {
   createDefaultState,
   createFallbackScene,
   detectCapabilities,
+  deriveConceptStatuses,
   FIXED_UI_COMPONENT_REGISTRY,
   getAlgebraConcept,
   getDiagnosticPlacementConceptId,
@@ -442,6 +443,36 @@ test("algebra concept graph prerequisites and dependents stay internally consist
       assert.equal(dependent?.prerequisites.includes(concept.id), true, `${dependentId} should depend on ${concept.id}`);
     }
   }
+});
+
+test("shared concept status derivation includes the in progress node state", () => {
+  const state = createDefaultState({
+    pedagogicalState: {
+      diagnosticStatus: "complete",
+      currentConceptId: "variables-and-expressions",
+      recommendedConceptId: "evaluate-expressions",
+      masteryByConcept: {
+        "variables-and-expressions": {
+          score: 0.5,
+          status: "in-progress",
+          attempts: 1,
+        },
+      },
+      lessonRecords: {
+        "lesson.variables-and-expressions": {
+          lessonId: "lesson.variables-and-expressions",
+          conceptId: "variables-and-expressions",
+          status: "in-progress",
+          sessionPhase: "learner-attempt",
+        },
+      },
+    },
+  });
+
+  const statuses = deriveConceptStatuses(state);
+
+  assert.equal(statuses.find((concept) => concept.id === "variables-and-expressions")?.state, "in progress");
+  assert.equal(statuses.find((concept) => concept.id === "evaluate-expressions")?.state, "recommended next");
 });
 
 test("invalid scene output is replaced by the safe fallback scene", () => {
