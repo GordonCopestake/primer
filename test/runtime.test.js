@@ -665,16 +665,50 @@ test("offline recovery state retains the last safe scene metadata", () => {
   assert.equal(state.runtimeSession.lastScene.scene.kind, "fallback");
 });
 
-test("encrypted backup payload round-trips with the same passphrase", () => {
+test("encrypted backup payload round-trips with the same passphrase", async () => {
   const payload = JSON.stringify({ learner: "local-learner", stage: 2 });
-  const encrypted = runtimeModule.encryptBackupPayload(payload, "secret-passphrase");
-  const decrypted = runtimeModule.decryptBackupPayload(encrypted, "secret-passphrase");
+  const encrypted = await runtimeModule.encryptBackupPayload(payload, "secret-passphrase");
+  const decrypted = await runtimeModule.decryptBackupPayload(encrypted, "secret-passphrase");
+  const parsed = JSON.parse(encrypted);
+
+  assert.equal(parsed.encryption, runtimeModule.ENCRYPTION_AES_GCM);
+  assert.equal(parsed.formatVersion, runtimeModule.EXPORT_FORMAT_VERSION);
   assert.equal(decrypted, payload);
 });
 
-test("encrypted backup rejects unsupported payload formats", () => {
-  assert.throws(
-    () => runtimeModule.decryptBackupPayload(JSON.stringify({ encryption: "other", payload: "abc" }), "pw"),
+test("encrypted backup rejects unsupported payload formats", async () => {
+  await assert.rejects(
+    runtimeModule.decryptBackupPayload(JSON.stringify({ encryption: "other", payload: "abc" }), "pw"),
     /supported format/i,
   );
+});
+
+test("legacy encrypted backup payloads remain importable", async () => {
+  const payload = JSON.stringify({ learner: "local-learner", stage: 2 });
+  const encrypted = JSON.stringify({
+    encryption: runtimeModule.ENCRYPTION_LEGACY_XOR,
+    payload: Buffer.from(
+      payload
+        .split("")
+        .map((character, index) =>
+          String.fromCharCode(character.charCodeAt(0) ^ "secret-passphrase".charCodeAt(index % "secret-passphrase".length)),
+        )
+        .join(""),
+      "utf8",
+    ).toString("base64"),
+  });
+
+  const decrypted = await runtimeModule.decryptBackupPayload(encrypted, "secret-passphrase");
+  assert.equal(decrypted, payload);
+});
+
+test("export bundle wraps state with a manifest and legacy imports normalize", () => {
+  const state = runtimeModule.createDefaultState();
+  const bundle = runtimeModule.createExportBundle({ state, scene: null, encrypted: true });
+  const normalized = runtimeModule.parseImportBundle({ state, scene: null });
+
+  assert.equal(bundle.manifest.manifestType, "primer-export-manifest");
+  assert.equal(bundle.manifest.encryption, runtimeModule.ENCRYPTION_AES_GCM);
+  assert.equal(normalized.manifest.formatVersion, runtimeModule.EXPORT_FORMAT_VERSION);
+  assert.equal(normalized.state.schemaVersion, state.schemaVersion);
 });

@@ -5,11 +5,14 @@ import {
   ALGEBRA_FOUNDATIONS_MODULE,
   ALGEBRA_LESSONS,
   APP_CONFIG,
+  ADAPTER_CONTRACTS,
   advanceAssessment,
   applyMasteryEvidence,
+  createExportManifest,
   createDefaultState,
   createFallbackScene,
   detectCapabilities,
+  FIXED_UI_COMPONENT_REGISTRY,
   getAlgebraConcept,
   getLessonForConcept,
   interpretScene,
@@ -17,6 +20,8 @@ import {
   nextCurriculumDecision,
   recordAssessmentCompletion,
   setActiveScene,
+  validateContractImplementation,
+  validateExportManifest,
 } from "../packages/core/src/index.js";
 
 test("migrateState converts legacy prototype state into the algebra MVP shape", () => {
@@ -192,4 +197,39 @@ test("cloud and backup defaults follow the spec contract", () => {
   assert.equal(APP_CONFIG.cloudMode, "required");
   assert.equal(APP_CONFIG.features.exportImport, true);
   assert.equal(APP_CONFIG.features.cloudDirector, true);
+});
+
+test("formal adapter contracts expose the spec extension points", () => {
+  assert.deepEqual(Object.keys(ADAPTER_CONTRACTS), [
+    "aiProviderAdapter",
+    "modelAdapter",
+    "storageAdapter",
+    "subjectPack",
+    "validationPlugin",
+    "telemetrySink",
+    "uiComponentRegistry",
+  ]);
+  assert.equal(FIXED_UI_COMPONENT_REGISTRY.length, 9);
+  assert.equal(validateContractImplementation("storageAdapter", {}).ok, false);
+  assert.equal(
+    validateContractImplementation("storageAdapter", {
+      loadState() {},
+      saveState() {},
+      loadScene() {},
+      saveScene() {},
+      exportBackup() {},
+      importBackup() {},
+    }).ok,
+    true,
+  );
+});
+
+test("export manifests are versioned and validate required metadata", () => {
+  const manifest = createExportManifest(createDefaultState(), "primer-aes-gcm-v1", "2026-04-08T12:00:00.000Z");
+  const validation = validateExportManifest(manifest);
+
+  assert.equal(manifest.manifestType, "primer-export-manifest");
+  assert.equal(manifest.formatVersion, 2);
+  assert.equal(manifest.encryption, "primer-aes-gcm-v1");
+  assert.equal(validation.ok, true);
 });

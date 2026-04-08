@@ -9,7 +9,7 @@ The current implementation focuses on the bounded algebra MVP foundation:
 - bounded diagnostic and tutoring decisions
 - dedicated math-input scenes and deterministic validation helpers
 - relay/runtime contracts aligned to the algebra tutor flow
-- local settings, backup controls, and safe fallback handling
+- local settings, manifested backup controls, and safe fallback handling
 
 ## Current Progress vs New PM Spec
 
@@ -21,6 +21,16 @@ Primer follows the spec posture: cloud AI with local learner storage and no requ
 - learner state is stored locally
 - the shell can be installed as a PWA
 - cloud director/chat/image/vision routes are available through the relay
+- encrypted exports use AES-GCM with passphrase-derived keys; older XOR exports remain importable for compatibility only
+
+## Architecture Contracts
+
+The pluggable MVP contracts are now formalized in code and documented here:
+
+- [`packages/core/src/contracts.js`](/home/gordon/source/primer/packages/core/src/contracts.js)
+- [`docs/contracts.md`](/home/gordon/source/primer/docs/contracts.md)
+
+These cover the subject-pack, provider/model/storage adapter, validation plugin, telemetry sink, export manifest, and fixed UI registry boundaries called for by the spec.
 
 ## How To Run It
 

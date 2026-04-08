@@ -12,18 +12,22 @@ import {
   nextCurriculumDecision as nextCurriculumDecisionCore,
   setActiveScene as setActiveSceneCore,
   updateConsentSettings as updateConsentSettingsCore,
-} from "../../../../packages/core/src/index.js";
+} from "../shared/core.js";
 import {
   createStableError as createStableErrorSchema,
   validateDirectorRequest as validateDirectorRequestSchema,
   validateDirectorResponse as validateDirectorResponseSchema,
   validateSceneBlueprint,
-} from "../../../../packages/schemas/src/index.js";
+} from "../shared/schemas.js";
 
 const DIRECTOR_TIMEOUT_MS = 3_500;
 const IMAGE_TIMEOUT_MS = 2_500;
 const VISION_TIMEOUT_MS = 2_500;
 const ASSET_MANIFEST_VERSION = 1;
+const EXPORT_FORMAT_VERSION = 2;
+const ENCRYPTION_AES_GCM = "primer-aes-gcm-v1";
+const ENCRYPTION_LEGACY_XOR = "primer-xor-v1";
+const PBKDF2_ITERATIONS = 250_000;
 const ALGEBRA_CONCEPT_GRAPH = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph;
 
 const createDefaultState = (overrides = {}) => createDefaultStateCore(overrides);
@@ -185,48 +189,193 @@ const lockAdmin = (state) =>
     },
   });
 
-const encodeBase64 = (text) => {
+const encodeBase64 = (bytes) => {
   if (typeof Buffer !== "undefined") {
-    return Buffer.from(text, "utf8").toString("base64");
+    return Buffer.from(bytes).toString("base64");
   }
 
-  return globalThis.btoa(unescape(encodeURIComponent(text)));
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return globalThis.btoa(binary);
 };
 
 const decodeBase64 = (text) => {
   if (typeof Buffer !== "undefined") {
-    return Buffer.from(text, "base64").toString("utf8");
+    return new Uint8Array(Buffer.from(text, "base64"));
   }
 
-  return decodeURIComponent(escape(globalThis.atob(text)));
+  const binary = globalThis.atob(text);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 };
 
-const encryptBackupPayload = (jsonText, passphrase) =>
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+const getCryptoRuntime = async () => {
+  if (globalThis.crypto?.subtle && typeof globalThis.crypto.getRandomValues === "function") {
+    return globalThis.crypto;
+  }
+
+  if (typeof process !== "undefined" && process.versions?.node) {
+    const { webcrypto } = await import("node:crypto");
+    return webcrypto;
+  }
+
+  throw new Error("Secure encryption is unavailable in this runtime.");
+};
+
+const encryptBackupPayloadLegacy = (jsonText, passphrase) =>
   JSON.stringify({
-    encryption: "primer-xor-v1",
+    encryption: ENCRYPTION_LEGACY_XOR,
     payload: encodeBase64(
-      jsonText
-        .split("")
-        .map((character, index) =>
-          String.fromCharCode(character.charCodeAt(0) ^ passphrase.charCodeAt(index % passphrase.length)),
-        )
-        .join(""),
+      textEncoder.encode(
+        jsonText
+          .split("")
+          .map((character, index) =>
+            String.fromCharCode(character.charCodeAt(0) ^ passphrase.charCodeAt(index % passphrase.length)),
+          )
+          .join(""),
+      ),
     ),
   });
 
-const decryptBackupPayload = (encodedText, passphrase) => {
+const decryptBackupPayloadLegacy = (encodedText, passphrase) => {
   const parsed = JSON.parse(encodedText);
-  if (parsed.encryption !== "primer-xor-v1" || typeof parsed.payload !== "string") {
+  if (parsed.encryption !== ENCRYPTION_LEGACY_XOR || typeof parsed.payload !== "string") {
     throw new Error("Backup is not encrypted with the supported format.");
   }
 
-  const decoded = decodeBase64(parsed.payload);
+  const decoded = textDecoder.decode(decodeBase64(parsed.payload));
   return decoded
     .split("")
     .map((character, index) =>
       String.fromCharCode(character.charCodeAt(0) ^ passphrase.charCodeAt(index % passphrase.length)),
     )
     .join("");
+};
+
+const derivePassphraseKey = async (passphrase, salt) => {
+  const cryptoRuntime = await getCryptoRuntime();
+  const baseKey = await cryptoRuntime.subtle.importKey(
+    "raw",
+    textEncoder.encode(passphrase),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  );
+
+  return cryptoRuntime.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt,
+      iterations: PBKDF2_ITERATIONS,
+      hash: "SHA-256",
+    },
+    baseKey,
+    {
+      name: "AES-GCM",
+      length: 256,
+    },
+    false,
+    ["encrypt", "decrypt"],
+  );
+};
+
+const encryptBackupPayload = async (jsonText, passphrase) => {
+  if (typeof passphrase !== "string" || passphrase.length === 0) {
+    throw new Error("Backup passphrase is required.");
+  }
+
+  const cryptoRuntime = await getCryptoRuntime();
+  const salt = cryptoRuntime.getRandomValues(new Uint8Array(16));
+  const iv = cryptoRuntime.getRandomValues(new Uint8Array(12));
+  const key = await derivePassphraseKey(passphrase, salt);
+  const ciphertext = await cryptoRuntime.subtle.encrypt(
+    {
+      name: "AES-GCM",
+      iv,
+    },
+    key,
+    textEncoder.encode(jsonText),
+  );
+
+  return JSON.stringify({
+    encryption: ENCRYPTION_AES_GCM,
+    formatVersion: EXPORT_FORMAT_VERSION,
+    kdf: "pbkdf2-sha256",
+    iterations: PBKDF2_ITERATIONS,
+    salt: encodeBase64(salt),
+    iv: encodeBase64(iv),
+    payload: encodeBase64(new Uint8Array(ciphertext)),
+  });
+};
+
+const decryptBackupPayload = async (encodedText, passphrase) => {
+  if (typeof passphrase !== "string" || passphrase.length === 0) {
+    throw new Error("Backup passphrase is required.");
+  }
+
+  const parsed = JSON.parse(encodedText);
+  if (parsed.encryption === ENCRYPTION_LEGACY_XOR) {
+    return decryptBackupPayloadLegacy(encodedText, passphrase);
+  }
+
+  if (
+    parsed.encryption !== ENCRYPTION_AES_GCM ||
+    parsed.kdf !== "pbkdf2-sha256" ||
+    typeof parsed.payload !== "string" ||
+    typeof parsed.salt !== "string" ||
+    typeof parsed.iv !== "string"
+  ) {
+    throw new Error("Backup is not encrypted with the supported format.");
+  }
+
+  try {
+    const cryptoRuntime = await getCryptoRuntime();
+    const key = await derivePassphraseKey(passphrase, decodeBase64(parsed.salt));
+    const plaintext = await cryptoRuntime.subtle.decrypt(
+      {
+        name: "AES-GCM",
+        iv: decodeBase64(parsed.iv),
+      },
+      key,
+      decodeBase64(parsed.payload),
+    );
+    return textDecoder.decode(new Uint8Array(plaintext));
+  } catch {
+    throw new Error("Backup could not be decrypted with that passphrase.");
+  }
+};
+
+const createExportBundle = ({ state, scene, encrypted = false, exportedAt = new Date().toISOString() }) => ({
+  manifest: {
+    manifestType: "primer-export-manifest",
+    formatVersion: EXPORT_FORMAT_VERSION,
+    schemaVersion: state?.schemaVersion ?? 2,
+    moduleId: state?.moduleSelection?.selectedModuleId ?? "algebra-foundations",
+    exportedAt,
+    encryption: encrypted ? ENCRYPTION_AES_GCM : "none",
+    assetManifestVersion: state?.assetIndex?.manifestVersion ?? ASSET_MANIFEST_VERSION,
+    telemetryConsent: state?.consentAndSettings?.telemetryEnabled ? "opt-in" : "off",
+    selectedProvider: state?.providerConfig?.providerName ?? "",
+  },
+  state,
+  scene,
+});
+
+const parseImportBundle = (rawBundle) => {
+  if (rawBundle?.manifest?.manifestType === "primer-export-manifest") {
+    return rawBundle;
+  }
+
+  return createExportBundle({
+    state: rawBundle?.state ?? rawBundle,
+    scene: rawBundle?.scene ?? null,
+    encrypted: false,
+    exportedAt: new Date().toISOString(),
+  });
 };
 
 const createAssetRecord = ({
@@ -789,6 +938,7 @@ export {
   applyMasteryEvidence,
   buildDirectorRequest,
   clearAdminPin,
+  createExportBundle,
   createDefaultLearnerState,
   createDefaultState,
   createFallbackScene,
@@ -798,10 +948,13 @@ export {
   deleteAssetRecord,
   detectCapabilities,
   DIRECTOR_TIMEOUT_MS,
+  ENCRYPTION_AES_GCM,
+  ENCRYPTION_LEGACY_XOR,
   encryptBackupPayload,
   estimateInstalledAssetBytes,
   estimateStorage,
   evictNonEssentialAssets,
+  EXPORT_FORMAT_VERSION,
   getAssetInstallPlan,
   getBuiltInAssetManifest,
   hashAdminPin,
@@ -813,6 +966,7 @@ export {
   migrateState,
   nextCurriculumDecision,
   normalizeSceneForRuntime,
+  parseImportBundle,
   queueImageGeneration,
   recoverSceneForRuntime,
   requestDirectorScene,

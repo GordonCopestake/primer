@@ -1,6 +1,7 @@
 export * from "./algebraModule.js";
 export * from "./capability.js";
 export * from "./config.js";
+export * from "./contracts.js";
 export * from "./curriculumEngine.js";
 export * from "./fallback.js";
 export * from "./interpreter.js";

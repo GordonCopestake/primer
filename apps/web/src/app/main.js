@@ -5,6 +5,7 @@ import {
   appendRecentTurn,
   applyMasteryEvidence,
   clearAdminPin,
+  createExportBundle,
   createDefaultState,
   createFallbackScene,
   decryptBackupPayload,
@@ -22,6 +23,7 @@ import {
   listInstalledAssets,
   migrateState,
   normalizeSceneForRuntime,
+  parseImportBundle,
   nextCurriculumDecision,
   queueImageGeneration,
   recoverSceneForRuntime,
@@ -1057,8 +1059,13 @@ const syncStorageStatus = async () => {
   updateSettingsForm();
 };
 
-const exportBackup = () => {
-  const payload = JSON.stringify({ state, scene: currentScene }, null, 2);
+const exportBackup = async () => {
+  const bundle = createExportBundle({
+    state,
+    scene: currentScene,
+    encrypted: APP_CONFIG.features.encryptedExport && encryptedExportEnabledInput.checked,
+  });
+  const payload = JSON.stringify(bundle, null, 2);
   let data = payload;
   let filename = "primer-backup.json";
 
@@ -1068,7 +1075,7 @@ const exportBackup = () => {
       setStatus("Encrypted export cancelled.");
       return;
     }
-    data = encryptBackupPayload(payload, passphrase);
+    data = await encryptBackupPayload(payload, passphrase);
     filename = "primer-backup.encrypted.json";
   }
 
@@ -1089,9 +1096,9 @@ const importBackup = async (file) => {
     if (!passphrase) {
       throw new Error("Missing backup passphrase.");
     }
-    text = decryptBackupPayload(text, passphrase);
+    text = await decryptBackupPayload(text, passphrase);
   }
-  const parsed = JSON.parse(text);
+  const parsed = parseImportBundle(JSON.parse(text));
   state = hydrateAssetIndex(
     createDefaultState({
       ...migrateState(parsed.state),
@@ -1380,8 +1387,13 @@ refreshStorageButton?.addEventListener("click", async () => {
   setStatus(quotaEstimate ? "Storage estimate refreshed." : "Storage estimate is unavailable on this device.");
 });
 
-exportButton?.addEventListener("click", () => {
-  exportBackup();
+exportButton?.addEventListener("click", async () => {
+  try {
+    await exportBackup();
+  } catch (error) {
+    console.error("Export failed", error);
+    setStatus("Backup export failed locally.");
+  }
 });
 
 importButton?.addEventListener("click", () => {
