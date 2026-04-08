@@ -59,6 +59,39 @@ const makeConceptDecision = (state, conceptId) => {
 
 const getDiagnosticItem = (step) => ALGEBRA_DIAGNOSTIC_ITEMS[Math.max(0, Math.min(step, ALGEBRA_DIAGNOSTIC_ITEMS.length - 1))];
 
+const getPlacementConceptIdForDiagnosticItem = (item) => item?.conceptId ?? "variables-and-expressions";
+
+const summarizeDiagnosticOutcome = (assessmentItems = {}) => {
+  const diagnosticRecords = ALGEBRA_DIAGNOSTIC_ITEMS.map((item) => ({
+    item,
+    record: assessmentItems[item.id] ?? null,
+  }));
+  const totalItems = diagnosticRecords.length;
+  const correctCount = diagnosticRecords.filter(({ record }) => record?.correct === true).length;
+  const incorrectRecords = diagnosticRecords.filter(({ record }) => record?.correct !== true);
+  const prerequisiteGaps = [...new Set(incorrectRecords.map(({ item }) => getPlacementConceptIdForDiagnosticItem(item)))];
+  const likelyMisconceptions = [
+    ...new Set(
+      incorrectRecords
+        .map(({ record, item }) => record?.misconceptionTag ?? item.misconceptionTag ?? null)
+        .filter(Boolean),
+    ),
+  ];
+  const recommendedConceptId = prerequisiteGaps[0] ?? "two-step-equations";
+  const readiness =
+    correctCount >= totalItems - 1 ? "ready" : correctCount >= Math.ceil(totalItems / 2) ? "developing" : "needs-foundations";
+
+  return {
+    totalItems,
+    correctCount,
+    incorrectCount: totalItems - correctCount,
+    readiness,
+    prerequisiteGaps,
+    likelyMisconceptions,
+    recommendedConceptId,
+  };
+};
+
 const appendUniqueRecentActivity = (state, activity) => {
   const nextActivity = [...state.pedagogicalState.recentActivity, activity].slice(-10);
   return {
@@ -133,15 +166,32 @@ export const nextCurriculumDecision = (state) => {
   return makeConceptDecision(state, recommendedConceptId);
 };
 
-export const recordAssessmentCompletion = (state, recommendedConceptId = "variables-and-expressions") =>
-  updateMilestones(
+export const recordAssessmentCompletion = (state, placement = "variables-and-expressions") => {
+  const diagnosticSummary =
+    typeof placement === "string"
+      ? {
+          totalItems: ALGEBRA_DIAGNOSTIC_ITEMS.length,
+          correctCount: ALGEBRA_DIAGNOSTIC_ITEMS.length,
+          incorrectCount: 0,
+          readiness: "ready",
+          prerequisiteGaps: [],
+          likelyMisconceptions: [],
+          recommendedConceptId: placement,
+        }
+      : placement;
+  const recommendedConceptId = diagnosticSummary?.recommendedConceptId ?? "variables-and-expressions";
+
+  return updateMilestones(
     createDefaultState({
       ...state,
       pedagogicalState: {
         ...state.pedagogicalState,
         diagnosticStep: ALGEBRA_DIAGNOSTIC_ITEMS.length,
         diagnosticStatus: "complete",
-        readiness: "ready",
+        readiness: diagnosticSummary?.readiness ?? "ready",
+        prerequisiteGaps: diagnosticSummary?.prerequisiteGaps ?? [],
+        likelyMisconceptions: diagnosticSummary?.likelyMisconceptions ?? [],
+        diagnosticSummary,
         currentConceptId: recommendedConceptId,
         currentObjectiveId: `concept.${recommendedConceptId}`,
         recommendedConceptId,
@@ -150,6 +200,8 @@ export const recordAssessmentCompletion = (state, recommendedConceptId = "variab
           {
             type: "diagnostic-complete",
             conceptId: recommendedConceptId,
+            readiness: diagnosticSummary?.readiness ?? "ready",
+            prerequisiteGaps: diagnosticSummary?.prerequisiteGaps ?? [],
             recordedAt: new Date().toISOString(),
           },
         ].slice(-10),
@@ -166,6 +218,7 @@ export const recordAssessmentCompletion = (state, recommendedConceptId = "variab
       },
     }),
   );
+};
 
 export const advanceAssessment = (state, result = {}) => {
   const currentStep = state.pedagogicalState.diagnosticStep ?? 0;
@@ -179,8 +232,35 @@ export const advanceAssessment = (state, result = {}) => {
   const misconceptionTag =
     correct === false ? currentItem?.misconceptionTag ?? deriveMisconceptionTags(currentItem?.conceptId, false)[0] ?? null : null;
 
+  const recordedAssessmentItems = currentItem
+    ? {
+        ...state.pedagogicalState.assessmentItems,
+        [currentItem.id]: {
+          objectiveId: currentItem.id,
+          conceptId: currentItem.conceptId,
+          inputType: currentItem.inputType,
+          kind: currentStep < 2 ? "readiness" : "placement",
+          correct: correct === true,
+          completed: typeof correct === "boolean",
+          skipped: typeof correct !== "boolean",
+          expectedResponse: currentItem.expectedResponse ?? null,
+          misconceptionTag,
+          recordedAt: new Date().toISOString(),
+        },
+      }
+    : state.pedagogicalState.assessmentItems;
+
   if (nextStep >= ALGEBRA_DIAGNOSTIC_ITEMS.length) {
-    return recordAssessmentCompletion(state, recommendedConceptId);
+    return recordAssessmentCompletion(
+      createDefaultState({
+        ...state,
+        pedagogicalState: {
+          ...state.pedagogicalState,
+          assessmentItems: recordedAssessmentItems,
+        },
+      }),
+      summarizeDiagnosticOutcome(recordedAssessmentItems),
+    );
   }
 
   return createDefaultState({
@@ -196,6 +276,7 @@ export const advanceAssessment = (state, result = {}) => {
       diagnosticStep: nextStep,
       currentObjectiveId: getDiagnosticItem(nextStep).id,
       recommendedConceptId,
+      assessmentItems: recordedAssessmentItems,
       misconceptionsByConcept:
         misconceptionTag && currentItem?.conceptId
           ? {

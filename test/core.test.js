@@ -121,6 +121,23 @@ test("completed diagnostic unlocks the algebra tutoring flow", () => {
   assert.equal(state.pedagogicalState.milestones[0].status, "completed");
 });
 
+test("diagnostic completion can derive readiness, prerequisite gaps, and placement", () => {
+  let state = createDefaultState();
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "variables-and-expressions" });
+  state = advanceAssessment(state, { correct: false, recommendedConceptId: "variables-and-expressions" });
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "evaluate-expressions" });
+  state = advanceAssessment(state, { correct: false, recommendedConceptId: "one-step-addition-equations" });
+  state = advanceAssessment(state, { correct: true, recommendedConceptId: "two-step-equations" });
+
+  assert.equal(state.pedagogicalState.diagnosticStatus, "complete");
+  assert.equal(state.pedagogicalState.readiness, "developing");
+  assert.deepEqual(state.pedagogicalState.prerequisiteGaps, ["order-of-operations", "one-step-addition-equations"]);
+  assert.deepEqual(state.pedagogicalState.likelyMisconceptions, ["left-to-right-only", "move-without-inverse"]);
+  assert.equal(state.pedagogicalState.recommendedConceptId, "order-of-operations");
+  assert.equal(state.pedagogicalState.diagnosticSummary.correctCount, 3);
+  assert.equal(nextCurriculumDecision(state).conceptId, "order-of-operations");
+});
+
 test("mastery evidence advances toward the next available algebra concept", () => {
   const assessed = recordAssessmentCompletion(createDefaultState(), "variables-and-expressions");
   const shifted = applyMasteryEvidence(assessed, "variables-and-expressions", 1);
@@ -190,6 +207,19 @@ test("incorrect diagnostic evidence records a misconception tag for the assessed
 
   assert.deepEqual(state.pedagogicalState.misconceptionsByConcept["variables-and-expressions"], ["variable-as-label"]);
   assert.equal(state.pedagogicalState.recentActivity.at(-1)?.correct, false);
+});
+
+test("fully correct diagnostic places the learner into later algebra content", () => {
+  let state = createDefaultState();
+  for (let index = 0; index < 5; index += 1) {
+    state = advanceAssessment(state, { correct: true, recommendedConceptId: "two-step-equations" });
+  }
+
+  assert.equal(state.pedagogicalState.diagnosticStatus, "complete");
+  assert.equal(state.pedagogicalState.readiness, "ready");
+  assert.deepEqual(state.pedagogicalState.prerequisiteGaps, []);
+  assert.equal(state.pedagogicalState.recommendedConceptId, "two-step-equations");
+  assert.equal(nextCurriculumDecision(state).conceptId, "two-step-equations");
 });
 
 test("algebra module metadata exposes the bounded concept pack", () => {

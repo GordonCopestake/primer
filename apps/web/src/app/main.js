@@ -744,6 +744,8 @@ const renderConceptMapView = () => {
   const recentActivity = getRecentActivityItems()
     .map((item) => `<li>${item}</li>`)
     .join("");
+  const prerequisiteGaps = state.pedagogicalState.prerequisiteGaps ?? [];
+  const diagnosticSummary = state.pedagogicalState.diagnosticSummary;
 
   sceneRoot.innerHTML = `
     <div class="scene-body">
@@ -754,6 +756,18 @@ const renderConceptMapView = () => {
         <section class="detail-card">
           <h3>Recommended next</h3>
           <p class="helper">${state.pedagogicalState.recommendedConceptId ?? "variables-and-expressions"}</p>
+        </section>
+        <section class="detail-card">
+          <h3>Diagnostic readiness</h3>
+          <p class="helper">${
+            diagnosticSummary
+              ? `${state.pedagogicalState.readiness} (${diagnosticSummary.correctCount}/${diagnosticSummary.totalItems} checks)`
+              : "Diagnostic not complete yet."
+          }</p>
+        </section>
+        <section class="detail-card">
+          <h3>Prerequisite gaps</h3>
+          <p class="helper">${prerequisiteGaps.length ? prerequisiteGaps.join(", ") : "No prerequisite gaps identified."}</p>
         </section>
         <section class="detail-card">
           <h3>Milestones</h3>
