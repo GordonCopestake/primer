@@ -471,7 +471,21 @@ h3 {
   color: var(--muted-ink);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 @media (max-width: 640px) {
+  .view-nav,
   .settings-actions,
   .settings-header,
   .canvas-status {

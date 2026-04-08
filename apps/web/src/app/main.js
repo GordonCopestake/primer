@@ -48,6 +48,9 @@ const loadingIndicator = document.querySelector("#loading-indicator");
 const listenButton = document.querySelector("#listen-button");
 const replayButton = document.querySelector("#replay-button");
 const conceptMapButton = document.querySelector("#concept-map-button");
+const resumeViewButton = document.querySelector("#resume-view-button");
+const importExportViewButton = document.querySelector("#import-export-view-button");
+const telemetryViewButton = document.querySelector("#telemetry-view-button");
 const settingsButton = document.querySelector("#settings-button");
 const stopButton = document.querySelector("#stop-button");
 const fallbackButton = document.querySelector("#fallback-button");
@@ -89,12 +92,29 @@ let recognition = null;
 let currentDecision = null;
 let currentScene = null;
 let lastLessonScene = null;
+let activeView = "tutor";
 let latestInput = {
   type: "system-start",
   content: "startup",
 };
 let activeTracePad = null;
 let orbState = "idle";
+let reducedMotionQuery = null;
+
+const getRecentActivityItems = () =>
+  [...(state.runtimeSession?.recentTurns ?? [])]
+    .slice(-5)
+    .reverse()
+    .map((turn) => String(turn.content ?? "").trim())
+    .filter(Boolean);
+
+const getConceptStateLabel = (conceptId) =>
+  deriveConceptStatuses().find((concept) => concept.id === conceptId)?.state ?? "locked";
+
+const syncReducedMotionPreference = () => {
+  const prefersReducedMotion = Boolean(reducedMotionQuery?.matches);
+  document.documentElement.dataset.reducedMotion = prefersReducedMotion ? "reduce" : "no-preference";
+};
 
 const setOrbState = (nextState) => {
   orbState = nextState;
@@ -499,19 +519,31 @@ const isDiagnosticComplete = () =>
   (state.pedagogicalState.diagnosticStatus ?? state.pedagogicalState.assessmentStatus) === "complete";
 
 const renderConceptMapView = () => {
+  activeView = "concept-map";
   const nodes = deriveConceptStatuses();
   const rows = nodes
     .map(
       (node) => `
-        <li class="concept-node" data-node-state="${node.state.replaceAll(" ", "-")}">
+        <li>
+          <button
+            type="button"
+            class="concept-node"
+            data-concept-id="${node.id}"
+            data-node-state="${node.state.replaceAll(" ", "-")}"
+          >
           <div>
             <strong>${node.label}</strong>
             <p class="helper">Prerequisites: ${node.prerequisites.length ? node.prerequisites.join(", ") : "None"}</p>
           </div>
           <span class="status-pill subtle">${node.state}</span>
+          </button>
         </li>
       `,
     )
+    .join("");
+
+  const recentActivity = getRecentActivityItems()
+    .map((item) => `<li>${item}</li>`)
     .join("");
 
   sceneRoot.innerHTML = `
@@ -519,14 +551,35 @@ const renderConceptMapView = () => {
       <h2>Algebra foundations concept map</h2>
       <p class="helper">Tech-tree style progress view for the bounded MVP module.</p>
       <ul class="concept-map-list">${rows}</ul>
+      <div class="detail-grid">
+        <section class="detail-card">
+          <h3>Recommended next</h3>
+          <p class="helper">${state.pedagogicalState.recommendedConceptId ?? "variables-and-expressions"}</p>
+        </section>
+        <section class="detail-card">
+          <h3>Recent activity</h3>
+          ${
+            recentActivity
+              ? `<ul class="helper">${recentActivity}</ul>`
+              : `<p class="helper">No recent interactions yet. The next lesson will start the log.</p>`
+          }
+        </section>
+      </div>
       <div class="trace-actions">
         <button id="resume-lesson-button" type="button" class="choice-button">Resume lesson</button>
       </div>
     </div>
   `;
 
+  sceneRoot.querySelectorAll("[data-concept-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      renderConceptDetailView(button.dataset.conceptId);
+    });
+  });
+
   sceneRoot.querySelector("#resume-lesson-button")?.addEventListener("click", () => {
     if (lastLessonScene) {
+      activeView = "tutor";
       renderScene(lastLessonScene);
       return;
     }
@@ -536,6 +589,164 @@ const renderConceptMapView = () => {
     });
   });
   setStatus("Concept map loaded.");
+};
+
+const renderConceptDetailView = (conceptId) => {
+  activeView = "concept-detail";
+  const concept = ALGEBRA_CONCEPT_GRAPH.find((entry) => entry.id === conceptId);
+  if (!concept) {
+    renderConceptMapView();
+    return;
+  }
+
+  const dependents = ALGEBRA_CONCEPT_GRAPH.filter((entry) => entry.prerequisites.includes(concept.id));
+  const lessonReady = isDiagnosticComplete() && getConceptStateLabel(concept.id) !== "locked";
+
+  sceneRoot.innerHTML = `
+    <div class="scene-body">
+      <div class="scene-meta">
+        <span>concept detail</span>
+        <span>${getConceptStateLabel(concept.id)}</span>
+      </div>
+      <h2>${concept.label}</h2>
+      <p class="helper">${concept.description}</p>
+      <div class="detail-grid">
+        <section class="detail-card">
+          <h3>Mastery rule</h3>
+          <p class="helper">${concept.masteryRule}</p>
+        </section>
+        <section class="detail-card">
+          <h3>Prerequisites</h3>
+          <p class="helper">${concept.prerequisites.length ? concept.prerequisites.join(", ") : "None"}</p>
+        </section>
+        <section class="detail-card">
+          <h3>Unlocked by this concept</h3>
+          <p class="helper">${dependents.length ? dependents.map((entry) => entry.label).join(", ") : "No dependents yet."}</p>
+        </section>
+        <section class="detail-card">
+          <h3>Common misconceptions</h3>
+          <p class="helper">${concept.misconceptionTags.join(", ")}</p>
+        </section>
+      </div>
+      <div class="trace-actions">
+        <button id="concept-back-button" type="button" class="choice-button">Back to map</button>
+        <button id="concept-launch-button" type="button" class="choice-button" ${lessonReady ? "" : "disabled"}>
+          ${lessonReady ? "Start this concept" : "Locked until prerequisites are complete"}
+        </button>
+      </div>
+    </div>
+  `;
+
+  sceneRoot.querySelector("#concept-back-button")?.addEventListener("click", () => {
+    renderConceptMapView();
+  });
+
+  sceneRoot.querySelector("#concept-launch-button")?.addEventListener("click", () => {
+    state = createDefaultState({
+      ...state,
+      pedagogicalState: {
+        ...state.pedagogicalState,
+        diagnosticStatus: state.pedagogicalState.diagnosticStatus === "complete" ? "complete" : state.pedagogicalState.diagnosticStatus,
+        currentConceptId: concept.id,
+        currentObjectiveId: `concept.${concept.id}`,
+        recommendedConceptId: concept.id,
+      },
+    });
+    persistState();
+    renderCurrentDecisionScene().catch((error) => {
+      console.error("Concept launch failed", error);
+      renderScene(createFallbackScene("concept-launch"));
+    });
+  });
+
+  setStatus(`Viewing ${concept.label}.`);
+};
+
+const renderTelemetryPreferencesView = () => {
+  activeView = "telemetry";
+  sceneRoot.innerHTML = `
+    <div class="scene-body">
+      <div class="scene-meta">
+        <span>settings</span>
+        <span>telemetry preferences</span>
+      </div>
+      <h2>Telemetry preferences</h2>
+      <p class="helper">Telemetry stays off unless you explicitly opt in. Richer traces should always be reviewable first.</p>
+      <div class="detail-grid">
+        <section class="detail-card">
+          <h3>Current consent</h3>
+          <p class="helper">${state.consentAndSettings.telemetryEnabled ? "Opt-in enabled" : "Telemetry off by default"}</p>
+        </section>
+        <section class="detail-card">
+          <h3>What may be shared later</h3>
+          <p class="helper">Validator mismatches, crash signals, and optional donated traces after explicit review.</p>
+        </section>
+      </div>
+      <div class="trace-actions">
+        <button id="telemetry-toggle-button" type="button" class="choice-button">
+          ${state.consentAndSettings.telemetryEnabled ? "Disable telemetry" : "Enable telemetry"}
+        </button>
+        <button id="telemetry-settings-button" type="button" class="choice-button">Open full settings</button>
+      </div>
+    </div>
+  `;
+
+  sceneRoot.querySelector("#telemetry-toggle-button")?.addEventListener("click", () => {
+    state = updateConsentSettings(state, {
+      telemetryEnabled: !state.consentAndSettings.telemetryEnabled,
+    });
+    persistState();
+    updateSettingsForm();
+    renderTelemetryPreferencesView();
+    setStatus(state.consentAndSettings.telemetryEnabled ? "Telemetry opt-in enabled." : "Telemetry opt-in disabled.");
+  });
+
+  sceneRoot.querySelector("#telemetry-settings-button")?.addEventListener("click", () => {
+    updateSettingsForm();
+    settingsDialog?.showModal();
+  });
+};
+
+const renderImportExportView = () => {
+  activeView = "import-export";
+  sceneRoot.innerHTML = `
+    <div class="scene-body">
+      <div class="scene-meta">
+        <span>settings</span>
+        <span>import/export</span>
+      </div>
+      <h2>Local backup and recovery</h2>
+      <p class="helper">Exports include a versioned manifest. Encrypted exports use a local passphrase and never upload your key.</p>
+      <div class="detail-grid">
+        <section class="detail-card">
+          <h3>Last export</h3>
+          <p class="helper">${state.exportMetadata?.lastExportedAt ?? "No local export recorded yet."}</p>
+        </section>
+        <section class="detail-card">
+          <h3>Last import</h3>
+          <p class="helper">${state.exportMetadata?.lastImportedAt ?? "No import recorded yet."}</p>
+        </section>
+      </div>
+      <div class="trace-actions">
+        <button id="screen-export-button" type="button" class="choice-button">Export backup</button>
+        <button id="screen-import-button" type="button" class="choice-button">Import backup</button>
+      </div>
+    </div>
+  `;
+
+  sceneRoot.querySelector("#screen-export-button")?.addEventListener("click", async () => {
+    try {
+      await exportBackup();
+      renderImportExportView();
+    } catch (error) {
+      console.error("Export failed", error);
+      setStatus("Backup export failed locally.");
+    }
+  });
+
+  sceneRoot.querySelector("#screen-import-button")?.addEventListener("click", () => {
+    importInput?.click();
+  });
 };
 
 const stopAudioAndInput = () => {
@@ -550,6 +761,7 @@ const speakScene = (scene) => {
 };
 
 const renderScene = (scene) => {
+  activeView = "tutor";
   activeTracePad?.destroy();
   activeTracePad = null;
   currentDecision = nextCurriculumDecision(state);
@@ -846,6 +1058,13 @@ const renderScene = (scene) => {
     const submitButton = sceneRoot.querySelector("#read-respond-submit");
     const skipButton = sceneRoot.querySelector("#read-respond-skip");
 
+    input?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submitButton?.click();
+      }
+    });
+
     submitButton?.addEventListener("click", async () => {
       const masteryTarget = currentDecision.conceptId ?? currentDecision.activeDomain;
       const response = String(input?.value ?? "").trim().toLowerCase();
@@ -896,6 +1115,13 @@ const renderScene = (scene) => {
     const input = sceneRoot.querySelector("#math-response-input");
     const submitButton = sceneRoot.querySelector("#math-response-submit");
     const skipButton = sceneRoot.querySelector("#math-response-skip");
+
+    input?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submitButton?.click();
+      }
+    });
 
     submitButton?.addEventListener("click", async () => {
       const masteryTarget = currentDecision.conceptId ?? currentDecision.activeDomain;
@@ -949,6 +1175,7 @@ const renderScene = (scene) => {
   capabilityIndicator.textContent = `Capability tier: ${state.capabilities.tier}`;
   listenButton.disabled = !(capabilitySnapshot.localSTT && capabilitySnapshot.microphone);
   listenButton.dataset.orbState = orbState;
+  sceneRoot.querySelector("button, input, [tabindex]")?.focus();
   speakScene(safeScene);
 };
 
@@ -1060,10 +1287,21 @@ const syncStorageStatus = async () => {
 };
 
 const exportBackup = async () => {
+  const exportedAt = new Date().toISOString();
+  state = createDefaultState({
+    ...state,
+    exportMetadata: {
+      ...state.exportMetadata,
+      lastExportedAt: exportedAt,
+    },
+  });
+  persistState();
+  updateSettingsForm();
   const bundle = createExportBundle({
     state,
     scene: currentScene,
     encrypted: APP_CONFIG.features.encryptedExport && encryptedExportEnabledInput.checked,
+    exportedAt,
   });
   const payload = JSON.stringify(bundle, null, 2);
   let data = payload;
@@ -1099,10 +1337,16 @@ const importBackup = async (file) => {
     text = await decryptBackupPayload(text, passphrase);
   }
   const parsed = parseImportBundle(JSON.parse(text));
+  const importedAt = new Date().toISOString();
+  const migratedImportState = migrateState(parsed.state);
   state = hydrateAssetIndex(
     createDefaultState({
-      ...migrateState(parsed.state),
+      ...migratedImportState,
       capabilities: capabilitySnapshot,
+      exportMetadata: {
+        ...migratedImportState.exportMetadata,
+        lastImportedAt: importedAt,
+      },
     }),
   );
   currentScene = parsed.scene ?? null;
@@ -1126,6 +1370,24 @@ fallbackButton?.addEventListener("click", () => {
 conceptMapButton?.addEventListener("click", () => {
   stopAudioAndInput();
   renderConceptMapView();
+});
+
+resumeViewButton?.addEventListener("click", () => {
+  stopAudioAndInput();
+  renderCurrentDecisionScene().catch((error) => {
+    console.error("Resume view failed", error);
+    renderScene(createFallbackScene("resume-view"));
+  });
+});
+
+importExportViewButton?.addEventListener("click", () => {
+  stopAudioAndInput();
+  renderImportExportView();
+});
+
+telemetryViewButton?.addEventListener("click", () => {
+  stopAudioAndInput();
+  renderTelemetryPreferencesView();
 });
 
 replayButton?.addEventListener("click", () => {
@@ -1417,8 +1679,44 @@ importInput?.addEventListener("change", async () => {
   }
 });
 
+document.addEventListener("keydown", (event) => {
+  if (event.defaultPrevented) {
+    return;
+  }
+
+  const target = event.target;
+  const editable =
+    target instanceof HTMLElement &&
+    (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+  if (editable) {
+    return;
+  }
+
+  if (event.key === "Escape" && settingsDialog?.open) {
+    settingsDialog.close();
+    return;
+  }
+
+  if (event.key.toLowerCase() === "m") {
+    event.preventDefault();
+    renderConceptMapView();
+  } else if (event.key.toLowerCase() === "t") {
+    event.preventDefault();
+    renderTelemetryPreferencesView();
+  } else if (event.key.toLowerCase() === "i") {
+    event.preventDefault();
+    renderImportExportView();
+  }
+});
+
 if (APP_CONFIG.appMode !== "test") {
   registerServiceWorker();
+}
+
+if (globalThis.matchMedia) {
+  reducedMotionQuery = globalThis.matchMedia("(prefers-reduced-motion: reduce)");
+  syncReducedMotionPreference();
+  reducedMotionQuery.addEventListener?.("change", syncReducedMotionPreference);
 }
 
 syncStorageStatus().catch((error) => {
