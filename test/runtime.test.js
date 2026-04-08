@@ -361,7 +361,15 @@ test("mock director can propose a bounded scene when relay is set to mock", asyn
       evidenceLog: [],
       reviewSchedule: [],
       recentActivity: [],
-      lessonRecords: {},
+      lessonRecords: {
+        "lesson.one-step-addition-equations": {
+          lessonId: "lesson.one-step-addition-equations",
+          conceptId: "one-step-addition-equations",
+          status: "in-progress",
+          sessionPhase: "learner-attempt",
+          lastUpdatedAt: new Date().toISOString(),
+        },
+      },
       assessmentItems: {},
       attemptLog: [],
       goals: [],

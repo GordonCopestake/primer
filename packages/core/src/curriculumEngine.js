@@ -1,12 +1,14 @@
 import {
   ALGEBRA_DIAGNOSTIC_ITEMS,
   ALGEBRA_FOUNDATIONS_MODULE,
+  getLessonForConcept,
   getRecommendedConceptId,
 } from "./algebraModule.js";
 import { createDefaultState } from "./state.js";
 
 const DIAGNOSTIC_SCENE_KINDS = ["assessment", "fallback"];
 const LESSON_SCENE_KINDS = ["lesson", "practice", "review", "fallback"];
+const DEFAULT_SESSION_PHASE = "explain";
 
 const makeDiagnosticDecision = (state, item) => ({
   moduleId: ALGEBRA_FOUNDATIONS_MODULE.id,
@@ -29,6 +31,9 @@ const makeDiagnosticDecision = (state, item) => ({
 
 const makeConceptDecision = (state, conceptId) => {
   const concept = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.find((item) => item.id === conceptId);
+  const lesson = getLessonForConcept(conceptId);
+  const lessonRecord = state.pedagogicalState.lessonRecords?.[`lesson.${conceptId}`] ?? {};
+  const sessionPhase = lessonRecord.sessionPhase ?? DEFAULT_SESSION_PHASE;
 
   return {
     moduleId: ALGEBRA_FOUNDATIONS_MODULE.id,
@@ -37,8 +42,12 @@ const makeConceptDecision = (state, conceptId) => {
     conceptId,
     objectiveId: `concept.${conceptId}`,
     prompt: concept?.description ?? "Continue with the next algebra concept.",
+    lessonId: lesson?.id ?? `lesson.${conceptId}`,
+    sessionPhase,
+    lessonType: lesson?.lessonType ?? "guided-practice",
     allowedSceneKinds: LESSON_SCENE_KINDS,
-    allowedInteractionTypes: ["math-input", "tap-choice", "read-respond", "none"],
+    allowedInteractionTypes:
+      sessionPhase === "learner-attempt" ? ["math-input", "tap-choice", "read-respond", "none"] : ["none"],
     maxNarrationChars: 220,
     recommendedConceptId: state.pedagogicalState.recommendedConceptId,
   };
@@ -220,9 +229,9 @@ export const applyMasteryEvidence = (state, conceptId, delta = 1) => {
           delta,
           recordedAt: now,
         }),
-        currentConceptId: recommendedConceptId,
+        currentConceptId: conceptId,
         currentLessonId: lessonId,
-        currentObjectiveId: `concept.${recommendedConceptId}`,
+        currentObjectiveId: `concept.${conceptId}`,
         recommendedConceptId,
         masteryByConcept: {
           ...state.pedagogicalState.masteryByConcept,
@@ -252,6 +261,7 @@ export const applyMasteryEvidence = (state, conceptId, delta = 1) => {
             lessonId,
             conceptId,
             status: nextScore >= 1 ? "completed" : "in-progress",
+            sessionPhase: correct ? "feedback" : "remediation",
             lastUpdatedAt: now,
           },
         },
@@ -279,4 +289,65 @@ export const applyMasteryEvidence = (state, conceptId, delta = 1) => {
       },
     }),
   );
+};
+
+export const advanceTutoringSession = (state, conceptId, action = "continue") => {
+  const lessonId = `lesson.${conceptId}`;
+  const lessonRecord = state.pedagogicalState.lessonRecords?.[lessonId] ?? {};
+  const sessionPhase = lessonRecord.sessionPhase ?? DEFAULT_SESSION_PHASE;
+  const recommendedConceptId = state.pedagogicalState.recommendedConceptId ?? conceptId;
+
+  let nextConceptId = conceptId;
+  let nextSessionPhase = sessionPhase;
+
+  if (action === "continue") {
+    if (sessionPhase === "explain") {
+      nextSessionPhase = "worked-example";
+    } else if (sessionPhase === "worked-example") {
+      nextSessionPhase = "learner-attempt";
+    } else if (sessionPhase === "feedback") {
+      nextConceptId = recommendedConceptId;
+      nextSessionPhase = "explain";
+    } else if (sessionPhase === "remediation") {
+      nextSessionPhase = "learner-attempt";
+    }
+  }
+
+  return createDefaultState({
+    ...state,
+    pedagogicalState: {
+      ...appendUniqueRecentActivity(state, {
+        type: "session-phase-advance",
+        conceptId,
+        fromPhase: sessionPhase,
+        toPhase: nextSessionPhase,
+        recordedAt: new Date().toISOString(),
+      }),
+      currentConceptId: nextConceptId,
+      currentLessonId: `lesson.${nextConceptId}`,
+      currentObjectiveId: `concept.${nextConceptId}`,
+      lessonRecords: {
+        ...state.pedagogicalState.lessonRecords,
+        [lessonId]: {
+          lessonId,
+          conceptId,
+          status: lessonRecord.status ?? "in-progress",
+          sessionPhase:
+            nextConceptId === conceptId ? nextSessionPhase : state.pedagogicalState.lessonRecords?.[lessonId]?.sessionPhase ?? sessionPhase,
+          lastUpdatedAt: new Date().toISOString(),
+        },
+        ...(nextConceptId !== conceptId
+          ? {
+              [`lesson.${nextConceptId}`]: {
+                lessonId: `lesson.${nextConceptId}`,
+                conceptId: nextConceptId,
+                status: "in-progress",
+                sessionPhase: "explain",
+                lastUpdatedAt: new Date().toISOString(),
+              },
+            }
+          : {}),
+      },
+    },
+  });
 };

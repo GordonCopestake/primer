@@ -7,6 +7,7 @@ import {
   APP_CONFIG,
   ADAPTER_CONTRACTS,
   advanceAssessment,
+  advanceTutoringSession,
   applyMasteryEvidence,
   createExportManifest,
   createDefaultState,
@@ -100,6 +101,7 @@ test("completed diagnostic unlocks the algebra tutoring flow", () => {
   assert.equal(decision.phase, "tutoring");
   assert.equal(decision.conceptId, "variables-and-expressions");
   assert.equal(decision.objectiveId, "concept.variables-and-expressions");
+  assert.equal(decision.sessionPhase, "explain");
   assert.equal(state.pedagogicalState.goals[0].status, "active");
   assert.equal(state.pedagogicalState.milestones[0].status, "completed");
 });
@@ -109,12 +111,33 @@ test("mastery evidence advances toward the next available algebra concept", () =
   const shifted = applyMasteryEvidence(assessed, "variables-and-expressions", 1);
 
   assert.equal(shifted.pedagogicalState.masteryByConcept["variables-and-expressions"].status, "mastered");
-  assert.equal(shifted.pedagogicalState.currentConceptId, "evaluate-expressions");
-  assert.equal(shifted.pedagogicalState.currentObjectiveId, "concept.evaluate-expressions");
+  assert.equal(shifted.pedagogicalState.currentConceptId, "variables-and-expressions");
+  assert.equal(shifted.pedagogicalState.currentObjectiveId, "concept.variables-and-expressions");
+  assert.equal(shifted.pedagogicalState.recommendedConceptId, "evaluate-expressions");
   assert.equal(shifted.pedagogicalState.reviewSchedule[0].conceptId, "variables-and-expressions");
   assert.equal(shifted.pedagogicalState.lessonRecords["lesson.variables-and-expressions"].status, "completed");
+  assert.equal(shifted.pedagogicalState.lessonRecords["lesson.variables-and-expressions"].sessionPhase, "feedback");
   assert.equal(shifted.pedagogicalState.attemptLog.length, 1);
   assert.equal(shifted.pedagogicalState.milestones[1].status, "completed");
+});
+
+test("tutoring session advances through explain, worked example, attempt, and next concept", () => {
+  let state = recordAssessmentCompletion(createDefaultState(), "variables-and-expressions");
+  assert.equal(nextCurriculumDecision(state).sessionPhase, "explain");
+
+  state = advanceTutoringSession(state, "variables-and-expressions", "continue");
+  assert.equal(nextCurriculumDecision(state).sessionPhase, "worked-example");
+
+  state = advanceTutoringSession(state, "variables-and-expressions", "continue");
+  assert.equal(nextCurriculumDecision(state).sessionPhase, "learner-attempt");
+
+  state = applyMasteryEvidence(state, "variables-and-expressions", 1);
+  assert.equal(nextCurriculumDecision(state).sessionPhase, "feedback");
+
+  state = advanceTutoringSession(state, "variables-and-expressions", "continue");
+  const nextDecision = nextCurriculumDecision(state);
+  assert.equal(nextDecision.conceptId, "evaluate-expressions");
+  assert.equal(nextDecision.sessionPhase, "explain");
 });
 
 test("incorrect evidence records misconceptions and prioritizes due review", () => {

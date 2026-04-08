@@ -2,12 +2,14 @@ import {
   ALGEBRA_FOUNDATIONS_MODULE,
   APP_CONFIG,
   advanceAssessment as advanceAssessmentCore,
+  advanceTutoringSession as advanceTutoringSessionCore,
   appendRecentTurn as appendRecentTurnCore,
   applyMasteryEvidence as applyMasteryEvidenceCore,
   createDefaultState as createDefaultStateCore,
   createFallbackScene as createFallbackSceneCore,
   detectCapabilities as detectCapabilitiesCore,
   interpretScene as interpretSceneCore,
+  getLessonForConcept as getLessonForConceptCore,
   migrateState as migrateStateCore,
   nextCurriculumDecision as nextCurriculumDecisionCore,
   setActiveScene as setActiveSceneCore,
@@ -35,7 +37,10 @@ const migrateState = (rawState) => migrateStateCore(rawState);
 const appendRecentTurn = (state, turn) => appendRecentTurnCore(state, turn);
 const nextCurriculumDecision = (state) => nextCurriculumDecisionCore(state);
 const advanceAssessment = (state, result = {}) => advanceAssessmentCore(state, result);
+const advanceTutoringSession = (state, conceptId, action = "continue") =>
+  advanceTutoringSessionCore(state, conceptId, action);
 const applyMasteryEvidence = (state, conceptId, delta = 1) => applyMasteryEvidenceCore(state, conceptId, delta);
+const getLessonForConcept = (conceptId) => getLessonForConceptCore(conceptId);
 const setActiveScene = (state, scene) => setActiveSceneCore(state, scene);
 const updateConsentSettings = (state, updates) => updateConsentSettingsCore(state, updates);
 const detectCapabilities = (runtime) => detectCapabilitiesCore(runtime);
@@ -934,6 +939,7 @@ export {
   APP_CONFIG,
   ASSET_MANIFEST_VERSION,
   advanceAssessment,
+  advanceTutoringSession,
   appendRecentTurn,
   applyMasteryEvidence,
   buildDirectorRequest,
@@ -957,6 +963,7 @@ export {
   EXPORT_FORMAT_VERSION,
   getAssetInstallPlan,
   getBuiltInAssetManifest,
+  getLessonForConcept,
   hashAdminPin,
   hydrateAssetIndex,
   installAssetRecord,

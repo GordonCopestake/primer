@@ -2,6 +2,7 @@ import {
   ALGEBRA_CONCEPT_GRAPH,
   APP_CONFIG,
   advanceAssessment,
+  advanceTutoringSession,
   appendRecentTurn,
   applyMasteryEvidence,
   clearAdminPin,
@@ -19,6 +20,7 @@ import {
   hydrateAssetIndex,
   installAssetRecord,
   interpretScene,
+  getLessonForConcept,
   lockAdmin,
   listInstalledAssets,
   migrateState,
@@ -447,6 +449,117 @@ const createSceneFromDecision = (decision) => {
     };
   }
 
+  const lesson = getLessonForConcept(decision.conceptId);
+  const sessionPhase = decision.sessionPhase ?? "learner-attempt";
+
+  if (sessionPhase === "explain") {
+    return {
+      version: 1,
+      scene: {
+        id: `scene_${decision.conceptId.replaceAll("-", "_")}_explain`,
+        kind: "lesson",
+        objectiveId: decision.objectiveId,
+        transition: "slide",
+        tone: "encouraging",
+      },
+      narration: {
+        text: lesson?.objective ?? `Primer is introducing ${conceptLabel}.`,
+        maxChars: 220,
+        estDurationMs: 2200,
+        bargeInAllowed: true,
+      },
+      visualIntent: fallbackScene.visualIntent,
+      interaction: {
+        type: "none",
+      },
+      evidence: {
+        observedSkill: decision.conceptId,
+        confidenceHint: 0.4,
+      },
+    };
+  }
+
+  if (sessionPhase === "worked-example") {
+    return {
+      version: 1,
+      scene: {
+        id: `scene_${decision.conceptId.replaceAll("-", "_")}_worked_example`,
+        kind: "lesson",
+        objectiveId: decision.objectiveId,
+        transition: "slide",
+        tone: "focused",
+      },
+      narration: {
+        text: lesson?.workedExample ?? `Worked example for ${conceptLabel}.`,
+        maxChars: 220,
+        estDurationMs: 2200,
+        bargeInAllowed: true,
+      },
+      visualIntent: fallbackScene.visualIntent,
+      interaction: {
+        type: "none",
+      },
+      evidence: {
+        observedSkill: decision.conceptId,
+        confidenceHint: 0.55,
+      },
+    };
+  }
+
+  if (sessionPhase === "feedback") {
+    return {
+      version: 1,
+      scene: {
+        id: `scene_${decision.conceptId.replaceAll("-", "_")}_feedback`,
+        kind: "review",
+        objectiveId: decision.objectiveId,
+        transition: "fade",
+        tone: "celebratory",
+      },
+      narration: {
+        text: `That step checked out. Primer is ready to move from ${conceptLabel} to the next recommended concept.`,
+        maxChars: 220,
+        estDurationMs: 2000,
+        bargeInAllowed: true,
+      },
+      visualIntent: fallbackScene.visualIntent,
+      interaction: {
+        type: "none",
+      },
+      evidence: {
+        observedSkill: decision.conceptId,
+        confidenceHint: 0.8,
+      },
+    };
+  }
+
+  if (sessionPhase === "remediation") {
+    return {
+      version: 1,
+      scene: {
+        id: `scene_${decision.conceptId.replaceAll("-", "_")}_remediation`,
+        kind: "review",
+        objectiveId: decision.objectiveId,
+        transition: "fade",
+        tone: "curious",
+      },
+      narration: {
+        text: `Primer spotted a misconception in ${conceptLabel}. Review the worked step, then try another bounded attempt.`,
+        maxChars: 220,
+        estDurationMs: 2200,
+        bargeInAllowed: true,
+      },
+      visualIntent: fallbackScene.visualIntent,
+      interaction: {
+        type: "none",
+      },
+      evidence: {
+        observedSkill: decision.conceptId,
+        confidenceHint: 0.45,
+      },
+    };
+  }
+
   return {
     version: 1,
     scene: {
@@ -456,23 +569,23 @@ const createSceneFromDecision = (decision) => {
       transition: "slide",
       tone: "encouraging",
     },
-    narration: {
+      narration: {
       text: `Next concept: ${conceptLabel}. Solve one bounded algebra step and Primer will update your mastery map.`,
       maxChars: 220,
       estDurationMs: 2400,
       bargeInAllowed: true,
     },
     visualIntent: fallbackScene.visualIntent,
-    interaction: {
-      type: "math-input",
-      expressionPrompt:
-        decision.conceptId === "variables-and-expressions"
+      interaction: {
+        type: "math-input",
+      expressionPrompt: lesson?.prompt ??
+        (decision.conceptId === "variables-and-expressions"
           ? "If x = 4, what is x + 3?"
           : decision.conceptId === "evaluate-expressions"
             ? "Evaluate 3x - 2 when x = 5."
             : decision.conceptId === "one-step-addition-equations"
               ? "Solve x + 4 = 11."
-              : "Solve 2x + 3 = 11.",
+              : "Solve 2x + 3 = 11."),
       expectedExpression:
         decision.conceptId === "variables-and-expressions"
           ? "7"
@@ -1066,6 +1179,9 @@ const renderScene = (scene) => {
         role: "user",
         content: `continue:${safeScene.scene.objectiveId}`,
       });
+      if (currentDecision?.phase === "tutoring" && currentDecision?.conceptId) {
+        state = advanceTutoringSession(state, currentDecision.conceptId, "continue");
+      }
       persistState();
       await renderCurrentDecisionScene();
     });
