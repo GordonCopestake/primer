@@ -1260,7 +1260,11 @@ const renderScene = (scene) => {
     submitButton?.addEventListener("click", async () => {
       const masteryTarget = currentDecision.conceptId ?? currentDecision.activeDomain;
       const response = String(input?.value ?? "").trim();
-      const validation = validateMathInputResponse(response, safeScene.interaction.expectedExpression);
+      const validation = validateMathInputResponse(
+        response,
+        safeScene.interaction.expectedExpression,
+        currentDecision.conceptId,
+      );
       latestInput = {
         type: "math-input",
         content: response || "empty",
@@ -1276,10 +1280,10 @@ const renderScene = (scene) => {
             ? currentDecision.conceptId
             : state.pedagogicalState.recommendedConceptId ?? currentDecision.conceptId,
         });
-        setStatus(validation.correct ? "Diagnostic step accepted." : `Saved with ${validation.reason} feedback.`);
+        setStatus(validation.correct ? "Diagnostic step accepted." : validation.feedback);
       } else {
         state = applyMasteryEvidence(state, masteryTarget, validation.correct ? 1 : 0);
-        setStatus(validation.correct ? "Validated and saved." : `Saved with ${validation.reason} feedback.`);
+        setStatus(validation.correct ? validation.feedback : validation.feedback);
       }
 
       persistState();

@@ -832,13 +832,50 @@ const scoreTrace = (points, bounds) => {
   };
 };
 
-const validateMathInputResponse = (input, expectedExpression) => {
+const getMathFeedbackMessage = (validation, conceptId = "algebra") => {
+  if (validation.correct) {
+    return validation.mode === "numeric"
+      ? "That answer checks out numerically."
+      : "That expression is equivalent to the expected result.";
+  }
+
+  if (validation.reason === "syntax") {
+    return "The response could not be parsed as safe algebra. Check symbols, operators, and equation format.";
+  }
+
+  if (validation.reason === "equation-form") {
+    return "Keep the equality sign and isolate the value or expression you want to show.";
+  }
+
+  const conceptMessages = {
+    "variables-and-expressions": "Focus on what the variable stands for before combining anything.",
+    "evaluate-expressions": "Substitute the given value first, then simplify in order.",
+    "one-step-addition-equations": "Undo the addition with the inverse operation, then check the result.",
+    "two-step-equations": "Reverse the operations one step at a time instead of jumping straight to the answer.",
+  };
+
+  return conceptMessages[conceptId] ?? "Try the next step more carefully and check each operation.";
+};
+
+const classifyConceptualMathError = (inputRhs, expectedRhs) => {
+  if (inputRhs.includes("=") || expectedRhs.includes("=")) {
+    return "equation-form";
+  }
+
+  return "conceptual";
+};
+
+const validateMathInputResponse = (input, expectedExpression, conceptId = null) => {
   const normalizedInput = String(input ?? "").trim();
   const normalizedExpected = String(expectedExpression ?? "").trim();
   const safePattern = /^[0-9xX+\-*/().\s=]+$/;
 
   if (!normalizedInput || !safePattern.test(normalizedInput)) {
-    return { correct: false, reason: "syntax" };
+    return {
+      correct: false,
+      reason: "syntax",
+      feedback: getMathFeedbackMessage({ correct: false, reason: "syntax" }, conceptId ?? "algebra"),
+    };
   }
 
   const inputRhs = normalizedInput.includes("=") ? normalizedInput.split("=").pop().trim() : normalizedInput;
@@ -849,7 +886,14 @@ const validateMathInputResponse = (input, expectedExpression) => {
   const asNumber = Number(inputRhs);
   const expectedNumber = Number(expectedRhs);
   if (Number.isFinite(asNumber) && Number.isFinite(expectedNumber)) {
-    return { correct: Math.abs(asNumber - expectedNumber) <= 1e-6, reason: "numeric" };
+    const correct = Math.abs(asNumber - expectedNumber) <= 1e-6;
+    const reason = correct ? "numeric" : classifyConceptualMathError(inputRhs, expectedRhs);
+    return {
+      correct,
+      reason,
+      mode: "numeric",
+      feedback: getMathFeedbackMessage({ correct, reason, mode: "numeric" }, conceptId ?? "algebra"),
+    };
   }
 
   try {
@@ -862,9 +906,19 @@ const validateMathInputResponse = (input, expectedExpression) => {
       const right = rightEval(x);
       return Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) <= 1e-6;
     });
-    return { correct: equivalent, reason: "expression" };
+    const reason = equivalent ? "expression" : classifyConceptualMathError(inputRhs, expectedRhs);
+    return {
+      correct: equivalent,
+      reason,
+      mode: "expression",
+      feedback: getMathFeedbackMessage({ correct: equivalent, reason, mode: "expression" }, conceptId ?? "algebra"),
+    };
   } catch {
-    return { correct: false, reason: "syntax" };
+    return {
+      correct: false,
+      reason: "syntax",
+      feedback: getMathFeedbackMessage({ correct: false, reason: "syntax" }, conceptId ?? "algebra"),
+    };
   }
 };
 
@@ -986,6 +1040,7 @@ export {
   updateAssetAccess,
   updateConsentSettings,
   updateQuotaEstimate,
+  getMathFeedbackMessage,
   validateDirectorRequest,
   validateDirectorResponse,
   validateMathInputResponse,

@@ -292,12 +292,21 @@ test("local trace scoring accepts broad, deliberate strokes", () => {
 test("math input validator accepts equivalent numeric answers", () => {
   const result = runtimeModule.validateMathInputResponse("x = 4", "4");
   assert.equal(result.correct, true);
+  assert.match(result.feedback, /checks out|equivalent/i);
 });
 
 test("math input validator rejects malformed expressions", () => {
   const result = runtimeModule.validateMathInputResponse("alert(1)", "4");
   assert.equal(result.correct, false);
   assert.equal(result.reason, "syntax");
+  assert.match(result.feedback, /could not be parsed|check symbols/i);
+});
+
+test("math input validator returns concept-aware remediation for incorrect algebra steps", () => {
+  const result = runtimeModule.validateMathInputResponse("9", "7", "one-step-addition-equations");
+  assert.equal(result.correct, false);
+  assert.equal(result.reason, "conceptual");
+  assert.match(result.feedback, /inverse operation|check the result/i);
 });
 
 test("repeat-sound scenes fall back to a tap path when local audio is unavailable", () => {
