@@ -1,14 +1,24 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../App';
+import { encryptForExport, decryptFromImport, isEncryptedExport } from '../../../../packages/core/src/encryption.js';
 import './ImportExportPage.css';
 
 export function ImportExportPage() {
   const { state, updateState, setView } = useApp();
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [importMessage, setImportMessage] = useState('');
+  const [exportPassword, setExportPassword] = useState('');
+  const [importPassword, setImportPassword] = useState('');
+  const [showExportPasswordPrompt, setShowExportPasswordPrompt] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleExport = () => {
+  const handleExport = async () => {
+    if (!exportPassword || exportPassword.length < 4) {
+      setImportMessage('Password must be at least 4 characters');
+      setImportStatus('error');
+      return;
+    }
+
     const exportData = {
       schemaVersion: state.schemaVersion,
       learnerProfile: state.learnerProfile,
@@ -20,33 +30,53 @@ export function ImportExportPage() {
       },
     };
 
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `primer-backup-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+      const encrypted = await encryptForExport(exportData, exportPassword);
+      const blob = new Blob([encrypted], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `primer-backup-${new Date().toISOString().split('T')[0]}.enc`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
-    updateState({
-      exportMetadata: {
-        ...state.exportMetadata,
-        lastExportedAt: new Date().toISOString(),
-      },
-    });
+      updateState({
+        exportMetadata: {
+          ...state.exportMetadata,
+          lastExportedAt: new Date().toISOString(),
+        },
+      });
+
+      setShowExportPasswordPrompt(false);
+      setExportPassword('');
+      setImportStatus('success');
+      setImportMessage('Backup exported and encrypted!');
+    } catch (error) {
+      setImportStatus('error');
+      setImportMessage('Export failed: ' + String(error));
+    }
   };
 
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    if (!importPassword || importPassword.length < 4) {
+      setImportMessage('Enter password to decrypt backup');
+      setImportStatus('error');
+      return;
+    }
+
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
-        const imported = JSON.parse(e.target?.result as string);
-        
+        const content = e.target?.result as string;
+        const imported = isEncryptedExport(content)
+          ? await decryptFromImport(content, importPassword)
+          : JSON.parse(content);
+
         if (!imported.schemaVersion || !imported.learnerProfile || !imported.pedagogicalState) {
           throw new Error('Invalid backup file format');
         }
@@ -62,9 +92,12 @@ export function ImportExportPage() {
 
         setImportStatus('success');
         setImportMessage('Backup restored successfully!');
-      } catch {
+        setImportPassword('');
+      } catch (error) {
         setImportStatus('error');
-        setImportMessage('Failed to import: Invalid or corrupted backup file');
+        setImportMessage(String(error).includes('Decryption')
+          ? 'Decryption failed - wrong password?'
+          : 'Failed to import: Invalid or corrupted backup');
       }
     };
     reader.readAsText(file);
@@ -89,8 +122,8 @@ export function ImportExportPage() {
 
       <section className="info-section">
         <p className="info-text">
-          Export your progress to create a backup, or import a previous backup to restore your data.
-          Exports include your learning progress, mastery records, and settings.
+          Export your progress to create an encrypted backup, or import a previous backup to restore your data.
+          Backups are encrypted with AES-256-GCM using your chosen password.
         </p>
         {state.exportMetadata.lastExportedAt && (
           <p className="last-export">
@@ -105,27 +138,64 @@ export function ImportExportPage() {
       </section>
 
       <section className="action-section">
-        <h3 className="section-title">Export Backup</h3>
+        <h3 className="section-title">Export Encrypted Backup</h3>
         <p className="section-description">
-          Download a JSON file containing all your progress and settings.
+          Download an encrypted JSON file with your chosen password.
         </p>
-        <button className="primary-button" onClick={handleExport}>
-          <span className="button-icon">↓</span>
-          Export Data
-        </button>
+        {!showExportPasswordPrompt ? (
+          <button
+            className="primary-button"
+            onClick={() => setShowExportPasswordPrompt(true)}
+          >
+            <span className="button-icon">↓</span>
+            Export Data
+          </button>
+        ) : (
+          <div className="password-prompt">
+            <input
+              type="password"
+              value={exportPassword}
+              onChange={(e) => setExportPassword(e.target.value)}
+              placeholder="Enter encryption password (min 4 chars)"
+              className="password-input"
+              minLength={4}
+            />
+            <div className="password-actions">
+              <button className="action-button" onClick={handleExport}>
+                Confirm & Export
+              </button>
+              <button
+                className="action-button secondary"
+                onClick={() => {
+                  setShowExportPasswordPrompt(false);
+                  setExportPassword('');
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="action-section">
         <h3 className="section-title">Import Backup</h3>
         <p className="section-description">
-          Restore from a previous backup. This will replace your current progress.
+          Restore from a previous backup. Enter the password used during export.
         </p>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".json"
+          accept=".enc,.json"
           onChange={handleImport}
           style={{ display: 'none' }}
+        />
+        <input
+          type="password"
+          value={importPassword}
+          onChange={(e) => setImportPassword(e.target.value)}
+          placeholder="Enter import password"
+          className="password-input"
         />
         <button className="primary-button" onClick={handleMergeImport}>
           <span className="button-icon">↑</span>
@@ -145,22 +215,14 @@ export function ImportExportPage() {
           <li>Backups do not include your AI provider configuration</li>
           <li>Importing will replace all current progress</li>
           <li>Keep your backup files in a safe location</li>
-          <li>Backup files are not encrypted - avoid sharing them publicly</li>
+          <li>Your password cannot be recovered - don't lose it!</li>
         </ul>
       </section>
 
       <section className="schema-section">
         <h3 className="section-title">Export Format</h3>
         <div className="schema-info">
-          <code className="schema-version">Schema v{state.exportMetadata.exportFormatVersion}</code>
-          <pre className="schema-preview">
-{`{
-  "schemaVersion": 2,
-  "learnerProfile": { ... },
-  "pedagogicalState": { ... },
-  "consentAndSettings": { ... }
-}`}
-          </pre>
+          <code className="schema-version">Encrypted v1 (AES-256-GCM)</code>
         </div>
       </section>
     </div>

@@ -1,32 +1,31 @@
 import { useApp } from '../App';
 import { Concept } from '../types';
+// @ts-ignore - local JS module
+import { deriveConceptStatuses } from '../../../../packages/core/src/curriculumEngine.js';
+import { ALGEBRA_FOUNDATIONS_MODULE } from '../../../../packages/core/src/algebraModule.js';
 import './ConceptMapPage.css';
-
-const mockConceptGraph: Concept[] = [
-  { id: 'variables', label: 'Variables', description: 'Understanding variables as placeholders', prerequisites: [], dependents: ['expressions'], masteryRule: 'Understand x as unknown', masteryThreshold: 1, misconceptionTags: ['variable-as-label'], estimatedMinutes: 15, optional: false },
-  { id: 'expressions', label: 'Expressions', description: 'Writing and evaluating expressions', prerequisites: ['variables'], dependents: ['equations'], masteryRule: 'Evaluate 3x+2 for x=4', masteryThreshold: 1, misconceptionTags: ['order-of-ops'], estimatedMinutes: 20, optional: false },
-  { id: 'equations', label: 'One-Step Equations', description: 'Solving x+a=b', prerequisites: ['expressions'], dependents: ['two-step'], masteryRule: 'Solve x+5=12', masteryThreshold: 1, misconceptionTags: ['inverse-ops'], estimatedMinutes: 25, optional: false },
-  { id: 'two-step', label: 'Two-Step Equations', description: 'Solving ax+b=c', prerequisites: ['equations'], dependents: [], masteryRule: 'Solve 2x+3=11', masteryThreshold: 1, misconceptionTags: [], estimatedMinutes: 30, optional: false },
-];
 
 export function ConceptMapPage() {
   const { state, setView, setSelectedConcept } = useApp();
   const masteryByConcept = state.pedagogicalState.masteryByConcept;
 
-  const getConceptStatus = (conceptId: string): 'locked' | 'available' | 'in-progress' | 'mastered' => {
-    const mastery = masteryByConcept[conceptId];
-    if (mastery?.status === 'mastered') return 'mastered';
-    if (mastery?.status === 'in-progress') return 'in-progress';
+  const conceptStatuses = deriveConceptStatuses(state);
+  const recommendedConceptId = state.pedagogicalState.recommendedConceptId;
+
+  const getConceptStatus = (conceptId: string): 'locked' | 'available' | 'in-progress' | 'mastered' | 'review due' | 'recommended next' => {
+    const statusInfo = conceptStatuses.find(c => c.id === conceptId);
+    if (!statusInfo) return 'locked';
     
-    const concept = mockConceptGraph.find(c => c.id === conceptId);
-    if (!concept) return 'locked';
-    
-    const prereqsMet = concept.prerequisites.every(p => masteryByConcept[p]?.status === 'mastered');
-    return prereqsMet ? 'available' : 'locked';
+    if (statusInfo.state === 'mastered') return 'mastered';
+    if (statusInfo.state === 'review due') return 'review due';
+    if (statusInfo.state === 'in progress') return 'in-progress';
+    if (statusInfo.state === 'recommended next') return 'in-progress';
+    if (statusInfo.state === 'available') return 'available';
+    return 'locked';
   };
 
   const masteredCount = Object.values(masteryByConcept).filter(m => m.status === 'mastered').length;
-  const totalConcepts = mockConceptGraph.length;
+  const totalConcepts = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.length;
 
   const handleConceptClick = (concept: Concept) => {
     setSelectedConcept(concept);
@@ -39,7 +38,7 @@ export function ConceptMapPage() {
         <div>
           <h2 className="page-title">Concept Mastery Map</h2>
           <p className="page-description">
-            Track your progress through the algebra foundations module
+            Track your progress through the {ALGEBRA_FOUNDATIONS_MODULE.title} module
           </p>
         </div>
         <div className="progress-summary">
@@ -51,12 +50,12 @@ export function ConceptMapPage() {
       <div className="progress-bar-container">
         <div 
           className="progress-bar-fill" 
-          style={{ width: `${(masteredCount / totalConcepts) * 100}%` }}
+          style={{ width: `${totalConcepts > 0 ? (masteredCount / totalConcepts) * 100 : 0}%` }}
         />
       </div>
 
       <div className="concept-grid">
-        {mockConceptGraph.map((concept, index) => {
+        {conceptStatuses.map((concept, index) => {
           const status = getConceptStatus(concept.id);
           const isClickable = status !== 'locked';
 
@@ -76,6 +75,7 @@ export function ConceptMapPage() {
                     {status === 'mastered' && '✓'}
                     {status === 'in-progress' && '→'}
                     {status === 'available' && '○'}
+                    {status === 'review due' && '🔄'}
                     {status === 'locked' && '🔒'}
                   </span>
                 </div>
@@ -84,7 +84,7 @@ export function ConceptMapPage() {
                 )}
               </button>
 
-              {concept.dependents.length > 0 && (
+              {concept.dependents && concept.dependents.length > 0 && (
                 <div className="connector-line">
                   <span className="connector-label">leads to</span>
                 </div>
@@ -112,6 +112,10 @@ export function ConceptMapPage() {
           <div className="legend-item">
             <span className="legend-icon">✓</span>
             <span>Mastered</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-icon">🔄</span>
+            <span>Review Due</span>
           </div>
         </div>
       </div>

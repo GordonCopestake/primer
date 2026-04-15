@@ -1,71 +1,136 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useApp } from '../App';
 import { MathInput } from '../components/MathInput';
 // @ts-ignore - local JS module
+import { TutorOrchestrator, createOrchestrator, subjectPack, getInitialConceptId, getLessonForConcept, nextCurriculumDecision, deriveConceptStatuses, advanceAssessment, applyMasteryEvidence, advanceTutoringSession } from '../../../../packages/core/src/tutorOrchestrator.js';
+// @ts-ignore - local JS module
 import { validateMathResponse } from '../../../../packages/core/src/mathValidation.js';
+// @ts-ignore - local JS module
+import { createProviderClient, isProviderConfigured } from '../../../../packages/core/src/providerClient.js';
 import './TutoringWorkspacePage.css';
 
 export function TutoringWorkspacePage() {
   const { state, updateState } = useApp();
+  const orchestratorRef = useRef<TutorOrchestrator | null>(null);
   const [userInput, setUserInput] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'correct' | 'incorrect' | 'hint'; message: string } | null>(null);
+  const [currentScene, setCurrentScene] = useState<{ prompt: string; sceneKind: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [lessonContent, setLessonContent] = useState<{ title: string; text: string; workedExample: string } | null>(null);
 
   const diagnosticStatus = state.pedagogicalState.diagnosticStatus;
-  const currentConceptId = state.pedagogicalState.currentConceptId;
-  const recommendedConceptId = state.pedagogicalState.recommendedConceptId || currentConceptId;
+  const recommendedConceptId = state.pedagogicalState.recommendedConceptId || state.pedagogicalState.currentConceptId || getInitialConceptId();
 
-  const handleSubmit = useCallback(() => {
+  useEffect(() => {
+    const initOrchestrator = async () => {
+      let client = null;
+      if (isProviderConfigured(state)) {
+        client = createProviderClient({
+          providerName: state.providerConfig.providerName,
+          modelName: state.providerConfig.modelName,
+          endpointUrl: state.providerConfig.endpointUrl,
+          apiKey: state.providerConfig.apiKey,
+        });
+      }
+      orchestratorRef.current = await createOrchestrator(state, client);
+      await loadScene();
+    };
+    initOrchestrator();
+  }, []);
+
+  const loadScene = async () => {
+    if (!orchestratorRef.current) return;
+    
+    setLoading(true);
+    try {
+      const decision = orchestratorRef.current.currentDecision;
+      const lesson = getLessonForConcept(decision?.conceptId);
+      
+      if (decision?.phase === 'diagnostic') {
+        const items = subjectPack.listAssessmentItems();
+        const currentItem = items[state.pedagogicalState.diagnosticStep];
+        setCurrentScene({ prompt: currentItem?.prompt || '', sceneKind: 'diagnostic' });
+        setLessonContent({
+          title: 'Diagnostic Assessment',
+          text: 'Complete the following questions to assess your current level.',
+          workedExample: '',
+        });
+      } else if (lesson) {
+        setCurrentScene({ prompt: lesson.prompt || '', sceneKind: lesson.lessonType || 'learner-attempt' });
+        setLessonContent({
+          title: lesson.title,
+          text: lesson.objective,
+          workedExample: lesson.workedExample,
+        });
+      }
+      
+      const conceptStatuses = deriveConceptStatuses(state);
+      setCurrentScene(prev => prev);
+    } catch (err) {
+      console.error('Failed to load scene:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = useCallback(async () => {
     if (!userInput.trim()) return;
 
-    const result = validateMathResponse(userInput, '7');
+    const decision = orchestratorRef.current?.currentDecision;
+    if (!decision) return;
+
+    const expectedResponse = decision.expectedResponse;
+    const result = validateMathResponse(userInput, expectedResponse || '7', decision.conceptId);
+    const newState = orchestratorRef.current?.getState();
 
     if (result.correct) {
-      setFeedback({ type: 'correct', message: 'Correct! Well done.' });
+      setFeedback({ type: 'correct', message: result.feedback || 'Correct! Well done.' });
       
-      const newMastery = {
-        ...state.pedagogicalState.masteryByConcept,
-        [recommendedConceptId || 'diagnostic']: {
-          score: 1,
-          status: 'mastered' as const,
-          attempts: 1,
-          lastPracticedAt: new Date().toISOString(),
-          reviewDueAt: null,
-        },
-      };
-
-      updateState({
-        pedagogicalState: {
-          ...state.pedagogicalState,
-          masteryByConcept: newMastery,
-          diagnosticStatus: diagnosticStatus === 'in-progress' ? 'complete' : diagnosticStatus,
-        },
-      });
+      if (diagnosticStatus !== 'complete') {
+        const nextState = newState ? advanceAssessment(newState, { correct: true, learnerResponse: userInput }) : null;
+        if (nextState) {
+          updateState(nextState);
+        }
+      } else {
+        const nextState = newState ? applyMasteryEvidence(newState, recommendedConceptId, 1) : null;
+        if (nextState) {
+          updateState(nextState);
+          advanceTutoringSession(nextState, recommendedConceptId, 'continue');
+        }
+      }
+      
+      setUserInput('');
+      setTimeout(() => {
+        setFeedback(null);
+        loadScene();
+      }, 1500);
     } else {
       setFeedback({ 
         type: result.reason === 'syntax' ? 'hint' : 'incorrect', 
         message: result.feedback || 'Not quite right. Try again.' 
       });
     }
-  }, [userInput, state, updateState, recommendedConceptId, diagnosticStatus]);
+  }, [userInput, state, updateState, diagnosticStatus, recommendedConceptId]);
 
   const handleHint = () => {
-    setFeedback({ type: 'hint', message: 'Remember: the variable x represents the unknown value. Try substituting a number for x.' });
+    const decision = orchestratorRef.current?.currentDecision;
+    if (!decision) return;
+    
+    const lesson = getLessonForConcept(decision.conceptId);
+    setFeedback({ type: 'hint', message: lesson?.hint || 'Review the concept and try again.' });
   };
 
   const renderDiagnostic = () => (
     <div className="diagnostic-section">
       <div className="phase-indicator">
         <span className="phase-badge">Diagnostic</span>
-        <span className="phase-progress">Question {state.pedagogicalState.diagnosticStep + 1} of 4</span>
+        <span className="phase-progress">Question {state.pedagogicalState.diagnosticStep + 1} of {subjectPack.listAssessmentItems().length}</span>
       </div>
 
       <div className="question-card">
         <h3 className="question-prompt">
-          If x = 4, what is x + 3?
+          {currentScene?.prompt || 'Complete this diagnostic question.'}
         </h3>
-        <p className="question-hint">
-          Replace x with 4 in the expression x + 3.
-        </p>
       </div>
 
       <MathInput
@@ -103,29 +168,28 @@ export function TutoringWorkspacePage() {
     <div className="tutoring-section">
       <div className="concept-indicator">
         <span className="concept-badge">Current Concept</span>
-        <h3 className="concept-name">{recommendedConceptId || 'Introduction'}</h3>
+        <h3 className="concept-name">{lessonContent?.title || recommendedConceptId}</h3>
       </div>
 
       <div className="lesson-card">
         <div className="lesson-content">
-          <h4 className="lesson-title">Understanding Variables</h4>
+          <h4 className="lesson-title">{lessonContent?.title}</h4>
           <p className="lesson-text">
-            A variable is a letter that represents a number. In algebra, we use 
-            variables to write expressions and equations that describe real situations.
+            {lessonContent?.text}
           </p>
-          <div className="worked-example">
-            <span className="example-label">Example:</span>
-            <p className="example-text">
-              If <strong>x = 5</strong>, then <strong>x + 3 = 5 + 3 = 8</strong>
-            </p>
-          </div>
+          {lessonContent?.workedExample && (
+            <div className="worked-example">
+              <span className="example-label">Example:</span>
+              <p className="example-text">{lessonContent.workedExample}</p>
+            </div>
+          )}
         </div>
       </div>
 
       <MathInput
         value={userInput}
         onChange={setUserInput}
-        placeholder="Try: x + 3 when x = 5"
+        placeholder="Enter your answer..."
         onSubmit={handleSubmit}
       />
 
@@ -155,7 +219,9 @@ export function TutoringWorkspacePage() {
 
   return (
     <div className="tutoring-workspace-page">
-      {diagnosticStatus === 'not-started' || diagnosticStatus === 'in-progress' 
+      {loading ? (
+        <div className="loading-state">Loading...</div>
+      ) : diagnosticStatus === 'not-started' || diagnosticStatus === 'in-progress' 
         ? renderDiagnostic() 
         : renderTutoring()}
     </div>
