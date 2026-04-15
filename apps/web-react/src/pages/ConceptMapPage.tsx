@@ -5,15 +5,19 @@ import { deriveConceptStatuses } from '../../../../packages/core/src/curriculumE
 import { ALGEBRA_FOUNDATIONS_MODULE } from '../../../../packages/core/src/algebraModule.js';
 import './ConceptMapPage.css';
 
+interface ConceptStatus extends Concept {
+  state: 'locked' | 'available' | 'in progress' | 'mastered' | 'review due' | 'recommended next';
+}
+
 export function ConceptMapPage() {
   const { state, setView, setSelectedConcept } = useApp();
   const masteryByConcept = state.pedagogicalState.masteryByConcept;
 
-  const conceptStatuses = deriveConceptStatuses(state);
-  const recommendedConceptId = state.pedagogicalState.recommendedConceptId;
+  const conceptStatuses = deriveConceptStatuses(state) as ConceptStatus[];
+  void state.pedagogicalState.recommendedConceptId;
 
   const getConceptStatus = (conceptId: string): 'locked' | 'available' | 'in-progress' | 'mastered' | 'review due' | 'recommended next' => {
-    const statusInfo = conceptStatuses.find(c => c.id === conceptId);
+    const statusInfo = conceptStatuses.find((c: ConceptStatus) => c.id === conceptId);
     if (!statusInfo) return 'locked';
     
     if (statusInfo.state === 'mastered') return 'mastered';
@@ -55,7 +59,7 @@ export function ConceptMapPage() {
       </div>
 
       <div className="concept-grid">
-        {conceptStatuses.map((concept, index) => {
+        {conceptStatuses.map((concept: ConceptStatus, index: number) => {
           const status = getConceptStatus(concept.id);
           const isClickable = status !== 'locked';
 
@@ -85,8 +89,11 @@ export function ConceptMapPage() {
               </button>
 
               {concept.dependents && concept.dependents.length > 0 && (
-                <div className="connector-line">
-                  <span className="connector-label">leads to</span>
+                <div className="connector-line leads-to">
+                  <span className="connector-arrow">↓</span>
+                  <span className="connector-label">{concept.dependents.length === 1 
+                    ? ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.find((c: Concept) => c.id === concept.dependents[0])?.label
+                    : `${concept.dependents.length} concepts`}</span>
                 </div>
               )}
             </div>

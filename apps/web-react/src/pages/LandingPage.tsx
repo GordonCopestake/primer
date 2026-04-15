@@ -8,13 +8,17 @@ export function LandingPage() {
   const hasConfiguredProvider = state.providerConfig.configuredAt !== null;
 
   const handleGetStarted = () => {
-    if (!hasConfiguredProvider) {
-      setView('provider-setup');
-    } else if (!hasCompletedSetup) {
+    if (!hasCompletedSetup) {
       setView('module-selection');
+    } else if (!hasConfiguredProvider) {
+      setView('provider-setup');
     } else {
       setView('tutoring');
     }
+  };
+
+  const handleContinue = () => {
+    setView('concept-map');
   };
 
   const masteredCount = Object.values(state.pedagogicalState.masteryByConcept)
@@ -33,12 +37,21 @@ export function LandingPage() {
             personalized practice, and track your progress.
           </p>
           <div className="hero-actions">
-            <button 
-              className="primary-button"
-              onClick={handleGetStarted}
-            >
-              {hasCompletedSetup ? 'Continue Learning' : 'Get Started'}
-            </button>
+            {hasCompletedSetup && hasConfiguredProvider ? (
+              <button 
+                className="primary-button"
+                onClick={handleContinue}
+              >
+                Continue Learning
+              </button>
+            ) : (
+              <button 
+                className="primary-button"
+                onClick={handleGetStarted}
+              >
+                Get Started
+              </button>
+            )}
           </div>
         </div>
 

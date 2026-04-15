@@ -1,17 +1,17 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useApp } from '../App';
 import { MathInput } from '../components/MathInput';
-// @ts-ignore - local JS module
-import { TutorOrchestrator, createOrchestrator, subjectPack, getInitialConceptId, getLessonForConcept, nextCurriculumDecision, deriveConceptStatuses, advanceAssessment, applyMasteryEvidence, advanceTutoringSession } from '../../../../packages/core/src/tutorOrchestrator.js';
-// @ts-ignore - local JS module
+import { createOrchestrator, subjectPack, getInitialConceptId } from '../../../../packages/core/src/tutorOrchestrator.js';
+import { TutorOrchestrator } from '../../../../packages/core/src/tutorOrchestrator.js';
+import { getLessonForConcept } from '../../../../packages/core/src/algebraModule.js';
 import { validateMathResponse } from '../../../../packages/core/src/mathValidation.js';
-// @ts-ignore - local JS module
 import { createProviderClient, isProviderConfigured } from '../../../../packages/core/src/providerClient.js';
+import { deriveConceptStatuses, advanceAssessment, applyMasteryEvidence, advanceTutoringSession } from '../../../../packages/core/src/curriculumEngine.js';
 import './TutoringWorkspacePage.css';
 
 export function TutoringWorkspacePage() {
   const { state, updateState } = useApp();
-  const orchestratorRef = useRef<TutorOrchestrator | null>(null);
+  const orchestratorRef = useRef<InstanceType<typeof TutorOrchestrator> | null>(null);
   const [userInput, setUserInput] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'correct' | 'incorrect' | 'hint'; message: string } | null>(null);
   const [currentScene, setCurrentScene] = useState<{ prompt: string; sceneKind: string } | null>(null);
@@ -64,8 +64,7 @@ export function TutoringWorkspacePage() {
         });
       }
       
-      const conceptStatuses = deriveConceptStatuses(state);
-      setCurrentScene(prev => prev);
+      void deriveConceptStatuses(state);
     } catch (err) {
       console.error('Failed to load scene:', err);
     } finally {
@@ -79,7 +78,7 @@ export function TutoringWorkspacePage() {
     const decision = orchestratorRef.current?.currentDecision;
     if (!decision) return;
 
-    const expectedResponse = decision.expectedResponse;
+    const expectedResponse = (decision as { expectedResponse?: string }).expectedResponse;
     const result = validateMathResponse(userInput, expectedResponse || '7', decision.conceptId);
     const newState = orchestratorRef.current?.getState();
 
@@ -89,12 +88,12 @@ export function TutoringWorkspacePage() {
       if (diagnosticStatus !== 'complete') {
         const nextState = newState ? advanceAssessment(newState, { correct: true, learnerResponse: userInput }) : null;
         if (nextState) {
-          updateState(nextState);
+          updateState(nextState as unknown as Parameters<typeof updateState>[0]);
         }
       } else {
         const nextState = newState ? applyMasteryEvidence(newState, recommendedConceptId, 1) : null;
         if (nextState) {
-          updateState(nextState);
+          updateState(nextState as unknown as Parameters<typeof updateState>[0]);
           advanceTutoringSession(nextState, recommendedConceptId, 'continue');
         }
       }

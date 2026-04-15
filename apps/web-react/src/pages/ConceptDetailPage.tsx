@@ -1,4 +1,5 @@
 import { useApp } from '../App';
+import { Concept } from '../types';
 import './ConceptDetailPage.css';
 // @ts-ignore - local JS module
 import { ALGEBRA_FOUNDATIONS_MODULE } from '../../../../packages/core/src/algebraModule.js';
@@ -17,12 +18,12 @@ export function ConceptDetailPage() {
     );
   }
 
-  const fullConcept = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.find(c => c.id === selectedConcept.id) || selectedConcept;
+  const fullConcept = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.find((c: Concept) => c.id === selectedConcept.id) || selectedConcept;
   const mastery = state.pedagogicalState.masteryByConcept[selectedConcept.id];
   const masteryPercent = mastery ? Math.round((mastery.score / (fullConcept.masteryThreshold || 1)) * 100) : 0;
 
-  const prerequisites = (fullConcept.prerequisites || []).map(prereqId => {
-    const prereqConcept = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.find(c => c.id === prereqId);
+  const prerequisites = (fullConcept.prerequisites || []).map((prereqId: string) => {
+    const prereqConcept = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.find((c: Concept) => c.id === prereqId);
     const prereq = { 
       id: prereqId, 
       label: prereqConcept?.label || prereqId.charAt(0).toUpperCase() + prereqId.slice(1).replace(/-/g, ' ') 
@@ -31,8 +32,8 @@ export function ConceptDetailPage() {
     return { ...prereq, mastered: prereqMastery?.status === 'mastered' };
   });
 
-  const dependents = (fullConcept.dependents || []).map(depId => {
-    const depConcept = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.find(c => c.id === depId);
+  const dependents = (fullConcept.dependents || []).map((depId: string) => {
+    const depConcept = ALGEBRA_FOUNDATIONS_MODULE.conceptGraph.find((c: Concept) => c.id === depId);
     return {
       id: depId,
       label: depConcept?.label || depId.charAt(0).toUpperCase() + depId.slice(1).replace(/-/g, ' '),
@@ -85,7 +86,7 @@ export function ConceptDetailPage() {
         <div className="prerequisites-section">
           <h3 className="section-title">Prerequisites</h3>
           <div className="prerequisites-list">
-            {prerequisites.map(prereq => (
+            {prerequisites.map((prereq: { id: string; label: string; mastered: boolean }) => (
               <div key={prereq.id} className={`prerequisite-item ${prereq.mastered ? 'mastered' : ''}`}>
                 <span className="prereq-status">{prereq.mastered ? '✓' : '○'}</span>
                 <span className="prereq-label">{prereq.label}</span>
@@ -99,7 +100,7 @@ export function ConceptDetailPage() {
         <div className="dependents-section">
           <h3 className="section-title">Leads To</h3>
           <div className="dependents-list">
-            {dependents.map(dep => (
+            {dependents.map((dep: { id: string; label: string }) => (
               <div key={dep.id} className="dependent-item">
                 <span className="dep-label">{dep.label}</span>
               </div>
@@ -112,7 +113,7 @@ export function ConceptDetailPage() {
         <div className="misconceptions-section">
           <h3 className="section-title">Common Misconceptions</h3>
           <ul className="misconceptions-list">
-            {fullConcept.misconceptionTags.map(tag => (
+            {fullConcept.misconceptionTags.map((tag: string) => (
               <li key={tag} className="misconception-item">
                 {tag.replace(/-/g, ' ')}
               </li>
