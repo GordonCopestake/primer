@@ -1,0 +1,121 @@
+.module-selection-page {
+  padding: 24px 0;
+}
+
+.modules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+  margin-top: 32px;
+}
+
+.module-card {
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: var(--radius-xl);
+  transition: all var(--transition-fast);
+}
+
+.module-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-4px);
+}
+
+.module-card.coming-soon {
+  opacity: 0.7;
+}
+
+.module-header {
+  margin-bottom: 16px;
+}
+
+.module-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--accent);
+  color: white;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.module-badge.upcoming {
+  background: var(--muted-ink);
+}
+
+.module-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.module-description {
+  font-size: 0.95rem;
+  color: var(--muted-ink);
+  line-height: 1.5;
+  margin-bottom: 20px;
+  flex: 1;
+}
+
+.module-stats {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 20px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.module-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-icon {
+  font-size: 1.2rem;
+}
+
+.stat-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--muted-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.module-select-button {
+  padding: 14px 24px;
+  background: var(--ink);
+  color: white;
+  border: none;
+  border-radius: var(--radius-lg);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.module-select-button:hover:not(:disabled) {
+  background: var(--ink-light);
+  transform: translateY(-2px);
+}
+
+.module-select-button:disabled {
+  background: var(--line);
+  color: var(--muted-ink);
+  cursor: not-allowed;
+}

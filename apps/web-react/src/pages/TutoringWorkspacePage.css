@@ -1,0 +1,178 @@
+.tutoring-workspace-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 0;
+}
+
+.diagnostic-section,
+.tutoring-section {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.phase-indicator,
+.concept-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.phase-badge,
+.concept-badge {
+  padding: 6px 14px;
+  background: var(--accent);
+  color: white;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.phase-progress {
+  font-size: 0.9rem;
+  color: var(--muted-ink);
+}
+
+.concept-name {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.question-card,
+.lesson-card {
+  padding: 28px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+}
+
+.question-prompt,
+.lesson-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+.question-hint,
+.lesson-text {
+  font-size: 1rem;
+  color: var(--muted-ink);
+  line-height: 1.6;
+}
+
+.worked-example {
+  margin-top: 20px;
+  padding: 16px;
+  background: rgba(217, 143, 61, 0.1);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--accent);
+}
+
+.example-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.example-text {
+  font-size: 1rem;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.feedback {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.feedback-correct {
+  background: rgba(76, 175, 80, 0.15);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.feedback-incorrect {
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.2);
+}
+
+.feedback-hint {
+  background: rgba(217, 143, 61, 0.1);
+  border: 1px solid rgba(217, 143, 61, 0.3);
+}
+
+.feedback-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.feedback-correct .feedback-icon { color: var(--success); }
+.feedback-incorrect .feedback-icon { color: var(--error); }
+.feedback-hint .feedback-icon { color: var(--accent); }
+
+.feedback-message {
+  font-size: 0.95rem;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.hint-button {
+  padding: 12px 20px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-lg);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.hint-button:hover {
+  background: rgba(217, 143, 61, 0.1);
+}
+
+.submit-button {
+  padding: 12px 24px;
+  background: var(--ink);
+  color: white;
+  border: none;
+  border-radius: var(--radius-lg);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.submit-button:hover:not(:disabled) {
+  background: var(--ink-light);
+}
+
+.submit-button:disabled {
+  background: var(--line);
+  color: var(--muted-ink);
+  cursor: not-allowed;
+}
